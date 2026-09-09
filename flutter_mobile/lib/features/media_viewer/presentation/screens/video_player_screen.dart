@@ -1,0 +1,148 @@
+/// VideoPlayerScreen — full-screen video player streaming straight from the
+/// signed-in user's Drive using an authorized `alt=media` request with the
+/// bearer token in the header.
+library;
+
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
+
+import 'package:flutter_mobile/core/models/memory.dart';
+import 'package:flutter_mobile/core/providers.dart';
+import 'package:flutter_mobile/core/storage/local_storage_service.dart';
+import 'package:flutter_mobile/core/theme/index.dart';
+
+class VideoPlayerScreen extends ConsumerStatefulWidget {
+  const VideoPlayerScreen({super.key, required this.mediaId, this.memory});
+
+  final String mediaId;
+  final KiokuMemory? memory;
+
+  @override
+  ConsumerState<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
+}
+
+class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
+  VideoPlayerController? _videoController;
+  ChewieController? _chewieController;
+  bool _initialized = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializePlayer();
+  }
+
+  Future<void> _initializePlayer() async {
+    try {
+      final mem = widget.memory;
+      final VideoPlayerController controller;
+
+      if (mem != null && mem.localPath != null && mem.localPath!.isNotEmpty) {
+        controller = VideoPlayerController.file(File(mem.localPath!));
+      } else if (LocalStorageService.instance.isLocalMemory(widget.mediaId)) {
+        final path = LocalStorageService.instance.getLocalPath(widget.mediaId);
+        if (path != null && File(path).existsSync()) {
+          controller = VideoPlayerController.file(File(path));
+        } else {
+          throw Exception('Local video file not found');
+        }
+      } else {
+        // Resolve the current Drive token, then stream with it in the header.
+        final token = await ref.read(driveAuthTokenProvider.future);
+        final uri = Uri.parse(
+          'https://www.googleapis.com/drive/v3/files/${widget.mediaId}?alt=media',
+        );
+
+        controller = VideoPlayerController.networkUrl(
+          uri,
+          httpHeaders: {'Authorization': 'Bearer $token'},
+        );
+      }
+
+      _videoController = controller;
+      await controller.initialize();
+
+      if (!mounted) return;
+
+      _chewieController = ChewieController(
+        videoPlayerController: controller,
+        autoPlay: true,
+        looping: false,
+        aspectRatio: controller.value.aspectRatio,
+        placeholder: Container(
+          color: Colors.black,
+          child: Center(
+            child: CircularProgressIndicator(color: context.kiokuColors.primary),
+          ),
+        ),
+        errorBuilder: (context, errorMessage) => Center(
+          child: Text(errorMessage, style: const TextStyle(color: Colors.white)),
+        ),
+        materialProgressColors: ChewieProgressColors(
+          playedColor: context.kiokuColors.primary,
+          handleColor: context.kiokuColors.primary,
+          bufferedColor: context.kiokuColors.primary.withValues(alpha: 0.5),
+          backgroundColor: Colors.white.withValues(alpha: 0.3),
+        ),
+      );
+
+      setState(() => _initialized = true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = 'Could not load video');
+      }
+      _videoController?.dispose();
+      _videoController = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _videoController?.dispose();
+    _chewieController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.kiokuColors;
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          if (_error != null)
+            Center(
+              child: Text(
+                _error!,
+                style: const TextStyle(color: Colors.white70),
+              ),
+            )
+          else if (_initialized && _chewieController != null)
+            Chewie(controller: _chewieController!)
+          else
+            Center(
+              child: CircularProgressIndicator(color: colors.primary),
+            ),
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topRight,
+              child: Padding(
+                padding: const EdgeInsets.all(AppTheme.spacingSm),
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
