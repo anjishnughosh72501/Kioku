@@ -11,6 +11,12 @@
 [![Express](https://img.shields.io/badge/Express-4.19-000000?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com)
 [![Riverpod](https://img.shields.io/badge/State-Riverpod_2.6-blueviolet?style=for-the-badge)](https://riverpod.dev)
 [![License](https://img.shields.io/badge/License-MIT-amber?style=for-the-badge)](LICENSE)
+[![Download APK](https://img.shields.io/badge/Download-APK_v1.0.0-E06D53?style=for-the-badge&logo=android&logoColor=white)](releases/kioku-release.apk)
+
+<p align="center">
+  <a href="releases/kioku-release.apk"><b>👉 Download Android APK (v1.0.0)</b></a> · 
+  <a href="releases/README.md">Release Notes & Checksums</a>
+</p>
 
 </div>
 
