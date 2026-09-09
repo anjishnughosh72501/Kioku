@@ -13,7 +13,6 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:mime/mime.dart';
 import 'package:path_provider/path_provider.dart';
 
-import 'package:flutter_mobile/core/drive/app_drive.dart';
 import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/providers.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
@@ -127,11 +126,6 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       _showMessage('Create or pick an album first');
       return;
     }
-    if (!AppDrive.instance.isBound) {
-      _showMessage('Please sign in with Google first');
-      return;
-    }
-
     setState(() => _uploading = true);
     try {
       final detectedMime = lookupMimeType(file.path);
@@ -142,7 +136,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
 
       final fileToUpload = _isVideo ? originalFile : await _compressPhoto(originalFile);
 
-      await AppDrive.instance.uploadMemory(
+      await ref.read(uploadRepositoryProvider).uploadMemory(
         albumId: albumId,
         file: fileToUpload,
         mimeType: mime,
