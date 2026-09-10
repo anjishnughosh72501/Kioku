@@ -82,7 +82,7 @@ router.post('/join', JOIN_LIMITER, (req, res, next) => {
     const token = jwt.sign(
       { userId, groupId: group.id, name },
       process.env.JWT_SECRET,
-      { expiresIn: '365d' }
+      { expiresIn: '30d' }
     );
 
     res.json({ token, userId, groupId: group.id, groupName: group.name });
@@ -106,6 +106,21 @@ router.get('/me', requireAuth, (req, res, next) => {
       inviteCode: group.invite_code,
       role: 'member',
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Refresh authentication token
+router.post('/refresh', requireAuth, (req, res, next) => {
+  try {
+    const { userId, groupId, name } = req.user;
+    const token = jwt.sign(
+      { userId, groupId, name },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+    res.json({ token, userId, groupId, name });
   } catch (err) {
     next(err);
   }

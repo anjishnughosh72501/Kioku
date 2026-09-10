@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/providers.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
+import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// Compact album switcher shown in the feed header.
 class AlbumDropdown extends ConsumerWidget {
@@ -68,7 +70,26 @@ class AlbumDropdown extends ConsumerWidget {
               final selected = album.id == activeAlbumId;
               return ListTile(
                 title: Text(album.title, style: typography.bodyMedium?.copyWith(color: colors.ink)),
-                trailing: selected ? Icon(Icons.check_circle, color: colors.accentDark) : null,
+                leading: Icon(
+                  selected ? Icons.folder_special : Icons.folder_outlined,
+                  color: selected ? colors.accentDark : colors.inkMuted,
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.share_outlined, size: 18, color: colors.accentDark),
+                      tooltip: 'Invite friends to album',
+                      onPressed: () {
+                        Share.share(
+                          'Join my memory album "${album.title}" on Kioku! Download the Kioku app, sign in with your Google account, and collaborate on our shared memories.',
+                          subject: 'Kioku Memory Album: ${album.title}',
+                        );
+                      },
+                    ),
+                    if (selected) Icon(Icons.check_circle, color: colors.accentDark, size: 20),
+                  ],
+                ),
                 onTap: () {
                   ref.read(activeAlbumProvider.notifier).set(album.id);
                   Navigator.of(sheetContext).pop();
@@ -78,67 +99,20 @@ class AlbumDropdown extends ConsumerWidget {
             ListTile(
               leading: Icon(Icons.create_new_folder_outlined, color: colors.accent),
               title: Text('New album…', style: typography.bodyMedium?.copyWith(color: colors.accentDark)),
-              onTap: () {
+              onTap: () async {
                 Navigator.of(sheetContext).pop();
-                _promptNewAlbum(context, ref);
+                final name = await CreateAlbumDialog.show(context);
+                if (name != null && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Album "$name" created')),
+                  );
+                }
               },
             ),
             const SizedBox(height: AppTheme.spacingMd),
           ],
         ),
       ),
-    );
-  }
-
-  /// Creates a new album from an inline dialog.
-  void _promptNewAlbum(BuildContext context, WidgetRef ref) {
-    final controller = TextEditingController();
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: colors.surfaceContainer,
-          title: Text(
-            'Name your album',
-            style: typography.headlineSmall?.copyWith(color: colors.ink, fontFamily: 'Fraunces'),
-          ),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(hintText: 'e.g. Summer 2026'),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text('Cancel', style: typography.bodyMedium?.copyWith(color: colors.inkMuted)),
-            ),
-            TextButton(
-              onPressed: () async {
-                final name = controller.text.trim();
-                if (name.isEmpty) return;
-                Navigator.of(dialogContext).pop();
-                try {
-                  await ref.read(albumsProvider.notifier).addAlbum(name);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Album "$name" created')),
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Failed to create album: $e'),
-                        backgroundColor: colors.danger,
-                      ),
-                    );
-                  }
-                }
-              },
-              child: Text('Create', style: typography.bodyMedium?.copyWith(color: colors.accentDark)),
-            ),
-          ],
-        );
-      },
     );
   }
 }

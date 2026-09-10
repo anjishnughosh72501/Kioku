@@ -6,5 +6,10 @@ abstract interface class IMemoryRepository {
   Future<void> shareAlbum(String albumId, String email, {String role});
   Future<List<AlbumMember>> getAlbumMembers(String albumId);
   Future<List<KiokuMemory>> getMemories(String albumId);
+  Future<({List<KiokuMemory> items, String? nextPageToken})> getMemoriesPage(
+    String albumId, {
+    int pageSize = 30,
+    String? pageToken,
+  });
   Future<void> deleteMemory(String fileId);
 }

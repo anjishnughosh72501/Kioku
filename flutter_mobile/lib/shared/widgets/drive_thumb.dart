@@ -96,6 +96,9 @@ class _DriveThumbState extends ConsumerState<DriveThumb> {
           fit: BoxFit.cover,
           gaplessPlayback: true,
           filterQuality: FilterQuality.medium,
+          semanticLabel: memory.caption != null && memory.caption!.isNotEmpty
+              ? memory.caption
+              : 'Memory from ${memory.postmarkDate}',
         );
       },
     );

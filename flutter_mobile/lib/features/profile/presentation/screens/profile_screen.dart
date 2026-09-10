@@ -7,14 +7,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import 'package:flutter/services.dart';
-import 'package:flutter_mobile/core/services/user_profile_service.dart';
 import 'package:flutter_mobile/features/auth/presentation/widgets/username_dialog.dart';
 import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/providers.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
 import 'package:flutter_mobile/features/auth/presentation/controllers/auth_controller.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:flutter_mobile/features/profile/presentation/widgets/album_row.dart';
+import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -26,6 +27,7 @@ class ProfileScreen extends ConsumerWidget {
     final authState = ref.watch(authControllerProvider);
     final albumsAsync = ref.watch(albumsProvider);
     final albums = albumsAsync.value ?? <Album>[];
+    final userProfile = ref.watch(userProfileProvider);
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -228,7 +230,7 @@ class ProfileScreen extends ConsumerWidget {
                         InkWell(
                           onTap: () async {
                             await UsernameDialog.showEdit(context);
-                            (context as Element).markNeedsBuild();
+                            ref.invalidate(userProfileProvider);
                           },
                           borderRadius: BorderRadius.circular(8),
                           child: Padding(
@@ -262,7 +264,7 @@ class ProfileScreen extends ConsumerWidget {
                               ),
                             ),
                             Text(
-                              UserProfileService.instance.username,
+                              userProfile.username,
                               style: typography.headlineSmall?.copyWith(
                                 fontSize: 18,
                                 color: colors.ink,
@@ -291,7 +293,7 @@ class ProfileScreen extends ConsumerWidget {
                               Row(
                                 children: [
                                   Text(
-                                    UserProfileService.instance.friendCode,
+                                    userProfile.friendCode,
                                     style: typography.bodyMedium?.copyWith(
                                       fontWeight: FontWeight.w700,
                                       letterSpacing: 1.1,
@@ -302,7 +304,7 @@ class ProfileScreen extends ConsumerWidget {
                                   InkWell(
                                     onTap: () {
                                       Clipboard.setData(
-                                        ClipboardData(text: UserProfileService.instance.friendCode),
+                                        ClipboardData(text: userProfile.friendCode),
                                       );
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         const SnackBar(
@@ -312,6 +314,16 @@ class ProfileScreen extends ConsumerWidget {
                                       );
                                     },
                                     child: Icon(Icons.copy_rounded, size: 16, color: colors.primary),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  InkWell(
+                                    onTap: () {
+                                      Share.share(
+                                        'Add me on Kioku! My friend code is: ${userProfile.friendCode}',
+                                        subject: 'Kioku Friend Code',
+                                      );
+                                    },
+                                    child: Icon(Icons.share_rounded, size: 16, color: colors.primary),
                                   ),
                                 ],
                               ),
@@ -351,7 +363,14 @@ class ProfileScreen extends ConsumerWidget {
                         ),
                         const Spacer(),
                         OutlinedButton.icon(
-                          onPressed: () => _promptNewAlbum(context, ref, colors, typography),
+                          onPressed: () async {
+                            final name = await CreateAlbumDialog.show(context);
+                            if (name != null && context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Album "$name" created')),
+                              );
+                            }
+                          },
                           icon: Icon(Icons.add, size: 15, color: colors.accentDark),
                           label: Text('New Album',
                               style: typography.bodySmall?.copyWith(color: colors.accentDark)),
@@ -401,9 +420,44 @@ class ProfileScreen extends ConsumerWidget {
                   variant: authState.isSignedIn
                       ? ClayButtonVariant.secondary
                       : ClayButtonVariant.primary,
-                  onPressed: () {
+                  onPressed: () async {
                     if (authState.isSignedIn) {
-                      ref.read(authControllerProvider.notifier).signOut();
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: colors.surfaceContainer,
+                          title: Text(
+                            'Sign out?',
+                            style: typography.headlineSmall?.copyWith(
+                              color: colors.ink,
+                              fontFamily: 'Fraunces',
+                            ),
+                          ),
+                          content: Text(
+                            'Your memories will remain safely stored in your Google Drive. You can sign back in anytime to access them.',
+                            style: typography.bodyMedium?.copyWith(color: colors.inkMuted),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(false),
+                              child: Text('Cancel', style: typography.bodyMedium?.copyWith(color: colors.inkMuted)),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(true),
+                              child: Text(
+                                'Sign Out',
+                                style: typography.bodyMedium?.copyWith(
+                                  color: colors.danger,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmed == true && context.mounted) {
+                        ref.read(authControllerProvider.notifier).signOut();
+                      }
                     } else {
                       ref.read(authControllerProvider.notifier).signIn();
                     }
@@ -464,59 +518,7 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
-  void _promptNewAlbum(
-    BuildContext context,
-    WidgetRef ref,
-    AppColors colors,
-    TextTheme typography,
-  ) {
-    final controller = TextEditingController();
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: colors.surfaceContainer,
-          title: Text('Name your album',
-              style: typography.headlineSmall?.copyWith(color: colors.ink, fontFamily: 'Fraunces')),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(hintText: 'e.g. Summer 2026'),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text('Cancel', style: typography.bodyMedium?.copyWith(color: colors.inkMuted)),
-            ),
-            TextButton(
-              onPressed: () async {
-                final name = controller.text.trim();
-                if (name.isEmpty) return;
-                Navigator.of(dialogContext).pop();
-                try {
-                  await ref.read(albumsProvider.notifier).addAlbum(name);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Album "$name" created')),
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Failed to create album: $e'),
-                        backgroundColor: colors.danger,
-                      ),
-                    );
-                  }
-                }
-              },
-              child: Text('Create', style: typography.bodyMedium?.copyWith(color: colors.accentDark)),
-            ),
-          ],
-        );
-      },
-    );
-  }
+
 
   Future<void> _promptShareAlbum(
     BuildContext context,
@@ -540,26 +542,49 @@ class ProfileScreen extends ConsumerWidget {
                 'Share "${album.title}"',
                 style: typography.headlineSmall?.copyWith(color: colors.ink, fontFamily: 'Fraunces'),
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Your Google Drive folder is already the album — invite a '
-                    'friend’s email and they’ll see it in their Kioku after they '
-                    'sign in with Google.',
-                    style: typography.bodySmall?.copyWith(color: colors.inkMuted),
-                  ),
-                  const SizedBox(height: AppTheme.spacingMd),
-                  TextField(
-                    controller: controller,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: InputDecoration(
-                      hintText: 'friend@example.com',
-                      errorText: inlineError,
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Invite friends by email so they can view and contribute memories to this album in Kioku.',
+                      style: typography.bodySmall?.copyWith(color: colors.inkMuted),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: AppTheme.spacingMd),
+                    TextField(
+                      controller: controller,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: InputDecoration(
+                        hintText: 'friend@example.com',
+                        errorText: inlineError,
+                      ),
+                    ),
+                    const SizedBox(height: AppTheme.spacingMd),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Share.share(
+                          'Join my memory album "${album.title}" on Kioku! Download the Kioku app, sign in with your Google account, and collaborate on our shared memories.',
+                          subject: 'Kioku Memory Album: ${album.title}',
+                        );
+                      },
+                      icon: Icon(Icons.share_outlined, size: 16, color: colors.accentDark),
+                      label: Text(
+                        'Send Invitation to Friends',
+                        style: typography.bodySmall?.copyWith(
+                          color: colors.accentDark,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: colors.divider),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -594,7 +619,7 @@ class ProfileScreen extends ConsumerWidget {
                       }
                     }
                   },
-                  child: Text('Share', style: typography.bodyMedium?.copyWith(color: colors.accentDark)),
+                  child: Text('Add Friend', style: typography.bodyMedium?.copyWith(color: colors.accentDark)),
                 ),
               ],
             );

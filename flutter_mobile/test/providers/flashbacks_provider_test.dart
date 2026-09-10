@@ -26,6 +26,13 @@ class FakeMemoryRepository implements IMemoryRepository {
   Future<List<KiokuMemory>> getMemories(String albumId) async => memories;
 
   @override
+  Future<({List<KiokuMemory> items, String? nextPageToken})> getMemoriesPage(
+    String albumId, {
+    int pageSize = 30,
+    String? pageToken,
+  }) async => (items: List<KiokuMemory>.from(memories), nextPageToken: null);
+
+  @override
   Future<Album> createAlbum(String name) async => Album(id: 'new', name: name);
 
   @override

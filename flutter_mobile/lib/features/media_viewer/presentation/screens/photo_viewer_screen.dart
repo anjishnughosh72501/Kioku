@@ -7,10 +7,13 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:photo_view/photo_view.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:flutter_mobile/core/drive/app_drive.dart';
 import 'package:flutter_mobile/core/models/memory.dart';
+import 'package:flutter_mobile/core/providers.dart';
 import 'package:flutter_mobile/core/storage/local_storage_service.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
 
@@ -26,10 +29,12 @@ class PhotoViewerScreen extends ConsumerStatefulWidget {
 
 class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen> {
   late Future<Uint8List> _bytesFuture;
+  late String? _currentCaption;
 
   @override
   void initState() {
     super.initState();
+    _currentCaption = widget.memory?.caption;
     final mem = widget.memory;
     if (mem != null && mem.localPath != null && mem.localPath!.isNotEmpty) {
       _bytesFuture = File(mem.localPath!).readAsBytes();
@@ -42,13 +47,161 @@ class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen> {
     }
   }
 
+  void _showMoreMenu(BuildContext context, KiokuMemory? item) {
+    final colors = context.kiokuColors;
+    final typography = Theme.of(context).textTheme;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: colors.surfaceContainer,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusCard)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: colors.divider,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            ListTile(
+              leading: Icon(Icons.share_outlined, color: colors.ink),
+              title: Text('Share', style: typography.bodyMedium?.copyWith(color: colors.ink)),
+              onTap: () async {
+                Navigator.of(ctx).pop();
+                try {
+                  final bytes = await _bytesFuture;
+                  final fileName = item?.fileName ?? '${widget.mediaId}.jpg';
+                  await Share.shareXFiles(
+                    [XFile.fromData(bytes, mimeType: item?.mimeType ?? 'image/jpeg', name: fileName)],
+                    text: _currentCaption,
+                  );
+                } catch (e) {
+                  final text = _currentCaption ?? 'A memory from ${item?.postmarkDate ?? 'Kioku'}';
+                  Share.share(text);
+                }
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.edit_outlined, color: colors.ink),
+              title: Text('Edit Caption', style: typography.bodyMedium?.copyWith(color: colors.ink)),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _promptEditCaption(context);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.delete_outline, color: colors.danger),
+              title: Text('Delete', style: typography.bodyMedium?.copyWith(color: colors.danger)),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _confirmDeleteAndPop(context);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _promptEditCaption(BuildContext context) {
+    final colors = context.kiokuColors;
+    final typography = Theme.of(context).textTheme;
+    final controller = TextEditingController(text: _currentCaption);
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: colors.surfaceContainer,
+        title: Text(
+          'Edit Caption',
+          style: typography.headlineSmall?.copyWith(color: colors.ink, fontFamily: 'Fraunces'),
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 500,
+          decoration: const InputDecoration(hintText: 'Add a cozy note or caption...'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text('Cancel', style: typography.bodyMedium?.copyWith(color: colors.inkMuted)),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() => _currentCaption = controller.text.trim());
+              Navigator.of(dialogContext).pop();
+            },
+            child: Text('Save', style: typography.bodyMedium?.copyWith(color: colors.accentDark)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteAndPop(BuildContext context) {
+    final colors = context.kiokuColors;
+    final typography = Theme.of(context).textTheme;
+
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colors.surfaceContainer,
+        title: Text(
+          'Delete this memory?',
+          style: typography.headlineSmall?.copyWith(color: colors.ink, fontFamily: 'Fraunces'),
+        ),
+        content: Text(
+          'This will permanently remove it from your album. This action cannot be undone.',
+          style: typography.bodyMedium?.copyWith(color: colors.inkMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Cancel', style: typography.bodyMedium?.copyWith(color: colors.inkMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('Delete', style: typography.bodyMedium?.copyWith(color: colors.danger, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    ).then((confirmed) async {
+      if (confirmed == true && context.mounted) {
+        try {
+          await ref.read(memoriesProvider.notifier).delete(widget.mediaId);
+          if (context.mounted) {
+            context.pop();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Memory deleted')),
+            );
+          }
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to delete memory: $e'), backgroundColor: colors.danger),
+            );
+          }
+        }
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.kiokuColors;
     final typography = Theme.of(context).textTheme;
     final item = widget.memory;
 
-    final caption = item?.caption;
+    final caption = _currentCaption;
     final meta =
         item != null ? '${item.postmarkDate} · ${item.uploaderLabel}' : '';
 
@@ -96,11 +249,13 @@ class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen> {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                    onPressed: () => Navigator.of(context).pop(),
+                    tooltip: 'Close viewer',
+                    onPressed: () => context.pop(),
                   ),
                   IconButton(
                     icon: const Icon(Icons.more_vert, color: Colors.white, size: 28),
-                    onPressed: () {},
+                    tooltip: 'More options',
+                    onPressed: () => _showMoreMenu(context, item),
                   ),
                 ],
               ),
@@ -124,21 +279,22 @@ class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      caption ?? 'Memory',
-                      style: typography.headlineSmall?.copyWith(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontFamily: 'Fraunces',
+                    if (caption != null && caption.isNotEmpty) ...[
+                      Text(
+                        caption,
+                        style: typography.headlineSmall?.copyWith(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontFamily: 'Fraunces',
+                        ),
                       ),
-                    ),
-                    if (meta.isNotEmpty) ...[
                       const SizedBox(height: 4),
+                    ],
+                    if (meta.isNotEmpty)
                       Text(
                         meta,
                         style: typography.bodySmall?.copyWith(color: Colors.white70, fontSize: 11),
                       ),
-                    ],
                   ],
                 ),
               ),

@@ -11,7 +11,16 @@ class MemoryRepository implements IMemoryRepository {
     if (AppDrive.instance.isBound) {
       try {
         final driveAlbums = await AppDrive.instance.listAlbums();
-        if (driveAlbums.isNotEmpty) return driveAlbums;
+        final localAlbums = await LocalStorageService.instance.getAlbums();
+        // Return drive albums combined with any existing local albums (deduplicating by id)
+        final seenIds = <String>{};
+        final combined = <Album>[];
+        for (final album in [...driveAlbums, ...localAlbums]) {
+          if (seenIds.add(album.id)) {
+            combined.add(album);
+          }
+        }
+        if (combined.isNotEmpty) return combined;
       } catch (_) {
         // Fall back to local if Drive fails
       }
@@ -56,6 +65,27 @@ class MemoryRepository implements IMemoryRepository {
       return AppDrive.instance.listMemories(albumId);
     }
     return LocalStorageService.instance.getMemories(albumId);
+  }
+
+  @override
+  Future<({List<KiokuMemory> items, String? nextPageToken})> getMemoriesPage(
+    String albumId, {
+    int pageSize = 30,
+    String? pageToken,
+  }) async {
+    if (AppDrive.instance.isBound && !albumId.startsWith('local_')) {
+      return AppDrive.instance.listMemoriesPage(
+        albumId,
+        pageSize: pageSize,
+        pageToken: pageToken,
+      );
+    }
+    final all = await LocalStorageService.instance.getMemories(albumId);
+    final offset = pageToken != null ? int.tryParse(pageToken) ?? 0 : 0;
+    final end = (offset + pageSize).clamp(0, all.length);
+    final slice = offset < all.length ? all.sublist(offset, end) : <KiokuMemory>[];
+    final next = end < all.length ? end.toString() : null;
+    return (items: slice, nextPageToken: next);
   }
 
   @override

@@ -11,6 +11,7 @@ import 'package:flutter_mobile/features/auth/data/auth_repository.dart';
 import 'package:flutter_mobile/features/feed/domain/i_memory_repository.dart';
 import 'package:flutter_mobile/features/feed/data/memory_repository.dart';
 import 'package:flutter_mobile/features/feed/domain/use_cases/get_memories_use_case.dart';
+import 'package:flutter_mobile/core/services/user_profile_service.dart';
 import 'package:flutter_mobile/features/upload/domain/i_upload_repository.dart';
 import 'package:flutter_mobile/features/upload/data/upload_repository.dart';
 
@@ -23,6 +24,12 @@ final memoryRepositoryProvider =
 
 final uploadRepositoryProvider =
     Provider<IUploadRepository>((ref) => const UploadRepository());
+
+final userProfileProvider =
+    StateProvider<({String username, String friendCode})>((ref) {
+  final svc = UserProfileService.instance;
+  return (username: svc.username, friendCode: svc.friendCode);
+});
 
 final getMemoriesUseCaseProvider = Provider<GetMemoriesUseCase>(
   (ref) => GetMemoriesUseCase(ref.watch(memoryRepositoryProvider)),
@@ -96,6 +103,8 @@ class Albums extends AsyncNotifier<List<Album>> {
   Future<Album> addAlbum(String name) async {
     try {
       final album = await ref.read(memoryRepositoryProvider).createAlbum(name);
+      final currentList = state.valueOrNull ?? [];
+      state = AsyncData([...currentList, album]);
       await ref.read(activeAlbumProvider.notifier).set(album.id);
       await refresh();
       return album;
@@ -117,13 +126,29 @@ final albumsProvider = AsyncNotifierProvider<Albums, List<Album>>(
   Albums.new,
 );
 
+final isPaginatingMemoriesProvider = StateProvider<bool>((ref) => false);
+
 /// Memories of the active album.
 class Memories extends AsyncNotifier<List<KiokuMemory>> {
+  String? _nextPageToken;
+  bool _hasMore = true;
+  bool _isLoadingMore = false;
+
+  bool get hasMore => _hasMore;
+  bool get isLoadingMore => _isLoadingMore;
+
   @override
   Future<List<KiokuMemory>> build() async {
     final albumId = ref.watch(activeAlbumProvider);
-    if (albumId == null) return const [];
-    return ref.watch(getMemoriesUseCaseProvider)(albumId);
+    if (albumId == null) {
+      _nextPageToken = null;
+      _hasMore = false;
+      return const [];
+    }
+    final page = await ref.watch(memoryRepositoryProvider).getMemoriesPage(albumId);
+    _nextPageToken = page.nextPageToken;
+    _hasMore = page.nextPageToken != null;
+    return page.items;
   }
 
   Future<void> refresh() async {
@@ -133,15 +158,69 @@ class Memories extends AsyncNotifier<List<KiokuMemory>> {
       return;
     }
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
-      () => ref.read(getMemoriesUseCaseProvider)(albumId),
-    );
+    state = await AsyncValue.guard(() async {
+      final page = await ref.read(memoryRepositoryProvider).getMemoriesPage(albumId);
+      _nextPageToken = page.nextPageToken;
+      _hasMore = page.nextPageToken != null;
+      return page.items;
+    });
+  }
+
+  Future<void> loadMore() async {
+    if (!_hasMore || _isLoadingMore) return;
+    final albumId = ref.read(activeAlbumProvider);
+    if (albumId == null) return;
+    _isLoadingMore = true;
+    ref.read(isPaginatingMemoriesProvider.notifier).state = true;
+    try {
+      final page = await ref.read(memoryRepositoryProvider).getMemoriesPage(
+        albumId,
+        pageToken: _nextPageToken,
+      );
+      _nextPageToken = page.nextPageToken;
+      _hasMore = page.nextPageToken != null;
+      if (state.hasValue) {
+        state = AsyncData([...state.requireValue, ...page.items]);
+      }
+    } finally {
+      _isLoadingMore = false;
+      ref.read(isPaginatingMemoriesProvider.notifier).state = false;
+    }
+  }
+
+  Future<void> delete(String fileId) async {
+    await ref.read(memoryRepositoryProvider).deleteMemory(fileId);
+    if (state.hasValue) {
+      state = AsyncData(
+        state.requireValue.where((m) => m.id != fileId).toList(),
+      );
+    }
   }
 }
 
 final memoriesProvider = AsyncNotifierProvider<Memories, List<KiokuMemory>>(
   Memories.new,
 );
+
+/// Derived provider: groups memories by day, memoized by Riverpod.
+final groupedMemoriesProvider =
+    Provider<List<({DateTime day, List<KiokuMemory> items})>>((ref) {
+  final memories = ref.watch(memoriesProvider).value ?? const [];
+  final map = <String, ({DateTime day, List<KiokuMemory> items})>{};
+  for (final item in memories) {
+    final d = item.takenAt;
+    if (d == null) continue;
+    final day = DateTime(d.year, d.month, d.day);
+    final key = day.toIso8601String();
+    final existing = map[key];
+    if (existing == null) {
+      map[key] = (day: day, items: [item]);
+    } else {
+      existing.items.add(item);
+    }
+  }
+  return map.values.toList()..sort((a, b) => b.day.compareTo(a.day));
+});
 
 /// One flashback set, computed locally from memories across albums.
 class FlashbackSetData {

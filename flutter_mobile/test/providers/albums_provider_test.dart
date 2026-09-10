@@ -36,6 +36,13 @@ class MockMemoryRepository implements IMemoryRepository {
   Future<List<KiokuMemory>> getMemories(String albumId) async => [];
 
   @override
+  Future<({List<KiokuMemory> items, String? nextPageToken})> getMemoriesPage(
+    String albumId, {
+    int pageSize = 30,
+    String? pageToken,
+  }) async => (items: <KiokuMemory>[], nextPageToken: null);
+
+  @override
   Future<void> deleteMemory(String fileId) async {}
 }
 
@@ -75,7 +82,7 @@ void main() {
       );
     });
 
-    test('addAlbum creates album and updates activeAlbumProvider', () async {
+    test('addAlbum creates album and updates activeAlbumProvider and albums list', () async {
       final mockRepo = MockMemoryRepository();
       final container = ProviderContainer(
         overrides: [
@@ -87,6 +94,8 @@ void main() {
       final album = await container.read(albumsProvider.notifier).addAlbum('Tokyo 2026');
       expect(album.name, 'Tokyo 2026');
       expect(container.read(activeAlbumProvider), '2');
+      final currentAlbums = container.read(albumsProvider).value;
+      expect(currentAlbums?.any((a) => a.id == '2' && a.name == 'Tokyo 2026'), isTrue);
     });
   });
 }

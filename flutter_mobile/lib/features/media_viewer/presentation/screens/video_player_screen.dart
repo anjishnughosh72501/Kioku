@@ -7,6 +7,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 
@@ -118,9 +119,34 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
         children: [
           if (_error != null)
             Center(
-              child: Text(
-                _error!,
-                style: const TextStyle(color: Colors.white70),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.videocam_off_outlined, size: 56, color: Colors.white38),
+                  const SizedBox(height: 12),
+                  Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colors.primary,
+                      foregroundColor: colors.brightness == Brightness.dark
+                          ? const Color(0xFF140E0A)
+                          : Colors.white,
+                    ),
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Retry'),
+                    onPressed: () {
+                      setState(() {
+                        _error = null;
+                        _initialized = false;
+                      });
+                      _initializePlayer();
+                    },
+                  ),
+                ],
               ),
             )
           else if (_initialized && _chewieController != null)
@@ -136,7 +162,8 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
                 padding: const EdgeInsets.all(AppTheme.spacingSm),
                 child: IconButton(
                   icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                  onPressed: () => Navigator.of(context).pop(),
+                  tooltip: 'Close video',
+                  onPressed: () => context.pop(),
                 ),
               ),
             ),

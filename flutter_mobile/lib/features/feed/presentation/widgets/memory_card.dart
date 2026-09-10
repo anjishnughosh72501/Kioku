@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:flutter_mobile/core/models/memory.dart';
+import 'package:flutter_mobile/core/providers.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
 import 'package:flutter_mobile/shared/widgets/drive_thumb.dart';
 
-class MemoryCard extends StatelessWidget {
+class MemoryCard extends ConsumerWidget {
   const MemoryCard({
     super.key,
     required this.item,
@@ -18,12 +21,103 @@ class MemoryCard extends StatelessWidget {
   final AppColors colors;
   final TextTheme typography;
 
+  void _showContextMenu(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: colors.surfaceContainer,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusCard)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: colors.divider,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            ListTile(
+              leading: Icon(Icons.share_outlined, color: colors.ink),
+              title: Text('Share memory', style: typography.bodyMedium?.copyWith(color: colors.ink)),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                final text = item.caption != null && item.caption!.isNotEmpty
+                    ? '${item.caption!} (${item.postmarkDate})'
+                    : 'A memory from ${item.postmarkDate}';
+                Share.share(text);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.delete_outline, color: colors.danger),
+              title: Text('Delete memory', style: typography.bodyMedium?.copyWith(color: colors.danger)),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _confirmDelete(context, ref);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, WidgetRef ref) {
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colors.surfaceContainer,
+        title: Text(
+          'Delete this memory?',
+          style: typography.headlineSmall?.copyWith(color: colors.ink, fontFamily: 'Fraunces'),
+        ),
+        content: Text(
+          'This will permanently remove it from your album. This action cannot be undone.',
+          style: typography.bodyMedium?.copyWith(color: colors.inkMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Cancel', style: typography.bodyMedium?.copyWith(color: colors.inkMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('Delete', style: typography.bodyMedium?.copyWith(color: colors.danger, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    ).then((confirmed) async {
+      if (confirmed == true) {
+        try {
+          await ref.read(memoriesProvider.notifier).delete(item.id);
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Memory deleted')),
+            );
+          }
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to delete memory: $e'), backgroundColor: colors.danger),
+            );
+          }
+        }
+      }
+    });
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return ClayCard(
       variant: ClayVariant.defaultCard,
       padding: EdgeInsets.zero,
       onTap: () => context.push('/media/${item.id}', extra: item),
+      onLongPress: () => _showContextMenu(context, ref),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

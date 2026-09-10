@@ -43,7 +43,7 @@ class KiokuApp extends ConsumerWidget {
           data: mediaQuery.copyWith(
             textScaler: mediaQuery.textScaler.clamp(
               minScaleFactor: 0.85,
-              maxScaleFactor: 1.3,
+              maxScaleFactor: 2.5,
             ),
           ),
           child: child!,

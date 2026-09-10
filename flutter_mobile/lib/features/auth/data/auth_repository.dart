@@ -6,8 +6,11 @@ import '../domain/i_auth_repository.dart';
 class AuthRepository implements IAuthRepository {
   static const driveScope = drive.DriveApi.driveFileScope;
 
-  static const webClientId =
-      '259865154402-h2m8hdminqd8td2hgjk9uhp3djl6caci.apps.googleusercontent.com';
+  static const webClientId = String.fromEnvironment(
+    'GOOGLE_CLIENT_ID',
+    defaultValue:
+        '259865154402-h2m8hdminqd8td2hgjk9uhp3djl6caci.apps.googleusercontent.com',
+  );
 
   bool _initialized = false;
 

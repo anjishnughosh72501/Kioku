@@ -36,20 +36,23 @@ class _FlashbacksScreenState extends ConsumerState<FlashbacksScreen> {
 
     return Scaffold(
       backgroundColor: colors.background,
-      body: RefreshIndicator(
-        onRefresh: () async => ref.refresh(flashbacksProvider),
-        color: colors.primary,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(
-              child: _buildHeader(sets, colors, typography)
-                  .animate()
-                  .fadeIn(duration: 400.ms)
-                  .slideY(begin: -0.1, end: 0, duration: 400.ms),
-            ),
-            ..._buildBody(setsAsync, currentSets, colors, typography),
-          ],
+      body: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: () async => ref.refresh(flashbacksProvider),
+          color: colors.primary,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: _buildHeader(sets, colors, typography)
+                    .animate()
+                    .fadeIn(duration: 400.ms)
+                    .slideY(begin: -0.1, end: 0, duration: 400.ms),
+              ),
+              ..._buildBody(setsAsync, currentSets, colors, typography),
+            ],
+          ),
         ),
       ),
     );
@@ -151,7 +154,6 @@ class _FlashbacksScreenState extends ConsumerState<FlashbacksScreen> {
           borderRadius: BorderRadius.circular(AppTheme.radiusPill),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
     );
   }

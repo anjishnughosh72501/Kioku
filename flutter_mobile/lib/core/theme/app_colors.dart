@@ -124,7 +124,7 @@ class AppColors {
     accentContainer: Color(0xFF422C1D),
     ink: Color(0xFFFAF6F0),         // Steamed milk white text
     inkMuted: Color(0xFFA8988C),    // Soft warm oat grey
-    inkSubtle: Color(0xFF72655B),   // Muted roasted taupe
+    inkSubtle: Color(0xFF9E907A),   // Muted roasted taupe (WCAG AA compliant)
     divider: Color(0xFF33251B),     // Subtle roast border
     dividerLight: Color(0xFF3F2F24),
     overlay: Color(0xCC140E0A),     // rgba(20, 14, 10, 0.80)

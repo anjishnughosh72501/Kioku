@@ -2,6 +2,7 @@
 /// signed-in Google user. Files stay private; every read uses the user's token.
 library;
 
+import 'dart:collection';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -11,6 +12,48 @@ import 'package:googleapis_auth/googleapis_auth.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:flutter_mobile/core/models/memory.dart';
+import 'package:flutter_mobile/core/services/user_profile_service.dart';
+
+class _BudgetLRU {
+  _BudgetLRU({required this.maxBytes});
+  final int maxBytes;
+  final LinkedHashMap<String, Uint8List> _map = LinkedHashMap<String, Uint8List>();
+  int _used = 0;
+
+  Uint8List? get(String key) {
+    final v = _map.remove(key);
+    if (v != null) {
+      _map[key] = v; // promote to MRU
+    }
+    return v;
+  }
+
+  void put(String key, Uint8List bytes) {
+    if (_map.containsKey(key)) {
+      _used -= _map[key]!.length;
+      _map.remove(key);
+    }
+    while (_used + bytes.length > maxBytes && _map.isNotEmpty) {
+      final oldestKey = _map.keys.first;
+      _used -= _map[oldestKey]!.length;
+      _map.remove(oldestKey);
+    }
+    _map[key] = bytes;
+    _used += bytes.length;
+  }
+
+  void remove(String key) {
+    final v = _map.remove(key);
+    if (v != null) {
+      _used -= v.length;
+    }
+  }
+
+  void clear() {
+    _map.clear();
+    _used = 0;
+  }
+}
 
 class AppDrive {
   AppDrive._();
@@ -22,8 +65,7 @@ class AppDrive {
   String? _accessToken;
   DateTime? _apiExpiry;
 
-  final Map<String, Uint8List> _bytesCache = {};
-  static const int maxCacheEntries = 48;
+  final _BudgetLRU _bytesCache = _BudgetLRU(maxBytes: 50 * 1024 * 1024); // 50MB
 
   bool get isBound => _account != null;
 
@@ -86,6 +128,8 @@ class AppDrive {
           "mimeType='application/vnd.google-apps.folder' "
           "and trashed=false and name contains '${Album.prefix}'",
       spaces: 'drive',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
       orderBy: 'createdTime',
       $fields: 'files(id,name)',
     );
@@ -157,6 +201,28 @@ class AppDrive {
     return allFiles.map(KiokuMemory.fromDrive).toList();
   }
 
+  Future<({List<KiokuMemory> items, String? nextPageToken})> listMemoriesPage(
+    String albumId, {
+    int pageSize = 30,
+    String? pageToken,
+  }) async {
+    final driveApi = await api();
+    final res = await driveApi.files.list(
+      q: "'$albumId' in parents and trashed=false",
+      orderBy: 'createdTime desc',
+      pageSize: pageSize,
+      pageToken: pageToken,
+      $fields:
+          'nextPageToken,files(id,name,mimeType,size,createdTime,thumbnailLink,appProperties,'
+          'owners(displayName,emailAddress))',
+    );
+    final files = res.files ?? [];
+    return (
+      items: files.map(KiokuMemory.fromDrive).toList(),
+      nextPageToken: res.nextPageToken,
+    );
+  }
+
   Future<void> deleteMemory(String fileId) async {
     final driveApi = await api();
     await driveApi.files.delete(fileId);
@@ -176,9 +242,14 @@ class AppDrive {
     if (account == null) throw StateError('Google account not signed in');
     final driveApi = await api();
 
+    final customUsername = UserProfileService.instance.username;
+    final displayName = (customUsername.isNotEmpty && customUsername != 'Storyteller')
+        ? customUsername
+        : (account.displayName ?? account.email.split('@').first);
+
     final props = <String, String>{
       'taken_at': takenAt ?? DateTime.now().toIso8601String(),
-      'uploader_name': account.displayName ?? account.email.split('@').first,
+      'uploader_name': displayName,
       'uploader_email': account.email,
       if (caption != null && caption.trim().isNotEmpty)
         'caption': caption.trim(),
@@ -208,7 +279,7 @@ class AppDrive {
   /// Fetches full media bytes for a photo with the user's bearer token.
   /// Results are cached in memory so feed scrolling stays smooth.
   Future<Uint8List> photoBytes(String fileId) async {
-    final cached = _bytesCache[fileId];
+    final cached = _bytesCache.get(fileId);
     if (cached != null) return cached;
     final token = await accessToken();
     final client = http.Client();
@@ -223,7 +294,7 @@ class AppDrive {
         throw HttpException('Drive fetch failed ($fileId): ${resp.statusCode}');
       }
       final bytes = resp.bodyBytes;
-      _cacheBytes(fileId, bytes);
+      _bytesCache.put(fileId, bytes);
       return bytes;
     } finally {
       client.close();
@@ -231,11 +302,4 @@ class AppDrive {
   }
 
   void evictBytes(String fileId) => _bytesCache.remove(fileId);
-
-  void _cacheBytes(String key, Uint8List bytes) {
-    if (_bytesCache.length >= maxCacheEntries) {
-      _bytesCache.remove(_bytesCache.keys.first);
-    }
-    _bytesCache[key] = bytes;
-  }
 }

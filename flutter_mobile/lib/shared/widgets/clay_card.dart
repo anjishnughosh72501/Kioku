@@ -247,7 +247,6 @@ class _ClayButtonState extends State<ClayButton> with SingleTickerProviderStateM
     final typography = Theme.of(context).textTheme;
     final clayShadows = context.clayShadows;
 
-    final isPrimary = widget.variant == ClayButtonVariant.primary;
     final effectiveRadius = widget.radius ?? AppTheme.radiusButton;
     final effectivePadding = widget.padding ??
         (widget.size == ClayButtonSize.small
@@ -261,18 +260,24 @@ class _ClayButtonState extends State<ClayButton> with SingleTickerProviderStateM
 
     final isDisabled = widget.disabled || widget.loading;
 
-    if (isPrimary) {
-      bgColor = isDisabled ? colors.primary.withValues(alpha: 0.5) : colors.primary;
-      fgColor = isDisabled
-          ? (colors.brightness == Brightness.dark ? const Color(0xFF140E0A) : Colors.white).withValues(alpha: 0.5)
-          : (colors.brightness == Brightness.dark ? const Color(0xFF140E0A) : Colors.white);
-      shadows = isDisabled ? clayShadows.subtle : clayShadows.card;
-      border = null;
-    } else {
-      bgColor = isDisabled ? colors.surface.withValues(alpha: 0.5) : colors.surface;
-      fgColor = isDisabled ? colors.inkMuted : colors.ink;
-      shadows = isDisabled ? clayShadows.subtle : clayShadows.card;
-      border = Border.all(color: isDisabled ? colors.divider.withValues(alpha: 0.5) : colors.divider, width: 1);
+    switch (widget.variant) {
+      case ClayButtonVariant.primary:
+        bgColor = isDisabled ? colors.primary.withValues(alpha: 0.5) : colors.primary;
+        fgColor = isDisabled
+            ? (colors.brightness == Brightness.dark ? const Color(0xFF140E0A) : Colors.white).withValues(alpha: 0.5)
+            : (colors.brightness == Brightness.dark ? const Color(0xFF140E0A) : Colors.white);
+        shadows = isDisabled ? clayShadows.subtle : clayShadows.card;
+        border = null;
+      case ClayButtonVariant.danger:
+        bgColor = isDisabled ? colors.danger.withValues(alpha: 0.5) : colors.danger;
+        fgColor = Colors.white;
+        shadows = isDisabled ? clayShadows.subtle : clayShadows.card;
+        border = null;
+      case ClayButtonVariant.secondary:
+        bgColor = isDisabled ? colors.surface.withValues(alpha: 0.5) : colors.surface;
+        fgColor = isDisabled ? colors.inkMuted : colors.ink;
+        shadows = isDisabled ? clayShadows.subtle : clayShadows.card;
+        border = Border.all(color: isDisabled ? colors.divider.withValues(alpha: 0.5) : colors.divider, width: 1);
     }
 
     final button = AnimatedBuilder(

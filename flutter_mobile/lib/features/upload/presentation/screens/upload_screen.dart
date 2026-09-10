@@ -12,6 +12,7 @@ import 'package:exif/exif.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:mime/mime.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/providers.dart';
@@ -27,9 +28,8 @@ class UploadScreen extends ConsumerStatefulWidget {
 }
 
 class _UploadScreenState extends ConsumerState<UploadScreen> {
-  final _picker = ImagePicker();
   final _captionController = TextEditingController();
-
+  final _picker = ImagePicker();
   XFile? _pickedFile;
   bool _isVideo = false;
   bool _uploading = false;
@@ -43,8 +43,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   Future<void> _pickImage() async {
     final file = await _picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 85,
-      maxWidth: 2048,
+      imageQuality: 90,
     );
     if (file == null) return;
     setState(() {
@@ -56,8 +55,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   Future<void> _capturePhoto() async {
     final file = await _picker.pickImage(
       source: ImageSource.camera,
-      imageQuality: 85,
-      maxWidth: 2048,
+      imageQuality: 90,
     );
     if (file == null) return;
     setState(() {
@@ -67,7 +65,10 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   }
 
   Future<void> _pickVideo() async {
-    final file = await _picker.pickVideo(source: ImageSource.gallery);
+    final file = await _picker.pickVideo(
+      source: ImageSource.gallery,
+      maxDuration: const Duration(minutes: 5),
+    );
     if (file == null) return;
     setState(() {
       _pickedFile = file;
@@ -84,8 +85,12 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       );
       final raw = tag?.printable;
       if (raw != null && raw.length >= 19) {
-        return '${raw.substring(0, 4)}-${raw.substring(5, 7)}-'
+        final normalized = '${raw.substring(0, 4)}-${raw.substring(5, 7)}-'
             '${raw.substring(8, 10)}T${raw.substring(11, 19)}';
+        final parsed = DateTime.tryParse(normalized);
+        if (parsed != null) {
+          return parsed.toIso8601String();
+        }
       }
     } catch (_) {
       // Fall through to fileModified.
@@ -147,7 +152,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       if (!mounted) return;
       ref.read(memoriesProvider.notifier).refresh();
       _showMessage('Memory saved to your album');
-      Navigator.of(context).pop();
+      context.pop();
     } catch (e) {
       if (!mounted) return;
       setState(() => _uploading = false);
@@ -192,11 +197,20 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
         ),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppTheme.spacingMd),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: Column(
+          children: [
+            if (_uploading)
+              LinearProgressIndicator(
+                backgroundColor: colors.surfaceContainerLow,
+                color: colors.primary,
+                minHeight: 3,
+              ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(AppTheme.spacingMd),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
               ClayCard(
                 variant: ClayVariant.defaultCard,
                 padding: const EdgeInsets.all(16),
@@ -342,6 +356,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                 child: TextField(
                   controller: _captionController,
                   maxLines: 4,
+                  maxLength: 500,
                   decoration: InputDecoration(
                     hintText:
                         'What you felt, the conversation, the scent of the wind...',
@@ -354,20 +369,28 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
 
               const SizedBox(height: AppTheme.spacingLg),
 
-              ClayButton(
-                label: _uploading ? 'Saving...' : 'Save Memory to Album',
-                variant: ClayButtonVariant.primary,
-                onPressed: _uploading ? null : _submit,
-                loading: _uploading,
-                fullWidth: true,
-              ).animate().fadeIn(delay: 300.ms, duration: 300.ms),
+              // Submit
+              SizedBox(
+                width: double.infinity,
+                child: ClayButton(
+                  label: _uploading ? 'Saving memory...' : 'Save Memory',
+                  icon: const Icon(Icons.favorite_border, size: 18),
+                  variant: ClayButtonVariant.primary,
+                  loading: _uploading,
+                  disabled: _pickedFile == null || _uploading,
+                  onPressed: _submit,
+                ),
+              ).animate().fadeIn(delay: 250.ms, duration: 300.ms),
 
-              const SizedBox(height: AppTheme.spacingXl),
+              const SizedBox(height: AppTheme.spacingXxl),
             ],
           ),
         ),
       ),
-    );
+    ],
+  ),
+),
+);
   }
 
   String _pickLabel() {
@@ -399,7 +422,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           ),
           const SizedBox(height: AppTheme.spacingXs),
           Text(
-            'Drop a photo here',
+            'Choose a photo or video',
             style: typography.headlineSmall?.copyWith(
                 fontSize: 18, color: colors.ink, fontFamily: 'Fraunces'),
           ),

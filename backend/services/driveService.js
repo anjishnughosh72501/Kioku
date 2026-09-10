@@ -81,21 +81,9 @@ async function uploadFile({ buffer, filename, mimeType, folderId }) {
 
   const fileId = res.data.id;
 
-  try {
-    // Make it viewable via link (anyone with the link, not publicly searchable)
-    await drive.permissions.create({
-      fileId,
-      requestBody: { role: 'reader', type: 'anyone' },
-    });
-  } catch (permErr) {
-    // Rollback: delete the created file so no orphaned unviewable files linger
-    await drive.files.delete({ fileId }).catch(() => {});
-    throw permErr;
-  }
-
   return {
     fileId,
-    // Good for <Image> / <Video> src in the app
+    // Direct view & thumbnail URLs (access governed by folder permissions)
     viewUrl: `https://drive.google.com/uc?export=view&id=${fileId}`,
     thumbnailUrl: `https://drive.google.com/thumbnail?id=${fileId}&sz=w500`,
   };

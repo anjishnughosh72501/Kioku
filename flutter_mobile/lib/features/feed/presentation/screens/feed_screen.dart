@@ -17,6 +17,7 @@ import 'package:flutter_mobile/features/feed/presentation/widgets/memory_card.da
 
 import 'package:flutter_mobile/core/services/user_profile_service.dart';
 import 'package:flutter_mobile/features/auth/presentation/widgets/username_dialog.dart';
+import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
 
 class FeedScreen extends ConsumerStatefulWidget {
   const FeedScreen({super.key});
@@ -31,6 +32,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         UsernameDialog.showIfNeeded(context);
@@ -38,8 +40,19 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     });
   }
 
+  void _onScroll() {
+    if (_scrollController.hasClients) {
+      final max = _scrollController.position.maxScrollExtent;
+      final current = _scrollController.offset;
+      if (current >= max - 400) {
+        ref.read(memoriesProvider.notifier).loadMore();
+      }
+    }
+  }
+
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
   }
@@ -55,21 +68,24 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
 
     return Scaffold(
       backgroundColor: colors.background,
-      body: RefreshIndicator(
-        onRefresh: () => ref.read(memoriesProvider.notifier).refresh(),
-        color: colors.primary,
-        child: CustomScrollView(
-          controller: _scrollController,
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(
-              child: _buildHeader(activeAlbumId, albumsAsync, authState, colors, typography)
-                  .animate()
-                  .fadeIn(duration: 400.ms)
-                  .slideY(begin: -0.1, end: 0, duration: 400.ms),
-            ),
-            ..._buildFeedSlivers(memoriesAsync, colors, typography),
-          ],
+      body: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: () => ref.read(memoriesProvider.notifier).refresh(),
+          color: colors.primary,
+          child: CustomScrollView(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: _buildHeader(activeAlbumId, albumsAsync, authState, colors, typography)
+                    .animate()
+                    .fadeIn(duration: 400.ms)
+                    .slideY(begin: -0.1, end: 0, duration: 400.ms),
+              ),
+              ..._buildFeedSlivers(memoriesAsync, colors, typography),
+            ],
+          ),
         ),
       ),
       floatingActionButton: _buildFloatingCapture(colors)
@@ -203,61 +219,70 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
       ];
     }
 
-    final groups = _groupByDay(items);
-    final widgets = <Widget>[];
-
+    final groups = ref.watch(groupedMemoriesProvider);
+    final flatItems = <_FeedEntry>[];
     for (final group in groups) {
-      widgets.add(
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppTheme.spacingMd,
-            AppTheme.spacingMd,
-            AppTheme.spacingMd,
-            AppTheme.spacingSm,
-          ),
-          child: _buildDayHeader(group.day, colors, typography),
-        ),
-      );
-      widgets.addAll(group.items.map((item) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppTheme.spacingMd,
-            0,
-            AppTheme.spacingMd,
-            AppTheme.spacingMd,
-          ),
-          child: MemoryCard(item: item, colors: colors, typography: typography),
-        );
-      }));
+      flatItems.add(_FeedDayHeaderEntry(group.day));
+      for (final item in group.items) {
+        flatItems.add(_FeedMemoryEntry(item));
+      }
     }
+    final isPaginating = ref.watch(isPaginatingMemoriesProvider);
 
     return [
       SliverPadding(
-        padding: const EdgeInsets.only(bottom: 120),
-        sliver: SliverList(delegate: SliverChildListDelegate(widgets)),
+        padding: const EdgeInsets.only(bottom: 24),
+        sliver: SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              final entry = flatItems[index];
+              if (entry is _FeedDayHeaderEntry) {
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppTheme.spacingMd,
+                    AppTheme.spacingMd,
+                    AppTheme.spacingMd,
+                    AppTheme.spacingSm,
+                  ),
+                  child: _buildDayHeader(entry.day, colors, typography),
+                );
+              } else if (entry is _FeedMemoryEntry) {
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppTheme.spacingMd,
+                    0,
+                    AppTheme.spacingMd,
+                    AppTheme.spacingMd,
+                  ),
+                  child: MemoryCard(item: entry.memory, colors: colors, typography: typography),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+            childCount: flatItems.length,
+          ),
+        ),
+      ),
+      if (isPaginating)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppTheme.spacingMd),
+            child: Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: colors.primary,
+                ),
+              ),
+            ),
+          ),
+        ),
+      const SliverToBoxAdapter(
+        child: SizedBox(height: 96),
       ),
     ];
-  }
-
-  DateTime? _dayKey(KiokuMemory item) {
-    final d = item.takenAt;
-    if (d == null) return null;
-    return DateTime(d.year, d.month, d.day);
-  }
-
-  List<({DateTime day, List<KiokuMemory> items})> _groupByDay(
-    List<KiokuMemory> items,
-  ) {
-    final map = <String, ({DateTime day, List<KiokuMemory> items})>{};
-    for (final item in items) {
-      final day = _dayKey(item);
-      if (day == null) continue;
-      final key = day.toIso8601String();
-      final entry = map.putIfAbsent(key, () => (day: day, items: []));
-      map[key] = (day: day, items: [...entry.items, item]);
-    }
-    final list = map.values.toList()..sort((a, b) => b.day.compareTo(a.day));
-    return list;
   }
 
   String _dayLabel(DateTime day) {
@@ -346,7 +371,14 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
             ClayButton(
               label: 'Create your first album',
               variant: ClayButtonVariant.primary,
-              onPressed: () => _promptNewAlbum(context, colors, typography),
+              onPressed: () async {
+                final name = await CreateAlbumDialog.show(context);
+                if (name != null && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Album "$name" created')),
+                  );
+                }
+              },
             ),
           ],
         ),
@@ -366,43 +398,16 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
       extendedPadding: const EdgeInsets.symmetric(horizontal: 24),
     );
   }
+}
 
-  void _promptNewAlbum(BuildContext context, AppColors colors, TextTheme typography) {
-    final controller = TextEditingController();
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: colors.surfaceContainer,
-          title: Text(
-            'Name your album',
-            style: typography.headlineSmall?.copyWith(color: colors.ink, fontFamily: 'Fraunces'),
-          ),
-          content: TextField(
-            controller: controller,
-            decoration: InputDecoration(
-              hintText: 'e.g. Summer 2026',
-              hintStyle: typography.bodySmall?.copyWith(color: colors.inkSubtle),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text('Cancel', style: typography.bodyMedium?.copyWith(color: colors.inkMuted)),
-            ),
-            TextButton(
-              onPressed: () {
-                final name = controller.text.trim();
-                Navigator.of(dialogContext).pop();
-                if (name.isNotEmpty) {
-                  ref.read(albumsProvider.notifier).addAlbum(name);
-                }
-              },
-              child: Text('Create', style: typography.bodyMedium?.copyWith(color: colors.accentDark)),
-            ),
-          ],
-        );
-      },
-    );
-  }
+sealed class _FeedEntry {}
+
+class _FeedDayHeaderEntry extends _FeedEntry {
+  _FeedDayHeaderEntry(this.day);
+  final DateTime day;
+}
+
+class _FeedMemoryEntry extends _FeedEntry {
+  _FeedMemoryEntry(this.memory);
+  final KiokuMemory memory;
 }
