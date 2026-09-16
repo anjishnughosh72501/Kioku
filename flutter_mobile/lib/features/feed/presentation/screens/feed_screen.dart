@@ -16,8 +16,8 @@ import 'package:flutter_mobile/features/feed/presentation/widgets/album_dropdown
 import 'package:flutter_mobile/features/feed/presentation/widgets/memory_card.dart';
 
 import 'package:flutter_mobile/core/services/user_profile_service.dart';
-import 'package:flutter_mobile/features/auth/presentation/widgets/username_dialog.dart';
 import 'package:flutter_mobile/features/feed/presentation/widgets/shimmer_skeleton_card.dart';
+import 'package:flutter_mobile/features/feed/presentation/widgets/quick_actions_row.dart';
 import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
 
 class FeedScreen extends ConsumerStatefulWidget {
@@ -34,11 +34,6 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        UsernameDialog.showIfNeeded(context);
-      }
-    });
   }
 
   void _onScroll() {
@@ -103,6 +98,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                       .fadeIn(duration: 350.ms)
                       .slideY(begin: -0.06, end: 0, duration: 300.ms),
                 ),
+              ),
+              const SliverToBoxAdapter(
+                child: QuickActionsRow(),
               ),
               ..._buildFeedSlivers(memoriesAsync, colors, typography),
             ],

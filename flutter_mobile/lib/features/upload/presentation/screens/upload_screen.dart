@@ -364,8 +364,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                   maxLines: 4,
                   maxLength: 500,
                   decoration: InputDecoration(
-                    hintText:
-                        'What you felt, the conversation, the scent of the wind...',
+                    hintText: 'Add a caption...',
                     hintStyle: typography.bodyMedium?.copyWith(color: colors.inkSubtle),
                     border: InputBorder.none,
                   ),

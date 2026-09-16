@@ -55,10 +55,12 @@ class _AlbumRowState extends State<AlbumRow> {
           Icon(Icons.expand_more, color: colors.inkMuted),
         ],
       ),
-      onExpansionChanged: (_) {
-        setState(() {
-          _membersFuture = AppDrive.instance.albumMembers(widget.album.id);
-        });
+      onExpansionChanged: (isExpanded) {
+        if (isExpanded) {
+          setState(() {
+            _membersFuture = AppDrive.instance.albumMembers(widget.album.id);
+          });
+        }
       },
       children: [
         FutureBuilder<List<AlbumMember>>(

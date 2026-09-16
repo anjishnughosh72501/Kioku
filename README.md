@@ -1,4 +1,4 @@
-﻿<div align="center">
+<div align="center">
 
 <img src="assets/kiokulogo.jpg" width="170" alt="Kioku Logo" style="border-radius: 36px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);"/>
 
@@ -43,11 +43,17 @@ Social feeds encourage performance, metrics, and algorithms. But real life happe
 # 🌿 Key Features
 
 ### 🌸 Japanese Stationery Aesthetic
-- **Washi Tape & Hanko Stamps**: Organic visual accents with Japanese motifs and authentic ink textures.
+- **Washi Tape & Hanko Stamps**: Organic visual accents with Japanese motifs, authentic ink textures, and screen-reader accessibility.
 - **Claymorphic UI**: Soft, tactile cards with gentle debossed and elevated clay shadows.
-- **Curated Themes**:
-  - ☕ **Coffee Light**: Cream paper, warm sepia ink, toasted latte tones.
-  - 🌲 **Forest Dark**: Deep moss, charcoal slate, warm amber embers.
+- **Enhanced Curated Themes**:
+  - ☕ **Coffee Light**: Warm parchment paper, rich espresso typography, toasted latte tones.
+  - 🌲 **Forest Dark**: Deep rich roasted bean canvas (`#0F0B08`), high-contrast oat grey text (`#B09E92`, WCAG AA compliant), and warm golden caramel accents (`#E5AF72`).
+
+### 🗂️ Dedicated Albums Hub & 2×2 Photo Grid
+- **Dedicated Albums Tab**: 4-tab bottom navigation (**Feed** | **Albums** | **Flashbacks** | **Profile**) with dedicated album management.
+- **2×2 Square Photo Grid**: Clean, edge-to-edge 2×2 photo grid in album details for dense, distraction-free visual browsing.
+- **Shareable Deep Links & Invites**: One-tap album invite links generating app-accessible URLs and `kioku://album/<id>` deep links.
+- **Home Quick Actions**: Instant access row on the main feed for rapid capture, album browsing, flashbacks, and profile navigation.
 
 ### 🛡️ Zero-Knowledge End-to-End Encryption (E2EE)
 - **libsodium Cryptographic Engine**: Industrial-grade `XChaCha20-Poly1305` chunked streaming encryption for media and `crypto_secretbox` for metadata.

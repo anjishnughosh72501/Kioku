@@ -80,12 +80,14 @@ class WashiTape extends StatelessWidget {
     );
 
     if (animateIn) {
-      return widget
-          .animate()
-          .fadeIn(duration: 300.ms, curve: Curves.easeOut)
-          .slideY(begin: -0.2, end: 0, duration: 300.ms, curve: Curves.easeOut);
+      return ExcludeSemantics(
+        child: widget
+            .animate()
+            .fadeIn(duration: 300.ms, curve: Curves.easeOut)
+            .slideY(begin: -0.2, end: 0, duration: 300.ms, curve: Curves.easeOut),
+      );
     }
-    return widget;
+    return ExcludeSemantics(child: widget);
   }
 
   Color _variantColor(AppColors colors) {

@@ -116,6 +116,7 @@ class AppTheme {
   static const double radiusButton = 24;
   static const double radiusInput = 20;
   static const double radiusModal = 26;
+  static const double radiusAlbumCard = 20;
   static const double radiusNavigation = 34;
   static const double radiusPill = 9999;
 

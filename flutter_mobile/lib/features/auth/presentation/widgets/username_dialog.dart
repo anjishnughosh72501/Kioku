@@ -4,7 +4,7 @@ import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
 
 class UsernameDialog extends StatefulWidget {
-  const UsernameDialog({super.key, this.isDismissible = false});
+  const UsernameDialog({super.key, this.isDismissible = true});
 
   final bool isDismissible;
 
@@ -12,8 +12,8 @@ class UsernameDialog extends StatefulWidget {
     if (!UserProfileService.instance.hasUsername) {
       await showDialog<void>(
         context: context,
-        barrierDismissible: false,
-        builder: (context) => const UsernameDialog(isDismissible: false),
+        barrierDismissible: true,
+        builder: (context) => const UsernameDialog(isDismissible: true),
       );
     }
   }

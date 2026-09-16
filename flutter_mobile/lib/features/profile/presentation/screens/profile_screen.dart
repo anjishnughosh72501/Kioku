@@ -813,7 +813,9 @@ class ProfileScreen extends ConsumerWidget {
                     OutlinedButton.icon(
                       onPressed: () {
                         Share.share(
-                          'Join my memory album "${album.title}" on Kioku! Download the Kioku app, sign in with your Google account, and collaborate on our shared memories.',
+                          'Join my memory album "${album.title}" on Kioku!\n'
+                          'Get the app: https://github.com/anjishnughosh72501/Kioku\n'
+                          'Open album: kioku://album/${album.id}',
                           subject: 'Kioku Memory Album: ${album.title}',
                         );
                       },

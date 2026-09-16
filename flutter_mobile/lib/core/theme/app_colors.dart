@@ -108,40 +108,40 @@ class AppColors {
 
   // Espresso Dark (default) — deep coffee beans, warm mocha surfaces, golden caramel crema
   static const AppColors forestDark = AppColors(
-    background: Color(0xFF140E0A), // Deep roasted bean background
-    surface: Color(0xFF1E1611),    // Warm dark mocha
-    surfaceElevated: Color(0xFF281E17), // Rich coffee crema card
-    surfaceContainerLowest: Color(0xFF0D0906), // Extra dark espresso
-    surfaceContainerLow: Color(0xFF18110D),
-    surfaceContainer: Color(0xFF221913),
-    surfaceContainerHigh: Color(0xFF2D221A),
-    surfaceContainerHighest: Color(0xFF382B21),
-    primary: Color(0xFFDCA468),     // Golden caramel crema accent
-    primaryDark: Color(0xFFB87F44), // Cinnamon roast
-    accent: Color(0xFFE8BD8A),      // Warm froth latte accent
-    accentDark: Color(0xFFC78F56),  // Hazelnut brown
+    background: Color(0xFF0F0B08), // Slightly deeper, rich dark background
+    surface: Color(0xFF1A1109),    // Warm dark mocha
+    surfaceElevated: Color(0xFF251710), // Rich coffee crema card
+    surfaceContainerLowest: Color(0xFF0A0705), // Extra dark espresso
+    surfaceContainerLow: Color(0xFF140D07),
+    surfaceContainer: Color(0xFF1F150E),
+    surfaceContainerHigh: Color(0xFF2A1C13),
+    surfaceContainerHighest: Color(0xFF352419),
+    primary: Color(0xFFE5AF72),     // Brighter golden caramel crema accent
+    primaryDark: Color(0xFFC48B4E), // Cinnamon roast
+    accent: Color(0xFFEDCB9A),      // Warm froth latte accent
+    accentDark: Color(0xFFD49B60),  // Hazelnut brown
     accentSoft: Color(0xFF382518),  // Subtle roasted brown container
     accentContainer: Color(0xFF422C1D),
-    ink: Color(0xFFFAF6F0),         // Steamed milk white text
-    inkMuted: Color(0xFFA8988C),    // Soft warm oat grey
-    inkSubtle: Color(0xFF9E907A),   // Muted roasted taupe (WCAG AA compliant)
-    divider: Color(0xFF33251B),     // Subtle roast border
-    dividerLight: Color(0xFF3F2F24),
-    overlay: Color(0xCC140E0A),     // rgba(20, 14, 10, 0.80)
-    glassBorder: Color(0x2BDCA468), // rgba(220, 164, 104, 0.17)
-    danger: Color(0xFFDE7468),      // Terracotta red
-    success: Color(0xFF7CB883),     // Matcha / green bean
-    shadow: Color(0x80000000),      // rgba(0, 0, 0, 0.50)
+    ink: Color(0xFFF8F3EB),         // Steamed milk white text
+    inkMuted: Color(0xFFB09E92),    // Enhanced oat grey for better WCAG contrast
+    inkSubtle: Color(0xFFA89888),   // Muted roasted taupe
+    divider: Color(0xFF3A2A1E),     // Distinct roast border
+    dividerLight: Color(0xFF483526),
+    overlay: Color(0xCC0F0B08),     // rgba(15, 11, 8, 0.80)
+    glassBorder: Color(0x33E5AF72), // rgba(229, 175, 114, 0.20)
+    danger: Color(0xFFE06858),      // Terracotta red
+    success: Color(0xFF6DB07A),     // Matcha / green bean
+    shadow: Color(0x8C000000),      // rgba(0, 0, 0, 0.55)
     shadowDark: Color(0xB3000000),  // rgba(0, 0, 0, 0.70)
     washiTape: Color(0xB33D2A1C),   // Rich mocha washi tape
     washiTapeMatcha: Color(0x995C402B),
     washiTapePeach: Color(0x99572C20),
     hankoRed: Color(0xFFC95B48),
-    sage: Color(0xFFDCA468),        // Map to caramel crema
-    sageDark: Color(0xFFB87F44),
+    sage: Color(0xFFE5AF72),        // Map to caramel crema
+    sageDark: Color(0xFFC48B4E),
     sageLight: Color(0xFF382518),
-    sageBackground: Color(0xFF1E1611),
-    sageBorder: Color(0xFF3F2F24),
+    sageBackground: Color(0xFF1A1109),
+    sageBorder: Color(0xFF483526),
     amber: Color(0xFFE5B358),
     amberContainer: Color(0xFF3B2A10),
   );

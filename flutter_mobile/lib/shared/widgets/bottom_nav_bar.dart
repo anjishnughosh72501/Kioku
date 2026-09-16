@@ -164,6 +164,11 @@ class KiokuNavItems {
         activeIcon: const Icon(Icons.auto_stories),
       ),
       BottomNavItem(
+        label: 'Albums',
+        icon: const Icon(Icons.photo_library_outlined),
+        activeIcon: const Icon(Icons.photo_library),
+      ),
+      BottomNavItem(
         label: 'Flashbacks',
         icon: const Icon(Icons.auto_awesome_outlined),
         activeIcon: const Icon(Icons.auto_awesome),

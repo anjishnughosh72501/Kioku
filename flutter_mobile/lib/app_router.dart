@@ -18,6 +18,8 @@ import 'features/auth/presentation/controllers/auth_controller.dart';
 import 'features/auth/presentation/screens/recovery_key_screen.dart';
 import 'features/auth/presentation/screens/migration_screen.dart';
 import 'features/profile/presentation/screens/storage_setup_screen.dart';
+import 'features/albums/presentation/screens/albums_screen.dart';
+import 'features/albums/presentation/screens/album_detail_screen.dart';
 
 /// GoRouter provider with auth state listener
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -25,16 +27,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     initialLocation: '/join',
+    debugLogDiagnostics: false,
     redirect: (context, state) {
-      final isAuthed = authState.isAuthenticated;
-      final isJoining = state.matchedLocation == '/join';
+      final isAuth = authState.isAuthenticated;
+      final isJoinScreen = state.matchedLocation == '/join';
 
-      if (!isAuthed && !isJoining) {
+      if (authState.isLoading) return null;
+
+      if (!isAuth && !isJoinScreen) {
         return '/join';
       }
-      if (isAuthed && isJoining) {
+
+      if (isAuth && isJoinScreen) {
         return '/';
       }
+
       return null;
     },
     routes: [
@@ -75,6 +82,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
+                path: '/albums',
+                name: 'albums',
+                pageBuilder: (context, state) => const NoTransitionPage(
+                  child: AlbumsScreen(),
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
                 path: '/flashbacks',
                 name: 'flashbacks',
                 pageBuilder: (context, state) => const NoTransitionPage(
@@ -95,6 +113,25 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+      GoRoute(
+        path: '/albums/:id',
+        name: 'album-detail',
+        pageBuilder: (context, state) {
+          final albumId = state.pathParameters['id']!;
+          final album = state.extra as Album?;
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: AlbumDetailScreen(albumId: albumId, album: album),
+            transitionDuration: const Duration(milliseconds: 280),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              return FadeTransition(
+                opacity: CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                child: child,
+              );
+            },
+          );
+        },
       ),
       GoRoute(
         path: '/upload',
