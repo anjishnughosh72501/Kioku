@@ -7,7 +7,13 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Flutter Mobile</string>
+	<string>Kioku</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Kioku needs access to your photo library so you can select and encrypt memories to share in your albums.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Kioku needs access to your camera to capture photos and videos directly into your encrypted memory album.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Kioku needs access to your microphone when recording video memories.</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

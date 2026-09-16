@@ -90,7 +90,7 @@ class WebDavStorageProvider implements StorageProvider {
         'Content-Type': 'application/octet-stream',
       },
       body: ciphertext,
-    );
+    ).timeout(const Duration(seconds: 45));
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw http.ClientException(
@@ -104,7 +104,7 @@ class WebDavStorageProvider implements StorageProvider {
   @override
   Future<Uint8List> getBlob(String objectId, {required String containerId}) async {
     final uri = _buildUri('$containerId/$objectId.enc');
-    final res = await _client.get(uri, headers: _authHeaders);
+    final res = await _client.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 45));
 
     if (res.statusCode != 200) {
       throw http.ClientException(
@@ -118,7 +118,7 @@ class WebDavStorageProvider implements StorageProvider {
   @override
   Future<void> deleteBlob(String objectId, {required String containerId}) async {
     final uri = _buildUri('$containerId/$objectId.enc');
-    final res = await _client.delete(uri, headers: _authHeaders);
+    final res = await _client.delete(uri, headers: _authHeaders).timeout(const Duration(seconds: 45));
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw http.ClientException(
@@ -137,7 +137,7 @@ class WebDavStorageProvider implements StorageProvider {
         'Depth': '1',
       });
 
-    final streamedRes = await _client.send(req);
+    final streamedRes = await _client.send(req).timeout(const Duration(seconds: 45));
     final res = await http.Response.fromStream(streamedRes);
 
     if (res.statusCode != 207 && (res.statusCode < 200 || res.statusCode >= 300)) {

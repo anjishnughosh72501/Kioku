@@ -56,6 +56,10 @@ coverage/
 .idea/
 .gradle/
 local.properties
+key.properties
+*.keystore
+*.jks
+
 
 # Visual Studio Code
 .vscode/

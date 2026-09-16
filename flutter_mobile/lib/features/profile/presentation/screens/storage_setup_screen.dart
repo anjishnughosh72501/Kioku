@@ -292,49 +292,40 @@ class _StorageSetupScreenState extends ConsumerState<StorageSetupScreen> {
     return ClayCard(
       variant: ClayVariant.defaultCard,
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        children: [
-          RadioListTile<StorageProviderType>(
-            title: const Text('Local Storage'),
-            subtitle: const Text('Stored offline on this device'),
-            value: StorageProviderType.local,
-            groupValue: _selectedType,
-            activeColor: colors.primary,
-            onChanged: (val) => setState(() => _selectedType = val!),
-          ),
-          RadioListTile<StorageProviderType>(
-            title: const Text('Google Drive'),
-            subtitle: const Text('Sync encrypted blobs to personal Drive folder'),
-            value: StorageProviderType.drive,
-            groupValue: _selectedType,
-            activeColor: colors.primary,
-            onChanged: (val) => setState(() => _selectedType = val!),
-          ),
-          RadioListTile<StorageProviderType>(
-            title: const Text('S3-Compatible Cloud (BYOS)'),
-            subtitle: const Text('AWS S3, Cloudflare R2, Backblaze B2, MinIO'),
-            value: StorageProviderType.s3,
-            groupValue: _selectedType,
-            activeColor: colors.primary,
-            onChanged: (val) => setState(() => _selectedType = val!),
-          ),
-          RadioListTile<StorageProviderType>(
-            title: const Text('WebDAV Storage'),
-            subtitle: const Text('Nextcloud, ownCloud, or custom WebDAV server'),
-            value: StorageProviderType.webdav,
-            groupValue: _selectedType,
-            activeColor: colors.primary,
-            onChanged: (val) => setState(() => _selectedType = val!),
-          ),
-          RadioListTile<StorageProviderType>(
-            title: const Text('P2P Mesh (Decentralized)'),
-            subtitle: const Text('Replicate blobs directly between devices via WebRTC'),
-            value: StorageProviderType.mesh,
-            groupValue: _selectedType,
-            activeColor: colors.primary,
-            onChanged: (val) => setState(() => _selectedType = val!),
-          ),
-        ],
+      child: RadioGroup<StorageProviderType>(
+        groupValue: _selectedType,
+        onChanged: (val) {
+          if (val != null) setState(() => _selectedType = val);
+        },
+        child: const Column(
+          children: [
+            RadioListTile<StorageProviderType>(
+              title: Text('Local Storage'),
+              subtitle: Text('Stored offline on this device'),
+              value: StorageProviderType.local,
+            ),
+            RadioListTile<StorageProviderType>(
+              title: Text('Google Drive'),
+              subtitle: Text('Sync encrypted blobs to personal Drive folder'),
+              value: StorageProviderType.drive,
+            ),
+            RadioListTile<StorageProviderType>(
+              title: Text('S3-Compatible Cloud (BYOS)'),
+              subtitle: Text('AWS S3, Cloudflare R2, Backblaze B2, MinIO'),
+              value: StorageProviderType.s3,
+            ),
+            RadioListTile<StorageProviderType>(
+              title: Text('WebDAV Storage'),
+              subtitle: Text('Nextcloud, ownCloud, or custom WebDAV server'),
+              value: StorageProviderType.webdav,
+            ),
+            RadioListTile<StorageProviderType>(
+              title: Text('P2P Mesh (Decentralized)'),
+              subtitle: Text('Replicate blobs directly between devices via WebRTC'),
+              value: StorageProviderType.mesh,
+            ),
+          ],
+        ),
       ),
     );
   }

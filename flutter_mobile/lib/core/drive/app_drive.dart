@@ -62,6 +62,7 @@ class AppDrive {
 
   GoogleSignInAccount? _account;
   drive.DriveApi? _api;
+  http.Client? _authClient;
   String? _accessToken;
   DateTime? _apiExpiry;
 
@@ -73,6 +74,8 @@ class AppDrive {
   void bind(GoogleSignInAccount account) {
     _account = account;
     _api = null;
+    _authClient?.close();
+    _authClient = null;
     _accessToken = null;
     _apiExpiry = null;
   }
@@ -80,6 +83,8 @@ class AppDrive {
   void clear() {
     _account = null;
     _api = null;
+    _authClient?.close();
+    _authClient = null;
     _accessToken = null;
     _apiExpiry = null;
     _bytesCache.clear();
@@ -97,25 +102,32 @@ class AppDrive {
     _accessToken = authz.accessToken;
     _apiExpiry = DateTime.now().add(const Duration(minutes: 50));
     _api = null;
+    _authClient?.close();
+    _authClient = null;
     return _accessToken!;
   }
 
   Future<drive.DriveApi> api() async {
     final token = await accessToken();
-    _api ??= drive.DriveApi(
-      authenticatedClient(
-        http.Client(),
-        AccessCredentials(
-          AccessToken(
-            'Bearer',
-            token,
-            DateTime.now().toUtc().add(const Duration(hours: 1)),
+    if (_api == null) {
+      _authClient?.close();
+      final client = http.Client();
+      _authClient = client;
+      _api = drive.DriveApi(
+        authenticatedClient(
+          client,
+          AccessCredentials(
+            AccessToken(
+              'Bearer',
+              token,
+              DateTime.now().toUtc().add(const Duration(hours: 1)),
+            ),
+            null,
+            [drive.DriveApi.driveFileScope],
           ),
-          null,
-          [drive.DriveApi.driveFileScope],
         ),
-      ),
-    );
+      );
+    }
     return _api!;
   }
 
@@ -133,7 +145,10 @@ class AppDrive {
       orderBy: 'createdTime',
       $fields: 'files(id,name)',
     );
-    return (res.files ?? []).map(Album.fromDriveFolder).toList();
+    return (res.files ?? [])
+        .where((f) => (f.name ?? '').startsWith(Album.prefix))
+        .map(Album.fromDriveFolder)
+        .toList();
   }
 
   Future<Album> createAlbum(String name) async {
@@ -284,12 +299,14 @@ class AppDrive {
     final token = await accessToken();
     final client = http.Client();
     try {
-      final resp = await client.get(
-        Uri.parse(
-          'https://www.googleapis.com/drive/v3/files/$fileId?alt=media',
-        ),
-        headers: {'Authorization': 'Bearer $token'},
-      );
+      final resp = await client
+          .get(
+            Uri.parse(
+              'https://www.googleapis.com/drive/v3/files/$fileId?alt=media',
+            ),
+            headers: {'Authorization': 'Bearer $token'},
+          )
+          .timeout(const Duration(seconds: 45));
       if (resp.statusCode != 200) {
         throw HttpException('Drive fetch failed ($fileId): ${resp.statusCode}');
       }

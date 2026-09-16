@@ -293,7 +293,8 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
     final wrappedFileKey = CryptoCore.instance.wrapKey(fileKey, collectionKey);
 
     // 7. Assemble EncryptedEnvelope and serialize to opaque binary blob
-    final objectId = 'mem_${DateTime.now().millisecondsSinceEpoch}_${fileKey[0]}';
+    final randomSuffix = fileKey.sublist(0, 8).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    final objectId = 'mem_${DateTime.now().millisecondsSinceEpoch}_$randomSuffix';
     final envelope = EncryptedEnvelope(
       objectId: objectId,
       wrappedFileKey: wrappedFileKey.cipherText,

@@ -57,7 +57,10 @@ class _DriveThumbState extends ConsumerState<DriveThumb> {
       if (thumb != null) return thumb;
       return await repo.getPhotoBytes(memory.id, albumId: activeAlbum);
     } catch (_) {
-      return await AppDrive.instance.photoBytes(memory.id);
+      if (!memory.id.startsWith('mem_') && !memory.id.endsWith('.enc')) {
+        return await AppDrive.instance.photoBytes(memory.id);
+      }
+      rethrow;
     }
   }
 

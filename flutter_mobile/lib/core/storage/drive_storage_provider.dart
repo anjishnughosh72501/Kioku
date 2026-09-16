@@ -53,7 +53,7 @@ class DriveStorageProvider implements StorageProvider {
           'https://www.googleapis.com/drive/v3/files/$objectId?alt=media',
         ),
         headers: {'Authorization': 'Bearer $token'},
-      );
+      ).timeout(const Duration(seconds: 45));
       if (resp.statusCode != 200) {
         throw http.ClientException('Drive fetch failed ($objectId): ${resp.statusCode}');
       }

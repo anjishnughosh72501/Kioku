@@ -1,0 +1,12 @@
+# Android Release Keystore Configuration
+# Copy this file to `android/key.properties` (which is git-ignored) and fill in your values.
+#
+# To generate a production release keystore:
+# keytool -genkey -v -keystore kioku-release.keystore -keyalg RSA -keysize 2048 -validity 10000 -alias kioku
+#
+# Place the generated keystore file in `android/app/` or specify its absolute/relative path below.
+
+storePassword=YOUR_STORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=kioku
+storeFile=kioku-release.keystore

@@ -91,7 +91,7 @@ class UserProfileService {
 
   static String _generateFriendCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final random = Random();
+    final random = Random.secure();
     final buffer = StringBuffer('KIOKU-');
     for (var i = 0; i < 4; i++) {
       buffer.write(chars[random.nextInt(chars.length)]);

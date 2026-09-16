@@ -14,7 +14,11 @@ import 'package:flutter_mobile/app_router.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await UserProfileService.instance.init();
-  await KeyStore.instance.initialize();
+  try {
+    await KeyStore.instance.initialize();
+  } catch (_) {
+    // If vault recovery is required, app launches and router/recovery flow can handle it
+  }
 
   runApp(
     const ProviderScope(

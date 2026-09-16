@@ -42,7 +42,7 @@ class FakeMemoryRepository implements IMemoryRepository {
   Future<List<AlbumMember>> getAlbumMembers(String albumId) async => [];
 
   @override
-  Future<void> deleteMemory(String fileId) async {}
+  Future<void> deleteMemory(String fileId, {String? albumId}) async {}
 }
 
 void main() {

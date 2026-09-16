@@ -30,13 +30,38 @@ class VideoPlayerScreen extends ConsumerStatefulWidget {
 class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
+  File? _decryptedTempFile;
   bool _initialized = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    _sweepStaleTempVideos();
     _initializePlayer();
+  }
+
+  static Future<void> _sweepStaleTempVideos() async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final entities = tempDir.listSync();
+      for (final entity in entities) {
+        if (entity is File && entity.path.contains('dec_') && entity.path.endsWith('.mp4')) {
+          try {
+            entity.deleteSync();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
+
+  void _cleanupTempFile() {
+    try {
+      if (_decryptedTempFile != null && _decryptedTempFile!.existsSync()) {
+        _decryptedTempFile!.deleteSync();
+      }
+    } catch (_) {}
+    _decryptedTempFile = null;
   }
 
   Future<void> _initializePlayer() async {
@@ -55,6 +80,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
         final tempDir = await getTemporaryDirectory();
         final tempFile = File('${tempDir.path}/dec_${widget.mediaId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.mp4');
         await tempFile.writeAsBytes(bytes);
+        _decryptedTempFile = tempFile;
         controller = VideoPlayerController.file(tempFile);
       } else if (mem != null && mem.localPath != null && mem.localPath!.isNotEmpty) {
         controller = VideoPlayerController.file(File(mem.localPath!));
@@ -67,6 +93,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
             final tempDir = await getTemporaryDirectory();
             final tempFile = File('${tempDir.path}/dec_${widget.mediaId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.mp4');
             await tempFile.writeAsBytes(bytes);
+            _decryptedTempFile = tempFile;
             controller = VideoPlayerController.file(tempFile);
           } else {
             controller = VideoPlayerController.file(File(path));
@@ -116,6 +143,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
 
       setState(() => _initialized = true);
     } catch (e) {
+      _cleanupTempFile();
       if (mounted) {
         setState(() => _error = 'Could not load video');
       }
@@ -128,6 +156,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
   void dispose() {
     _videoController?.dispose();
     _chewieController?.dispose();
+    _cleanupTempFile();
     super.dispose();
   }
 

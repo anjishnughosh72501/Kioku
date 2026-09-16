@@ -1,8 +1,20 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'crypto_core.dart';
 import 'recovery_service.dart';
+
+class VaultRecoveryRequiredException implements Exception {
+  final String message;
+  const VaultRecoveryRequiredException([
+    this.message = 'An existing vault was detected, but master encryption keys are missing from secure storage. '
+        'Please restore your access using your 24-word recovery phrase.',
+  ]);
+
+  @override
+  String toString() => message;
+}
 
 abstract class ISecureStorageProvider {
   Future<String?> read({required String key});
@@ -51,6 +63,8 @@ class InMemorySecureStorage implements ISecureStorageProvider {
 
   @override
   Future<bool> containsKey({required String key}) async => _data.containsKey(key);
+
+  void clear() => _data.clear();
 }
 
 class KeyStore {
@@ -67,6 +81,8 @@ class KeyStore {
   static const _kDeviceSecKeyNonce = 'kioku_sec_dev_sec_key_nonce';
   static const _kRecoveryBlob = 'kioku_sec_recovery_blob';
   static const _kRecoveryNonce = 'kioku_sec_recovery_nonce';
+  static const _kRecoveryBlobBackup = 'kioku_sec_recovery_blob_backup';
+  static const _kRecoveryNonceBackup = 'kioku_sec_recovery_nonce_backup';
   static const _kRecoveryPhraseEncrypted = 'kioku_sec_rec_phrase_enc';
   static const _kRecoveryPhraseNonce = 'kioku_sec_rec_phrase_nonce';
   static const _kCollectionKeyPrefix = 'kioku_sec_coll_key_';
@@ -75,6 +91,9 @@ class KeyStore {
   Uint8List? _cachedMasterKey;
   Uint8List? _cachedDevicePubKey;
   Uint8List? _cachedDeviceSecKey;
+  bool _needsRecovery = false;
+
+  bool get needsRecovery => _needsRecovery;
 
   /// Check if master key exists
   Future<bool> hasMasterKey() async {
@@ -82,13 +101,43 @@ class KeyStore {
     return await _storage.containsKey(key: _kMasterKey);
   }
 
-  /// Initialize keystore: generates masterKey + device keypair if not present
+  /// Check whether prior encrypted vault data exists on device
+  Future<bool> hasExistingEncryptedData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.containsKey(_kRecoveryBlobBackup)) return true;
+      final albums = prefs.getString('kioku_local_albums');
+      if (albums != null && albums.isNotEmpty && albums != '[]') return true;
+      final keys = prefs.getKeys();
+      if (keys.any((k) => k.startsWith('kioku_local_memories_'))) return true;
+    } catch (_) {}
+    return false;
+  }
+
+  /// Initialize keystore: generates masterKey + device keypair if not present.
+  /// Throws [VaultRecoveryRequiredException] if previous vault data exists but keys were wiped.
   Future<String?> initialize({String? recoveryPhrase}) async {
     await CryptoCore.instance.init();
     if (await hasMasterKey()) {
+      _needsRecovery = false;
       await getMasterKey();
       return null;
     }
+
+    if (recoveryPhrase != null && recoveryPhrase.isNotEmpty) {
+      await restoreFromRecoveryPhrase(recoveryPhrase);
+      _needsRecovery = false;
+      return recoveryPhrase;
+    }
+
+    // Safety guard: If no master key is in secure storage, check if prior vault data exists.
+    // If so, do not silently generate an incompatible new master key!
+    if (await hasExistingEncryptedData()) {
+      _needsRecovery = true;
+      throw const VaultRecoveryRequiredException();
+    }
+
+    _needsRecovery = false;
 
     // Generate fresh master key
     final masterKey = CryptoCore.instance.generateRandomKey();
@@ -119,6 +168,14 @@ class KeyStore {
       key: _kRecoveryNonce,
       value: base64Encode(recoveryBlob.nonce),
     );
+
+    // Defense-in-depth: Save secondary copy in SharedPreferences so masterKey can be recovered
+    // even if secure storage is wiped by the OS.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kRecoveryBlobBackup, base64Encode(recoveryBlob.encryptedMasterKey));
+      await prefs.setString(_kRecoveryNonceBackup, base64Encode(recoveryBlob.nonce));
+    } catch (_) {}
 
     // Save phrase encrypted with masterKey for safe viewing in user settings
     final encPhrase = CryptoCore.instance.encryptMetadata({'phrase': phrase}, masterKey);
@@ -153,6 +210,10 @@ class KeyStore {
     if (_cachedMasterKey != null) return _cachedMasterKey!;
     final raw = await _storage.read(key: _kMasterKey);
     if (raw == null || raw.isEmpty) {
+      if (await hasExistingEncryptedData()) {
+        _needsRecovery = true;
+        throw const VaultRecoveryRequiredException();
+      }
       await initialize();
       return _cachedMasterKey!;
     }
@@ -227,10 +288,17 @@ class KeyStore {
     );
   }
 
-  /// Gets the stored recovery blob (encryptedMasterKey, nonce)
+  /// Gets the stored recovery blob (encryptedMasterKey, nonce), checking secure storage and backup
   Future<RecoveryBlob?> getRecoveryBlob() async {
-    final enc = await _storage.read(key: _kRecoveryBlob);
-    final nonce = await _storage.read(key: _kRecoveryNonce);
+    var enc = await _storage.read(key: _kRecoveryBlob);
+    var nonce = await _storage.read(key: _kRecoveryNonce);
+    if (enc == null || nonce == null) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        enc = prefs.getString(_kRecoveryBlobBackup);
+        nonce = prefs.getString(_kRecoveryNonceBackup);
+      } catch (_) {}
+    }
     if (enc == null || nonce == null) return null;
     return RecoveryBlob(
       encryptedMasterKey: base64Decode(enc),
@@ -251,6 +319,35 @@ class KeyStore {
     );
     await _storage.write(key: _kMasterKey, value: base64Encode(recoveredMasterKey));
     _cachedMasterKey = recoveredMasterKey;
+    _needsRecovery = false;
+
+    // Restore device keypair & recovery blobs
+    final keyPair = CryptoCore.instance.generateKeyPair();
+    _cachedDevicePubKey = keyPair.publicKey;
+    _cachedDeviceSecKey = keyPair.secretKey;
+    final wrappedDeviceKey = CryptoCore.instance.wrapKey(keyPair.secretKey, recoveredMasterKey);
+    await _storage.write(key: _kDevicePubKey, value: base64Encode(keyPair.publicKey));
+    await _storage.write(key: _kDeviceSecKey, value: base64Encode(wrappedDeviceKey.cipherText));
+    await _storage.write(key: _kDeviceSecKeyNonce, value: base64Encode(wrappedDeviceKey.nonce));
+
+    await _storage.write(
+      key: _kRecoveryBlob,
+      value: base64Encode(blob.encryptedMasterKey),
+    );
+    await _storage.write(
+      key: _kRecoveryNonce,
+      value: base64Encode(blob.nonce),
+    );
+
+    final encPhrase = CryptoCore.instance.encryptMetadata({'phrase': phrase}, recoveredMasterKey);
+    await _storage.write(key: _kRecoveryPhraseEncrypted, value: base64Encode(encPhrase.cipherText));
+    await _storage.write(key: _kRecoveryPhraseNonce, value: base64Encode(encPhrase.nonce));
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kRecoveryBlobBackup, base64Encode(blob.encryptedMasterKey));
+      await prefs.setString(_kRecoveryNonceBackup, base64Encode(blob.nonce));
+    } catch (_) {}
   }
 
   /// Clears in-memory key cache (e.g. on sign out)

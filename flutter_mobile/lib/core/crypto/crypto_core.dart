@@ -106,46 +106,84 @@ class CryptoCore {
   /// Output stream contains secretstream header as the first chunk followed by cipher chunks.
   Stream<Uint8List> encryptStream(Stream<Uint8List> inputStream, Uint8List fileKey) {
     final secureKey = sodium.secureCopy(fileKey);
-    // SecretStream.push handles streaming chunked encryption
-    final outStream = sodium.crypto.secretStream.push(
-      messageStream: inputStream,
-      key: secureKey,
+    bool isDisposed = false;
+    void safeDispose() {
+      if (!isDisposed) {
+        isDisposed = true;
+        secureKey.dispose();
+      }
+    }
+
+    late StreamController<Uint8List> controller;
+    StreamSubscription<Uint8List>? sub;
+
+    controller = StreamController<Uint8List>(
+      onListen: () {
+        final outStream = sodium.crypto.secretStream.push(
+          messageStream: inputStream,
+          key: secureKey,
+        );
+        sub = outStream.listen(
+          controller.add,
+          onError: (err, st) {
+            safeDispose();
+            controller.addError(err, st);
+          },
+          onDone: () {
+            safeDispose();
+            controller.close();
+          },
+          cancelOnError: false,
+        );
+      },
+      onCancel: () async {
+        safeDispose();
+        await sub?.cancel();
+      },
     );
-    // Dispose key when stream completes or errors
-    return outStream.transform(
-      StreamTransformer<Uint8List, Uint8List>.fromHandlers(
-        handleDone: (sink) {
-          secureKey.dispose();
-          sink.close();
-        },
-        handleError: (error, stack, sink) {
-          secureKey.dispose();
-          sink.addError(error, stack);
-        },
-      ),
-    );
+    return controller.stream;
   }
 
   /// Decrypt a stream of chunks via crypto_secretstream.
   /// Input stream must begin with the secretstream header as emitted by encryptStream.
   Stream<Uint8List> decryptStream(Stream<Uint8List> cipherStream, Uint8List fileKey) {
     final secureKey = sodium.secureCopy(fileKey);
-    final outStream = sodium.crypto.secretStream.pull(
-      cipherStream: cipherStream,
-      key: secureKey,
+    bool isDisposed = false;
+    void safeDispose() {
+      if (!isDisposed) {
+        isDisposed = true;
+        secureKey.dispose();
+      }
+    }
+
+    late StreamController<Uint8List> controller;
+    StreamSubscription<Uint8List>? sub;
+
+    controller = StreamController<Uint8List>(
+      onListen: () {
+        final outStream = sodium.crypto.secretStream.pull(
+          cipherStream: cipherStream,
+          key: secureKey,
+        );
+        sub = outStream.listen(
+          controller.add,
+          onError: (err, st) {
+            safeDispose();
+            controller.addError(err, st);
+          },
+          onDone: () {
+            safeDispose();
+            controller.close();
+          },
+          cancelOnError: false,
+        );
+      },
+      onCancel: () async {
+        safeDispose();
+        await sub?.cancel();
+      },
     );
-    return outStream.transform(
-      StreamTransformer<Uint8List, Uint8List>.fromHandlers(
-        handleDone: (sink) {
-          secureKey.dispose();
-          sink.close();
-        },
-        handleError: (error, stack, sink) {
-          secureKey.dispose();
-          sink.addError(error, stack);
-        },
-      ),
-    );
+    return controller.stream;
   }
 
   /// Encrypt small byte payloads (e.g. thumbnail) using crypto_secretbox_easy

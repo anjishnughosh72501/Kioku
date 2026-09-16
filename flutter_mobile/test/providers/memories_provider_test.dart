@@ -35,7 +35,7 @@ class MockMemoryRepository implements IMemoryRepository {
   }) async => (items: List<KiokuMemory>.from(memories), nextPageToken: null);
 
   @override
-  Future<void> deleteMemory(String fileId) async {
+  Future<void> deleteMemory(String fileId, {String? albumId}) async {
     deletedIds.add(fileId);
     memories.removeWhere((m) => m.id == fileId);
   }

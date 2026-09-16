@@ -83,8 +83,11 @@ class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen>
       try {
         final repo = ref.read(encryptedMemoryRepositoryProvider);
         return await repo.getPhotoBytes(widget.mediaId, albumId: activeAlbum);
-      } catch (_) {
-        // Fall back to local plaintext or Drive if not encrypted
+      } catch (e) {
+        // If this is an encrypted blob, fail directly instead of falling back to plaintext Drive
+        if (widget.mediaId.startsWith('mem_') || widget.mediaId.endsWith('.enc')) {
+          rethrow;
+        }
       }
     }
 

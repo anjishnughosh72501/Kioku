@@ -218,6 +218,3 @@ Page<dynamic> buildPushTransitionPage({
     },
   );
 }
-
-/// Exported router instance
-final appRouter = appRouterProvider;

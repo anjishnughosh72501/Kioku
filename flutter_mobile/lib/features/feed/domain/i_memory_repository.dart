@@ -11,5 +11,5 @@ abstract interface class IMemoryRepository {
     int pageSize = 30,
     String? pageToken,
   });
-  Future<void> deleteMemory(String fileId);
+  Future<void> deleteMemory(String fileId, {String? albumId});
 }

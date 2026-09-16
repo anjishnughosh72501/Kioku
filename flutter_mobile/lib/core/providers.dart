@@ -1,6 +1,7 @@
 /// App-level Riverpod providers for albums, memories, and flashbacks.
 library;
 
+import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -47,6 +48,37 @@ final meshStorageProvider =
 final activeStorageTypeProvider =
     StateProvider<StorageProviderType>((ref) => StorageProviderType.local);
 
+class StorageMisconfiguredProvider implements StorageProvider {
+  final String providerName;
+  const StorageMisconfiguredProvider(this.providerName);
+
+  @override
+  StorageProviderType get type => StorageProviderType.local;
+
+  @override
+  StorageCapabilities get capabilities => StorageCapabilities(
+        displayName: '$providerName (Not Configured)',
+      );
+
+  @override
+  Future<String> putBlob(Uint8List ciphertext, {required String containerId, required String objectId}) {
+    throw StateError('$providerName storage is not configured. Please open Settings -> Storage Backend to configure your credentials.');
+  }
+
+  @override
+  Future<Uint8List> getBlob(String objectId, {required String containerId}) {
+    throw StateError('$providerName storage is not configured. Please open Settings -> Storage Backend to configure your credentials.');
+  }
+
+  @override
+  Future<void> deleteBlob(String objectId, {required String containerId}) {
+    throw StateError('$providerName storage is not configured.');
+  }
+
+  @override
+  Future<List<String>> listBlobs(String containerId) async => [];
+}
+
 final storageProviderProvider = Provider<StorageProvider>((ref) {
   final activeType = ref.watch(activeStorageTypeProvider);
   switch (activeType) {
@@ -57,13 +89,13 @@ final storageProviderProvider = Provider<StorageProvider>((ref) {
       if (cfg != null) {
         return S3StorageProvider(config: cfg);
       }
-      return ref.watch(localStorageProvider);
+      return const StorageMisconfiguredProvider('S3 Cloud');
     case StorageProviderType.webdav:
       final cfg = ref.watch(webDavConfigProvider);
       if (cfg != null) {
         return WebDavStorageProvider(config: cfg);
       }
-      return ref.watch(localStorageProvider);
+      return const StorageMisconfiguredProvider('WebDAV');
     case StorageProviderType.mesh:
       return ref.watch(meshStorageProvider);
     case StorageProviderType.local:
@@ -113,10 +145,12 @@ class ActiveAlbum extends StateNotifier<String?> {
   static const _key = 'active_album_id';
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (mounted) {
-      state = prefs.getString(_key);
-    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (mounted) {
+        state = prefs.getString(_key);
+      }
+    } catch (_) {}
   }
 
   Future<void> set(String? id) async {
@@ -145,15 +179,14 @@ class AlbumException implements Exception {
 class Albums extends AsyncNotifier<List<Album>> {
   @override
   Future<List<Album>> build() async {
+    listenSelf((previous, next) {
+      final list = next.valueOrNull;
+      if (list != null && list.isNotEmpty && ref.read(activeAlbumProvider) == null) {
+        ref.read(activeAlbumProvider.notifier).set(list.first.id);
+      }
+    });
+
     final albums = await ref.watch(memoryRepositoryProvider).getAlbums();
-    // Auto-select first album if activeAlbumProvider is null, scheduled after build
-    if (albums.isNotEmpty && ref.read(activeAlbumProvider) == null) {
-      Future.microtask(() {
-        if (ref.read(activeAlbumProvider) == null) {
-          ref.read(activeAlbumProvider.notifier).set(albums.first.id);
-        }
-      });
-    }
     return albums;
   }
 
@@ -253,7 +286,8 @@ class Memories extends AsyncNotifier<List<KiokuMemory>> {
   }
 
   Future<void> delete(String fileId) async {
-    await ref.read(memoryRepositoryProvider).deleteMemory(fileId);
+    final albumId = ref.read(activeAlbumProvider);
+    await ref.read(memoryRepositoryProvider).deleteMemory(fileId, albumId: albumId);
     if (state.hasValue) {
       state = AsyncData(
         state.requireValue.where((m) => m.id != fileId).toList(),
@@ -280,7 +314,7 @@ final groupedMemoriesProvider =
     if (existing == null) {
       map[key] = (day: day, items: [item]);
     } else {
-      existing.items.add(item);
+      map[key] = (day: day, items: [...existing.items, item]);
     }
   }
   return map.values.toList()..sort((a, b) => b.day.compareTo(a.day));
@@ -305,16 +339,17 @@ class FlashbackSetData {
 /// (previous calendar month), weekly (past 7 days).
 final flashbacksProvider = FutureProvider<List<FlashbackSetData>>((ref) async {
   final albums = await ref.watch(albumsProvider.future);
-  final memories = <KiokuMemory>[];
-  for (final album in albums) {
-    try {
-      memories.addAll(
-        await ref.read(memoryRepositoryProvider).getMemories(album.id),
-      );
-    } catch (_) {
-      // Skip albums we can no longer read.
-    }
-  }
+  final repo = ref.read(memoryRepositoryProvider);
+  final results = await Future.wait(
+    albums.map((album) async {
+      try {
+        return await repo.getMemories(album.id);
+      } catch (_) {
+        return <KiokuMemory>[];
+      }
+    }),
+  );
+  final memories = results.expand((m) => m).toList();
   return _computeFlashbacks(memories);
 });
 

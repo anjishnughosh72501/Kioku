@@ -157,7 +157,7 @@ class S3StorageProvider implements StorageProvider {
       extraHeaders: {'content-type': 'application/octet-stream'},
     );
 
-    final res = await _client.put(uri, headers: headers, body: ciphertext);
+    final res = await _client.put(uri, headers: headers, body: ciphertext).timeout(const Duration(seconds: 45));
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw http.ClientException(
         'S3 putBlob failed (${res.statusCode}): ${res.body}',
@@ -176,7 +176,7 @@ class S3StorageProvider implements StorageProvider {
       payload: Uint8List(0),
     );
 
-    final res = await _client.get(uri, headers: headers);
+    final res = await _client.get(uri, headers: headers).timeout(const Duration(seconds: 45));
     if (res.statusCode != 200) {
       throw http.ClientException(
         'S3 getBlob failed (${res.statusCode}): ${res.body}',
@@ -195,7 +195,7 @@ class S3StorageProvider implements StorageProvider {
       payload: Uint8List(0),
     );
 
-    final res = await _client.delete(uri, headers: headers);
+    final res = await _client.delete(uri, headers: headers).timeout(const Duration(seconds: 45));
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw http.ClientException(
         'S3 deleteBlob failed (${res.statusCode}): ${res.body}',
@@ -214,7 +214,7 @@ class S3StorageProvider implements StorageProvider {
       payload: Uint8List(0),
     );
 
-    final res = await _client.get(uri, headers: headers);
+    final res = await _client.get(uri, headers: headers).timeout(const Duration(seconds: 45));
     if (res.statusCode != 200) {
       throw http.ClientException(
         'S3 listBlobs failed (${res.statusCode}): ${res.body}',

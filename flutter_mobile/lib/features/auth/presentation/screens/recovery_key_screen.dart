@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
@@ -26,6 +27,13 @@ class _RecoveryKeyScreenState extends State<RecoveryKeyScreen> {
   bool _isLoading = true;
   bool _confirmedSaved = false;
   bool _copied = false;
+  Timer? _clipboardTimer;
+
+  @override
+  void dispose() {
+    _clipboardTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -207,15 +215,25 @@ class _RecoveryKeyScreenState extends State<RecoveryKeyScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
                 onPressed: () {
-                  Clipboard.setData(ClipboardData(text: _phrase ?? ''));
+                  final textToCopy = _phrase ?? '';
+                  Clipboard.setData(ClipboardData(text: textToCopy));
                   setState(() => _copied = true);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: const Text('Recovery phrase copied to clipboard!'),
+                      content: const Text('Recovery phrase copied! Clipboard will clear in 60s.'),
                       backgroundColor: colors.primaryDark,
-                      duration: const Duration(seconds: 2),
+                      duration: const Duration(seconds: 3),
                     ),
                   );
+                  _clipboardTimer?.cancel();
+                  _clipboardTimer = Timer(const Duration(seconds: 60), () async {
+                    try {
+                      final current = await Clipboard.getData(Clipboard.kTextPlain);
+                      if (current?.text == textToCopy) {
+                        await Clipboard.setData(const ClipboardData(text: ''));
+                      }
+                    } catch (_) {}
+                  });
                 },
                 icon: Icon(_copied ? Icons.check : Icons.copy_rounded, size: 18),
                 label: Text(
