@@ -16,6 +16,7 @@ import 'package:flutter_mobile/features/auth/presentation/controllers/auth_contr
 import 'package:share_plus/share_plus.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_mobile/features/profile/presentation/widgets/album_row.dart';
+import 'package:flutter_mobile/main.dart';
 import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -139,20 +140,21 @@ class ProfileScreen extends ConsumerWidget {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: colors.accentSoft,
+                              color: colors.success.withValues(alpha: 0.12),
                               borderRadius:
                                   BorderRadius.circular(AppTheme.radiusPill),
+                              border: Border.all(color: colors.success.withValues(alpha: 0.3), width: 0.5),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(Icons.cloud_done_outlined,
-                                    size: 13, color: colors.accentDark),
+                                    size: 13, color: colors.success),
                                 const SizedBox(width: 4),
                                 Text(
                                   'Drive Connected',
                                   style: typography.bodySmall?.copyWith(
-                                    color: colors.accentDark,
+                                    color: colors.success,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -167,14 +169,15 @@ class ProfileScreen extends ConsumerWidget {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: colors.surfaceContainerHigh,
+                              color: colors.amber.withValues(alpha: 0.12),
                               borderRadius:
                                   BorderRadius.circular(AppTheme.radiusPill),
+                              border: Border.all(color: colors.amber.withValues(alpha: 0.3), width: 0.5),
                             ),
                             child: Text(
                               'Local Only',
                               style: typography.bodySmall?.copyWith(
-                                color: colors.inkMuted,
+                                color: colors.amber,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -230,16 +233,31 @@ class ProfileScreen extends ConsumerWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: colors.accentSoft,
+                            color: colors.success.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                            border: Border.all(color: colors.success.withValues(alpha: 0.3), width: 0.5),
                           ),
-                          child: Text(
-                            'Active',
-                            style: typography.bodySmall?.copyWith(
-                              color: colors.accentDark,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: colors.success,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                'Active',
+                                style: typography.bodySmall?.copyWith(
+                                  color: colors.success,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -299,11 +317,20 @@ class ProfileScreen extends ConsumerWidget {
                           ),
                         ),
                         const Spacer(),
-                        Text(
-                          ref.watch(activeStorageTypeProvider).name.toUpperCase(),
-                          style: typography.bodySmall?.copyWith(
-                            color: colors.primaryDark,
-                            fontWeight: FontWeight.w700,
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: colors.amber.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                            border: Border.all(color: colors.amber.withValues(alpha: 0.3), width: 0.5),
+                          ),
+                          child: Text(
+                            ref.watch(activeStorageTypeProvider).name.toUpperCase(),
+                            style: typography.bodySmall?.copyWith(
+                              color: colors.amber,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ],
@@ -475,6 +502,98 @@ class ProfileScreen extends ConsumerWidget {
                   ],
                 ),
               ).animate().fadeIn(delay: 100.ms, duration: 300.ms),
+
+              const SizedBox(height: AppTheme.spacingLg),
+
+              // Appearance & Motion Card
+              ClayCard(
+                variant: ClayVariant.elevated,
+                padding: const EdgeInsets.all(AppTheme.spacingLg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.palette_outlined, size: 20, color: colors.primary),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Appearance & Motion',
+                          style: typography.bodyMedium?.copyWith(
+                            color: colors.ink,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppTheme.spacingMd),
+                    Text(
+                      'Theme Palette',
+                      style: typography.bodySmall?.copyWith(color: colors.inkMuted),
+                    ),
+                    const SizedBox(height: 8),
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final currentMode = ref.watch(themeModeProvider);
+                        final notifier = ref.read(themeModeProvider.notifier);
+
+                        Widget buildThemeChip(String label, ThemeMode mode, IconData icon) {
+                          final isSelected = currentMode == mode;
+                          return Expanded(
+                            child: InkWell(
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                notifier.setThemeMode(mode);
+                              },
+                              borderRadius: BorderRadius.circular(AppTheme.radiusButton),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? colors.primary.withValues(alpha: 0.15)
+                                      : colors.surfaceContainer,
+                                  borderRadius: BorderRadius.circular(AppTheme.radiusButton),
+                                  border: Border.all(
+                                    color: isSelected ? colors.primary : colors.divider,
+                                    width: isSelected ? 1.5 : 0.5,
+                                  ),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Icon(
+                                      icon,
+                                      size: 18,
+                                      color: isSelected ? colors.primary : colors.inkMuted,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      label,
+                                      style: typography.bodySmall?.copyWith(
+                                        fontSize: 11,
+                                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                        color: isSelected ? colors.primary : colors.inkMuted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+
+                        return Row(
+                          children: [
+                            buildThemeChip('System', ThemeMode.system, Icons.brightness_auto_outlined),
+                            const SizedBox(width: 8),
+                            buildThemeChip('Dark', ThemeMode.dark, Icons.dark_mode_outlined),
+                            const SizedBox(width: 8),
+                            buildThemeChip('Light', ThemeMode.light, Icons.light_mode_outlined),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ).animate().fadeIn(delay: 110.ms, duration: 300.ms),
 
               const SizedBox(height: AppTheme.spacingLg),
 

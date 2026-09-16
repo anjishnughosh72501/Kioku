@@ -3,7 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:vibration/vibration.dart';
+import 'package:flutter/services.dart';
 
 import 'package:flutter_mobile/core/theme/index.dart';
 
@@ -237,7 +237,7 @@ class _ClayButtonState extends State<ClayButton> with SingleTickerProviderStateM
 
   void _handleTap() {
     if (widget.disabled || widget.loading || widget.onPressed == null) return;
-    Vibration.vibrate(duration: 25);
+    HapticFeedback.lightImpact();
     widget.onPressed!();
   }
 
@@ -419,7 +419,7 @@ class _ClayIconButtonState extends State<ClayIconButton> with SingleTickerProvid
 
   void _handleTap() {
     if (widget.disabled || widget.onPressed == null) return;
-    Vibration.vibrate(duration: 15);
+    HapticFeedback.lightImpact();
     widget.onPressed!();
   }
 

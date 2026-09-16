@@ -157,14 +157,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/storage-setup',
         name: 'storage-setup',
-        pageBuilder: (context, state) => const MaterialPage(
-          child: StorageSetupScreen(),
+        pageBuilder: (context, state) => buildPushTransitionPage(
+          key: state.pageKey,
+          child: const StorageSetupScreen(),
         ),
       ),
       GoRoute(
         path: '/recovery-key',
         name: 'recovery-key',
-        pageBuilder: (context, state) => MaterialPage(
+        pageBuilder: (context, state) => buildPushTransitionPage(
+          key: state.pageKey,
           child: RecoveryKeyScreen(
             recoveryPhrase: state.extra as String?,
           ),
@@ -173,7 +175,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/migration',
         name: 'migration',
-        pageBuilder: (context, state) => MaterialPage(
+        pageBuilder: (context, state) => buildPushTransitionPage(
+          key: state.pageKey,
           child: MigrationScreen(
             onComplete: () => context.go('/'),
           ),
@@ -182,6 +185,39 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
+
+/// iOS-style push transition: subtle horizontal slide (Offset(0.06, 0) -> 0) + fade
+Page<dynamic> buildPushTransitionPage({
+  required LocalKey key,
+  required Widget child,
+}) {
+  return CustomTransitionPage(
+    key: key,
+    child: child,
+    transitionDuration: const Duration(milliseconds: 260),
+    reverseTransitionDuration: const Duration(milliseconds: 220),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
+        return child;
+      }
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
+      return SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0.06, 0.0),
+          end: Offset.zero,
+        ).animate(curved),
+        child: FadeTransition(
+          opacity: curved,
+          child: child,
+        ),
+      );
+    },
+  );
+}
 
 /// Exported router instance
 final appRouter = appRouterProvider;

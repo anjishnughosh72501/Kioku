@@ -6,6 +6,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:photo_view/photo_view.dart';
@@ -27,15 +28,53 @@ class PhotoViewerScreen extends ConsumerStatefulWidget {
   ConsumerState<PhotoViewerScreen> createState() => _PhotoViewerScreenState();
 }
 
-class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen> {
+class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen>
+    with SingleTickerProviderStateMixin {
   late Future<Uint8List> _bytesFuture;
   late String? _currentCaption;
+  late final AnimationController _springController;
+  double _dragOffset = 0.0;
+  bool _isZoomed = false;
 
   @override
   void initState() {
     super.initState();
     _currentCaption = widget.memory?.caption;
     _bytesFuture = _loadBytes();
+    _springController = AnimationController.unbounded(vsync: this)
+      ..addListener(() {
+        setState(() {
+          _dragOffset = _springController.value;
+        });
+      });
+  }
+
+  @override
+  void dispose() {
+    _springController.dispose();
+    super.dispose();
+  }
+
+  void _onVerticalDragUpdate(DragUpdateDetails details) {
+    setState(() {
+      _dragOffset += details.primaryDelta ?? 0.0;
+      if (_dragOffset < 0) _dragOffset = 0;
+    });
+  }
+
+  void _onVerticalDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0.0;
+    if (_dragOffset > 130 || velocity > 650) {
+      context.pop();
+    } else {
+      const spring = SpringDescription(
+        mass: 1.0,
+        stiffness: 320.0,
+        damping: 25.0,
+      );
+      final simulation = SpringSimulation(spring, _dragOffset, 0.0, velocity);
+      _springController.animateWith(simulation);
+    }
   }
 
   Future<Uint8List> _loadBytes() async {
@@ -231,101 +270,120 @@ class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen> {
     final meta =
         item != null ? '${item.postmarkDate} · ${item.uploaderLabel}' : '';
 
+    final bgOpacity = (1.0 - (_dragOffset / 320.0)).clamp(0.0, 1.0);
+
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          FutureBuilder<Uint8List>(
-            future: _bytesFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return Center(
-                  child: CircularProgressIndicator(color: colors.primary),
-                );
-              }
-              if (snapshot.hasError || snapshot.data == null) {
-                return Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+      backgroundColor: Colors.black.withValues(alpha: bgOpacity),
+      body: GestureDetector(
+        onVerticalDragUpdate: _isZoomed ? null : _onVerticalDragUpdate,
+        onVerticalDragEnd: _isZoomed ? null : _onVerticalDragEnd,
+        behavior: HitTestBehavior.translucent,
+        child: Stack(
+          children: [
+            Transform.translate(
+              offset: Offset(0, _dragOffset),
+              child: FutureBuilder<Uint8List>(
+                future: _bytesFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return Center(
+                      child: CircularProgressIndicator(color: colors.primary),
+                    );
+                  }
+                  if (snapshot.hasError || snapshot.data == null) {
+                    return Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.broken_image_outlined, size: 56, color: Colors.white38),
+                          const SizedBox(height: 8),
+                          Text('Could not load this memory',
+                              style: TextStyle(color: Colors.white70)),
+                        ],
+                      ),
+                    );
+                  }
+                  return PhotoView(
+                    imageProvider: MemoryImage(snapshot.data!),
+                    minScale: PhotoViewComputedScale.contained,
+                    maxScale: PhotoViewComputedScale.covered * 4,
+                    initialScale: PhotoViewComputedScale.contained,
+                    scaleStateChangedCallback: (state) {
+                      setState(() => _isZoomed = state != PhotoViewScaleState.initial);
+                    },
+                    backgroundDecoration: const BoxDecoration(color: Colors.transparent),
+                    heroAttributes: PhotoViewHeroAttributes(tag: 'memory_media_${widget.mediaId}'),
+                  );
+                },
+              ),
+            ),
+
+            Opacity(
+              opacity: bgOpacity,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppTheme.spacingMd),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Icon(Icons.broken_image_outlined, size: 56, color: Colors.white38),
-                      const SizedBox(height: 8),
-                      Text('Could not load this memory',
-                          style: TextStyle(color: Colors.white70)),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                        tooltip: 'Close viewer',
+                        onPressed: () => context.pop(),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.more_vert, color: Colors.white, size: 28),
+                        tooltip: 'More options',
+                        onPressed: () => _showMoreMenu(context, item),
+                      ),
                     ],
                   ),
-                );
-              }
-              return PhotoView(
-                imageProvider: MemoryImage(snapshot.data!),
-                minScale: PhotoViewComputedScale.contained,
-                maxScale: PhotoViewComputedScale.covered * 4,
-                initialScale: PhotoViewComputedScale.contained,
-                backgroundDecoration: const BoxDecoration(color: Colors.black),
-                heroAttributes: PhotoViewHeroAttributes(tag: widget.mediaId),
-              );
-            },
-          ),
-
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(AppTheme.spacingMd),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                    tooltip: 'Close viewer',
-                    onPressed: () => context.pop(),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.more_vert, color: Colors.white, size: 28),
-                    tooltip: 'More options',
-                    onPressed: () => _showMoreMenu(context, item),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          SafeArea(
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(AppTheme.spacingMd),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent],
-                  ),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (caption != null && caption.isNotEmpty) ...[
-                      Text(
-                        caption,
-                        style: typography.headlineSmall?.copyWith(
-                          color: Colors.white,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                    ],
-                    if (meta.isNotEmpty)
-                      Text(
-                        meta,
-                        style: typography.bodySmall?.copyWith(color: Colors.white70, fontSize: 11),
-                      ),
-                  ],
                 ),
               ),
             ),
-          ),
-        ],
+
+            Opacity(
+              opacity: bgOpacity,
+              child: SafeArea(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppTheme.spacingMd),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent],
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (caption != null && caption.isNotEmpty) ...[
+                          Text(
+                            caption,
+                            style: typography.headlineSmall?.copyWith(
+                              color: Colors.white,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                        ],
+                        if (meta.isNotEmpty)
+                          Text(
+                            meta,
+                            style: typography.bodySmall?.copyWith(color: Colors.white70, fontSize: 11),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

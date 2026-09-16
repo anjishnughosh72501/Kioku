@@ -3,7 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:vibration/vibration.dart';
+import 'package:flutter/services.dart';
 
 import 'package:flutter_mobile/core/theme/index.dart';
 
@@ -73,8 +73,7 @@ class _HankoStampState extends State<HankoStamp> with SingleTickerProviderStateM
   }
 
   void _handleTap() {
-    Vibration.vibrate(duration: 30);
-    Vibration.vibrate(duration: 30);
+    HapticFeedback.mediumImpact();
 
     _controller.forward().then((_) => _controller.reverse());
 

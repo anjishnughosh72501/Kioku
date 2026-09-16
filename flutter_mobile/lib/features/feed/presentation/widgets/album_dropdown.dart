@@ -25,25 +25,37 @@ class AlbumDropdown extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final current = albums.where((a) => a.id == activeAlbumId).firstOrNull;
+    final effectiveColors = (activeAlbumId != null && activeAlbumId!.isNotEmpty)
+        ? colors.withAlbumTint(activeAlbumId!)
+        : colors;
+
     return InkWell(
       onTap: () => _showPicker(context, ref),
       borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Flexible(
-            child: Text(
-              current?.title ?? (albums.length > 1 ? 'Pick an album' : albums.first.title),
-              overflow: TextOverflow.ellipsis,
-              style: typography.bodyMedium?.copyWith(
-                color: colors.ink,
-                fontWeight: FontWeight.w600,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        decoration: BoxDecoration(
+          color: effectiveColors.accentSoft,
+          borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+          border: Border.all(color: effectiveColors.primary.withValues(alpha: 0.2), width: 0.5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                current?.title ?? (albums.length > 1 ? 'Pick an album' : albums.first.title),
+                overflow: TextOverflow.ellipsis,
+                style: typography.bodyMedium?.copyWith(
+                  color: effectiveColors.primaryDark,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 4),
-          Icon(Icons.arrow_drop_down, size: 20, color: colors.inkMuted),
-        ],
+            const SizedBox(width: 4),
+            Icon(Icons.arrow_drop_down, size: 18, color: effectiveColors.primaryDark),
+          ],
+        ),
       ),
     );
   }
@@ -68,11 +80,26 @@ class AlbumDropdown extends ConsumerWidget {
             ),
             ...albums.map((album) {
               final selected = album.id == activeAlbumId;
+              final rowColors = colors.withAlbumTint(album.id);
               return ListTile(
-                title: Text(album.title, style: typography.bodyMedium?.copyWith(color: colors.ink)),
-                leading: Icon(
-                  selected ? Icons.folder_special : Icons.folder_outlined,
-                  color: selected ? colors.accentDark : colors.inkMuted,
+                title: Text(
+                  album.title,
+                  style: typography.bodyMedium?.copyWith(
+                    color: colors.ink,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+                leading: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: selected ? rowColors.accentSoft : colors.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    selected ? Icons.folder_special : Icons.folder_outlined,
+                    color: selected ? rowColors.primaryDark : colors.inkMuted,
+                    size: 20,
+                  ),
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -87,7 +114,7 @@ class AlbumDropdown extends ConsumerWidget {
                         );
                       },
                     ),
-                    if (selected) Icon(Icons.check_circle, color: colors.accentDark, size: 20),
+                    if (selected) Icon(Icons.check_circle, color: rowColors.primaryDark, size: 20),
                   ],
                 ),
                 onTap: () {

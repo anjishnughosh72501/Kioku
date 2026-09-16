@@ -125,7 +125,10 @@ class MemoryCard extends ConsumerWidget {
             aspectRatio: 4 / 3,
             child: ClipRRect(
               borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusCard)),
-              child: DriveThumb(memory: item),
+              child: Hero(
+                tag: 'memory_media_${item.id}',
+                child: DriveThumb(memory: item),
+              ),
             ),
           ),
           Padding(

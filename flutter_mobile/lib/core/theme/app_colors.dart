@@ -227,4 +227,60 @@ class AppColors {
       amberContainer: Color.lerp(a.amberContainer, b.amberContainer, t)!,
     );
   }
+
+  /// Dynamic subtle album accent tinting based on album identifier
+  AppColors withAlbumTint(String albumId) {
+    if (albumId.isEmpty) return this;
+    final hash = albumId.hashCode.abs();
+    final tintOptions = [
+      washiTapeMatcha,
+      washiTapePeach,
+      amber,
+      sage,
+      primary,
+    ];
+    final chosen = tintOptions[hash % tintOptions.length];
+    final tintedPrimary = Color.lerp(primary, chosen, 0.22)!;
+    final tintedAccent = Color.lerp(accent, chosen, 0.20)!;
+    final tintedSoft = chosen.withValues(alpha: 0.14);
+
+    return AppColors(
+      background: background,
+      surface: surface,
+      surfaceElevated: surfaceElevated,
+      surfaceContainerLowest: surfaceContainerLowest,
+      surfaceContainerLow: surfaceContainerLow,
+      surfaceContainer: surfaceContainer,
+      surfaceContainerHigh: surfaceContainerHigh,
+      surfaceContainerHighest: surfaceContainerHighest,
+      primary: tintedPrimary,
+      primaryDark: primaryDark,
+      accent: tintedAccent,
+      accentDark: accentDark,
+      accentSoft: tintedSoft,
+      accentContainer: accentContainer,
+      ink: ink,
+      inkMuted: inkMuted,
+      inkSubtle: inkSubtle,
+      divider: divider,
+      dividerLight: dividerLight,
+      overlay: overlay,
+      glassBorder: glassBorder,
+      danger: danger,
+      success: success,
+      shadow: shadow,
+      shadowDark: shadowDark,
+      washiTape: washiTape,
+      washiTapeMatcha: washiTapeMatcha,
+      washiTapePeach: washiTapePeach,
+      hankoRed: hankoRed,
+      sage: sage,
+      sageDark: sageDark,
+      sageLight: sageLight,
+      sageBackground: sageBackground,
+      sageBorder: sageBorder,
+      amber: amber,
+      amberContainer: amberContainer,
+    );
+  }
 }

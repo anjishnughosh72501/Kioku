@@ -17,6 +17,7 @@ import 'package:flutter_mobile/features/feed/presentation/widgets/memory_card.da
 
 import 'package:flutter_mobile/core/services/user_profile_service.dart';
 import 'package:flutter_mobile/features/auth/presentation/widgets/username_dialog.dart';
+import 'package:flutter_mobile/features/feed/presentation/widgets/shimmer_skeleton_card.dart';
 import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
 
 class FeedScreen extends ConsumerStatefulWidget {
@@ -86,11 +87,22 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              SliverToBoxAdapter(
-                child: _buildHeader(activeAlbumId, albumsAsync, authState, colors, typography)
-                    .animate()
-                    .fadeIn(duration: 400.ms)
-                    .slideY(begin: -0.1, end: 0, duration: 400.ms),
+              SliverAppBar(
+                backgroundColor: colors.background,
+                elevation: 0,
+                scrolledUnderElevation: 2,
+                shadowColor: colors.shadow.withValues(alpha: 0.15),
+                floating: true,
+                snap: true,
+                pinned: false,
+                toolbarHeight: 76,
+                flexibleSpace: FlexibleSpaceBar(
+                  collapseMode: CollapseMode.parallax,
+                  background: _buildHeader(activeAlbumId, albumsAsync, authState, colors, typography)
+                      .animate()
+                      .fadeIn(duration: 350.ms)
+                      .slideY(begin: -0.06, end: 0, duration: 300.ms),
+                ),
               ),
               ..._buildFeedSlivers(memoriesAsync, colors, typography),
             ],
@@ -201,9 +213,22 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
 
     if (loading) {
       return [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(child: CircularProgressIndicator(color: colors.primary)),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+            AppTheme.spacingMd,
+            AppTheme.spacingSm,
+            AppTheme.spacingMd,
+            24,
+          ),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => const Padding(
+                padding: EdgeInsets.only(bottom: AppTheme.spacingMd),
+                child: ShimmerSkeletonCard(),
+              ),
+              childCount: 3,
+            ),
+          ),
         ),
       ];
     }
@@ -256,7 +281,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                   child: _buildDayHeader(entry.day, colors, typography),
                 );
               } else if (entry is _FeedMemoryEntry) {
-                return Padding(
+                final card = Padding(
                   padding: const EdgeInsets.fromLTRB(
                     AppTheme.spacingMd,
                     0,
@@ -265,6 +290,20 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                   ),
                   child: MemoryCard(item: entry.memory, colors: colors, typography: typography),
                 );
+                final disableAnims = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+                if (disableAnims) return card;
+                return card
+                    .animate()
+                    .fadeIn(
+                      delay: (index * 35).clamp(0, 350).ms,
+                      duration: 320.ms,
+                    )
+                    .slideY(
+                      begin: 0.08,
+                      end: 0,
+                      duration: 320.ms,
+                      curve: Curves.easeOutCubic,
+                    );
               }
               return const SizedBox.shrink();
             },

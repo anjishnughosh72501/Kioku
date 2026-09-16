@@ -3,7 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:vibration/vibration.dart';
+import 'package:flutter/services.dart';
 
 import 'package:flutter_mobile/core/theme/index.dart';
 
@@ -58,7 +58,7 @@ class KiokuBottomNavBar extends StatelessWidget {
                 item: item,
                 isActive: isActive,
                 onTap: () {
-                  Vibration.vibrate(duration: 10);
+                  HapticFeedback.selectionClick();
                   onTap(index);
                 },
               ),
@@ -93,37 +93,47 @@ class _NavBarItem extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppTheme.radiusNavigation),
         splashColor: colors.primary.withValues(alpha: 0.1),
         highlightColor: colors.primary.withValues(alpha: 0.05),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedScale(
-                scale: isActive ? 1.08 : 1.0,
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOutBack,
-                child: IconTheme(
-                  data: IconThemeData(
-                    color: isActive ? colors.accentDark : colors.inkMuted,
-                    size: 22,
+        child: Center(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOutCubic,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+            decoration: BoxDecoration(
+              color: isActive
+                  ? colors.primary.withValues(alpha: 0.12)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedScale(
+                  scale: isActive ? 1.05 : 1.0,
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutCubic,
+                  child: IconTheme(
+                    data: IconThemeData(
+                      color: isActive ? colors.accentDark : colors.inkMuted,
+                      size: 22,
+                    ),
+                    child: (isActive && item.activeIcon != null)
+                        ? item.activeIcon!
+                        : item.icon,
                   ),
-                  child: (isActive && item.activeIcon != null)
-                      ? item.activeIcon!
-                      : item.icon,
                 ),
-              ),
-              const SizedBox(height: 3),
-              AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 200),
-                style: (typography.labelSmall ?? const TextStyle()).copyWith(
-                  fontSize: 11,
-                  color: isActive ? colors.accentDark : colors.inkMuted,
-                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                  letterSpacing: 0.1,
+                const SizedBox(height: 2),
+                AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 200),
+                  style: (typography.labelSmall ?? const TextStyle()).copyWith(
+                    fontSize: 11,
+                    color: isActive ? colors.accentDark : colors.inkMuted,
+                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                    letterSpacing: 0.1,
+                  ),
+                  child: Text(item.label),
                 ),
-                child: Text(item.label),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
