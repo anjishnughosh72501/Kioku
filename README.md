@@ -16,10 +16,10 @@
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
 [![Riverpod](https://img.shields.io/badge/Riverpod-2.6-7F52FF?style=for-the-badge)](https://riverpod.dev)
 [![License](https://img.shields.io/badge/License-MIT-amber?style=for-the-badge)](LICENSE)
-[![Download APK](https://img.shields.io/badge/Download-APK_v2.0.0-E06D53?style=for-the-badge&logo=android&logoColor=white)](releases/kioku-v2.0-release.apk)
+[![Download APK](https://img.shields.io/badge/Download-APK_v3.0.0-E06D53?style=for-the-badge&logo=android&logoColor=white)](releases/kioku-v3.0-release.apk)
 
 <p align="center">
-  <a href="releases/kioku-v2.0-release.apk"><b>👉 Download Android APK (v2.0.0)</b></a> · 
+  <a href="releases/kioku-v3.0-release.apk"><b>👉 Download Android APK (v3.0.0)</b></a> · 
   <a href="releases/README.md">Release Notes & Checksums</a>
 </p>
 
