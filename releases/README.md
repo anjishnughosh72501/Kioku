@@ -6,8 +6,8 @@ This directory contains standalone release builds for Kioku.
 
 | File | Platform | Architecture | Size | SHA-256 Checksum |
 | :--- | :--- | :--- | :--- | :--- |
-| **[`kioku-v2.0-release.apk`](kioku-v2.0-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 58.2 MB | `A808A6FF1516D80DFEC6C42B38DC41B593EFEE5EDF1FAF886665A1D0CA47B0B2` |
-| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 58.2 MB | `A808A6FF1516D80DFEC6C42B38DC41B593EFEE5EDF1FAF886665A1D0CA47B0B2` |
+| **[`kioku-v2.0-release.apk`](kioku-v2.0-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.7 MB | `4BD2AAA07FF7B0CEF5519812F7FAA934FE73DA1CA69951B6AC90C1A0B9519E98` |
+| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.7 MB | `4BD2AAA07FF7B0CEF5519812F7FAA934FE73DA1CA69951B6AC90C1A0B9519E98` |
 
 ---
 
