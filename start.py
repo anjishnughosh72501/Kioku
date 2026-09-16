@@ -9,9 +9,13 @@ import urllib.request
 ROOT = os.path.dirname(os.path.abspath(__file__))
 FLUTTER_DIR = os.path.join(ROOT, "flutter_mobile")
 BACKEND_DIR = os.path.join(ROOT, "backend")
-ANDROID_SDK = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Android", "Sdk")
-ADB = os.path.join(ANDROID_SDK, "platform-tools", "adb.exe")
-EMULATOR = os.path.join(ANDROID_SDK, "emulator", "emulator.exe")
+ANDROID_SDK = (
+    os.environ.get("ANDROID_HOME")
+    or os.environ.get("ANDROID_SDK_ROOT")
+    or os.path.join(os.environ.get("LOCALAPPDATA", ""), "Android", "Sdk")
+)
+ADB = shutil.which("adb") or os.path.join(ANDROID_SDK, "platform-tools", "adb.exe")
+EMULATOR = shutil.which("emulator") or os.path.join(ANDROID_SDK, "emulator", "emulator.exe")
 AVD_NAME = "Pixel_7_API_35"
 FLUTTER_APP_PACKAGE = "com.kioku.app"
 FLUTTER_APP_ACTIVITY = "com.kioku.app.MainActivity"
@@ -25,7 +29,8 @@ def run(cmd, timeout=15, cwd=None, shell=False, check=True):
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd, shell=shell)
         ok = r.returncode == 0
         if check and not ok:
-            print(f"  WARN: {label} failed: {r.stderr.strip()}")
+            err_msg = r.stderr.strip() or r.stdout.strip()
+            print(f"  WARN: {label} failed: {err_msg}")
         return ok, r.stdout.strip()
     except Exception as ex:
         print(f"  WARN: {label} failed: {ex}")
@@ -51,10 +56,13 @@ def check_backend_health(port, timeout=10):
 
 
 def is_emulator_running():
-    if not os.path.exists(ADB):
+    if not ADB or not os.path.exists(ADB):
         return False
-    ok, out = run([ADB, "devices"])
-    return ok and "device" in out and ("emulator" in out or "\tdevice" in out)
+    ok, out = run([ADB, "devices"], check=False)
+    if not ok:
+        return False
+    lines = [line.strip() for line in out.splitlines() if line.strip() and not line.startswith("List of devices")]
+    return any("\tdevice" in line for line in lines)
 
 
 def wait_for_device(timeout=90):
@@ -115,12 +123,29 @@ def run_tests():
 def main():
     parser = argparse.ArgumentParser(description="Start Kioku development environment")
     parser.add_argument("--test", action="store_true", help="Run automated test suites and exit")
+    parser.add_argument("--build-apk", action="store_true", help="Build the Android APK and exit")
+    parser.add_argument("--release", action="store_true", help="Use release mode for building the APK (default is debug)")
     parser.add_argument("--no-emulator", action="store_true", help="Skip emulator startup (use physical device or desktop)")
     args = parser.parse_args()
 
     if args.test:
         success = run_tests()
         exit(0 if success else 1)
+
+    if args.build_apk:
+        ensure_libsodium()
+        print("Syncing Flutter dependencies...")
+        run("flutter pub get", timeout=180, cwd=FLUTTER_DIR, shell=True)
+        build_mode = "release" if args.release else "debug"
+        print(f"Building {build_mode} APK...")
+        ok, out = run(f"flutter build apk --{build_mode}", timeout=600, cwd=FLUTTER_DIR, shell=True)
+        if not ok:
+            print(f"ERROR: flutter build apk failed:\n{out}")
+            exit(1)
+        apk_name = f"app-{build_mode}.apk"
+        apk_path = os.path.join(FLUTTER_DIR, "build", "app", "outputs", "flutter-apk", apk_name)
+        print(f"\nAPK built successfully: {apk_path}")
+        exit(0)
 
     procs = []
     log_files = []
@@ -215,19 +240,28 @@ def main():
             return
 
         if not args.no_emulator and is_emulator_running():
-            print("  Building debug APK...")
-            ok, _ = run("flutter build apk --debug", timeout=600, cwd=FLUTTER_DIR, shell=True)
+            build_mode = "release" if args.release else "debug"
+            print(f"  Building {build_mode} APK...")
+            ok, out = run(f"flutter build apk --{build_mode}", timeout=600, cwd=FLUTTER_DIR, shell=True)
             if not ok:
-                print("  ERROR: flutter build apk failed.")
+                print(f"  ERROR: flutter build apk failed:\n{out}")
                 cleanup()
                 return
 
-            print("  Installing debug APK...")
-            ok, _ = run("flutter install --debug", timeout=600, cwd=FLUTTER_DIR, shell=True)
-            if not ok:
-                print("  ERROR: flutter install failed.")
-                cleanup()
-                return
+            print(f"  Installing {build_mode} APK...")
+            apk_name = f"app-{build_mode}.apk"
+            apk_path = os.path.join(FLUTTER_DIR, "build", "app", "outputs", "flutter-apk", apk_name)
+            installed = False
+            if os.path.exists(apk_path) and ADB and os.path.exists(ADB):
+                ok_install, _ = run([ADB, "install", "-r", apk_path], timeout=120)
+                installed = ok_install
+
+            if not installed:
+                ok, _ = run(f"flutter install --{build_mode}", timeout=600, cwd=FLUTTER_DIR, shell=True)
+                if not ok:
+                    print("  ERROR: flutter install failed.")
+                    cleanup()
+                    return
 
             # 4. Launch the app on device/emulator
             print("[4/5] Launching Kioku app on device...")
