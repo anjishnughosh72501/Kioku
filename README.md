@@ -1,236 +1,293 @@
 <div align="center">
 
-<img src="assets/kiokulogo.jpg" alt="Kioku Logo" width="180" style="border-radius: 36px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);" />
+<img src="assets/kiokulogo.jpg" width="170" alt="Kioku Logo"/>
 
 # Kioku · 記憶
-### *A warm, private shared memory album and time capsule for close friend groups and couples.*
+
+### *Your private scrapbook for the people who matter most.*
+
+*A warm, local-first memory album for the people you love.*
+
+<br>
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.x-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
-[![Express](https://img.shields.io/badge/Express-4.19-000000?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com)
-[![Riverpod](https://img.shields.io/badge/State-Riverpod_2.6-blueviolet?style=for-the-badge)](https://riverpod.dev)
-[![License](https://img.shields.io/badge/License-MIT-amber?style=for-the-badge)](LICENSE)
-[![Download APK](https://img.shields.io/badge/Download-APK_v1.0.0-E06D53?style=for-the-badge&logo=android&logoColor=white)](releases/kioku-release.apk)
+[![Riverpod](https://img.shields.io/badge/Riverpod-2.6-7F52FF?style=for-the-badge)](https://riverpod.dev)
+[![MIT License](https://img.shields.io/badge/License-MIT-D9A441?style=for-the-badge)](LICENSE)
 
-<p align="center">
-  <a href="releases/kioku-release.apk"><b>👉 Download Android APK (v1.0.0)</b></a> · 
-  <a href="releases/README.md">Release Notes & Checksums</a>
-</p>
+### 🌸 Preserve moments, not posts.
+
+[**Download APK**](releases/kioku-release.apk) • [Release Notes](releases/README.md)
 
 </div>
 
 ---
 
-## 📖 Overview
+# ✨ Why Kioku?
 
-**Kioku** (記憶, Japanese for *"memory"*) is a cozy, tactile memory-keeping application crafted specifically for small circles—couples, best friends, and family. Rather than broadcasting life onto algorithmic social media feeds, Kioku turns moments into intimate digital scrapbooks reminiscent of handcrafted Japanese stationery.
+Most apps are built for sharing with everyone.
 
-Your photos and videos stay strictly yours. Kioku adopts a **local-first and user-owned storage philosophy**: media files live in each user's personal **Google Drive** or on-device storage. There are no centralized storage servers, no third-party cloud lock-in, and no data mining.
+**Kioku is built for remembering with someone.**
 
----
+Whether it's a late-night coffee date, your family's annual vacation, or tiny everyday moments with your best friend, Kioku turns photos and videos into a beautiful shared scrapbook—without feeds, likes, or algorithms.
 
-## ✨ Features
+Inspired by Japanese stationery and handmade journals, every memory feels intentional, tactile, and deeply personal.
 
-### 🌸 Japanese Stationery Aesthetic
-- **Washi Tape & Hanko Stamps**: Organic visual postmarks with Japanese design motifs and ink textures.
-- **Claymorphism**: Soft, tactile cards with gentle debossed and elevated clay shadows.
-- **Curated Themes**:
-  - ☕ **Coffee Light**: Cream paper, warm sepia ink, toasted latte tones.
-  - 🌲 **Forest Dark**: Deep moss, charcoal slate, warm amber embers.
-
-### 🕰️ Smart Flashback Engine
-- **"1 Year Ago Today"**: Relive what happened on this exact calendar day in years past.
-- **"Last Month's Album"**: A retrospective highlight reel of memories captured during the previous month.
-- **"A Passing Memory"**: Ephemeral weekly highlights from the past 7 days.
-
-### 📸 Rich Media Experience
-- High-resolution photo viewer with pinch-to-zoom and pan gestures via `photo_view`.
-- Video playback support with custom playback controls via `video_player` and `chewie`.
-- Day-grouped timeline feed sorting moments automatically into neat daily chapters.
-
-### 🔒 User-Owned & Local-First Storage
-- **Google Drive Integration**: Each album is represented as a Google Drive folder (`Kioku · <Album Name>`).
-- **Offline / Local Mode**: Seamless guest and offline mode allowing users to save and browse albums stored directly on device.
-- **Selective Sharing**: Share albums with friends using standard Google Drive permissions—simply enter their email.
+> **記憶 (Kioku)** — *the Japanese word for memory.*
 
 ---
 
-## 🏗️ Architecture & Tech Stack
+# 🌷 The Experience
 
-Kioku is divided into a **Flutter Mobile App** client and an optional **Node.js Companion Backend**:
+<div align="center">
+
+| Coffee Light | Forest Dark |
+|:--:|:--:|
+| Warm cream paper & latte tones | Deep moss, charcoal & amber |
+
+</div>
+
+### A scrapbook that feels handcrafted
+
+- 📜 Washi tape accents and paper textures
+- 🪵 Claymorphism with soft tactile shadows
+- 🏮 Traditional Japanese **Hanko** ink stamps
+- ✍️ Elegant typography inspired by printed journals
+- 🌙 Beautiful light & dark themes designed as matching stationery sets
+
+Instead of scrolling through endless posts, Kioku feels like opening a treasured photo album.
+
+---
+
+# 💛 Designed for meaningful memories
+
+### 📸 Capture Moments
+
+Save photos and videos into beautifully organized albums shared with the people you love.
+
+### 🕰️ Relive the Past
+
+Kioku automatically resurfaces forgotten memories through gentle flashbacks.
+
+| Feature | Description |
+|---------|-------------|
+| 🌸 **One Year Ago Today** | Revisit memories captured on the same date |
+| 🍂 **Last Month's Album** | A curated retrospective of the previous month |
+| ✨ **Passing Memory** | Weekly highlights that quietly return for a moment |
+
+### 👥 Share privately
+
+Invite friends or family using their Google account. Albums remain collaborative without becoming public social media.
+
+---
+
+# 🔒 Privacy by Design
+
+Kioku follows a **local-first, user-owned** philosophy.
+
+Unlike traditional photo apps, your media is **never stored on our servers**.
+
+| Your Data | Where it lives |
+|-----------|----------------|
+| Photos & Videos | 📁 Your own Google Drive |
+| Offline Albums | 📱 Your device |
+| Shared Albums | 🤝 Google Drive permissions |
+| Central Media Storage | ❌ None |
+
+**Your memories belong to you—not to an algorithm.**
+
+---
+
+# 🏗 Architecture
+
+Kioku consists of a Flutter mobile application and an optional Node.js companion backend.
 
 ```mermaid
 graph TD
-    subgraph Mobile [Flutter Mobile Client]
-        UI[Presentation Layer: Screens & Widgets]
-        State[Riverpod 2.6 Notifiers & Providers]
-        Domain[Domain Layer: Use Cases & Repositories]
-        Local[Local Storage: SharedPreferences & PathProvider]
-        DriveClient[AppDrive: Direct Google Drive API v3]
-    end
 
-    subgraph Cloud [User Cloud]
-        GDrive[(User's Personal Google Drive)]
-    end
+subgraph Mobile["Flutter Mobile App"]
+UI[Presentation Layer]
+State[Riverpod State]
+Domain[Repositories & Use Cases]
+Drive[Google Drive API]
+Local[Local Storage]
+end
 
-    subgraph Companion [Node.js Companion Backend]
-        API[Express REST API]
-        SQL[(SQLite via sql.js)]
-        Cron[node-cron Flashback Scheduler]
-    end
+subgraph Cloud["User Storage"]
+GD[(Personal Google Drive)]
+end
 
-    UI --> State
-    State --> Domain
-    Domain --> Local
-    Domain --> DriveClient
-    DriveClient --> GDrive
-    API --> SQL
-    API --> Cron
+subgraph Backend["Optional Companion API"]
+Express[Express Server]
+DB[(SQLite)]
+Cron[Flashback Scheduler]
+end
+
+UI --> State
+State --> Domain
+Domain --> Drive
+Domain --> Local
+Drive --> GD
+
+Express --> DB
+Express --> Cron
 ```
 
-### 📱 Flutter Mobile (`flutter_mobile`)
-- **Framework**: Flutter 3.x / Dart 3.x
-- **State Management**: [Riverpod 2.6](https://riverpod.dev) (`AsyncNotifier`, `StateNotifier`, clean dependency injection)
-- **Routing**: [GoRouter](https://pub.dev/packages/go_router) with stateful nested shell routes (`StatefulShellRoute`) and smooth page transitions
-- **Design Tokens**: Custom typography (Fraunces & Inter), Clay shadows, Washi tape shaders, and Hanko stamps
-- **Cloud & Auth**: `google_sign_in`, `googleapis`, `googleapis_auth`
+### Mobile
 
-### ⚡ Companion Backend (`backend`)
-- **Runtime**: Node.js, Express.js
-- **Database**: Zero-dependency SQLite powered by `sql.js`
-- **Security**: `helmet`, `express-rate-limit`, JWT session tokens
-- **Batch Jobs**: `node-cron` scheduled flashback generation
+- **Flutter 3**
+- **Dart 3**
+- **Riverpod 2.6**
+- **GoRouter**
+- **Photo View**
+- **Video Player + Chewie**
+
+### Backend
+
+- **Node.js + Express**
+- **SQLite (sql.js)**
+- **JWT Authentication**
+- **node-cron**
+- **Google Drive API v3**
 
 ---
 
-## 📁 Repository Structure
+# 📂 Project Structure
 
-```
-Kioku/
-├── assets/                          # Shared root assets (e.g. Kioku logo)
-│   └── kiokulogo.jpg
-├── backend/                         # Node.js backend companion
-│   ├── __tests__/                   # Jest test suites (auth, flashbacks)
-│   ├── middleware/                  # Auth and error handling middleware
-│   ├── routes/                      # Express API routes (auth, media, flashbacks)
-│   ├── scripts/                     # Helper scripts (Google OAuth token generation)
-│   ├── services/                    # Google Drive v3 wrapper
-│   ├── db.js                        # SQLite database engine
-│   ├── flashbackJob.js              # Scheduled cron job for flashback bucketing
-│   ├── package.json                 # Backend dependencies & test scripts
-│   ├── server.js                    # Express app entry point
-│   └── .env.example                 # Environment variables template
-├── flutter_mobile/                  # Flutter application
-│   ├── assets/                      # Flutter app assets (kiokulogo.jpg)
+```text
+Kioku
+│
+├── flutter_mobile/
 │   ├── lib/
-│   │   ├── core/                    # Theme, Drive API, models, providers, storage
+│   │   ├── core/
 │   │   ├── features/
-│   │   │   ├── auth/                # Sign-in & identity presentation / domain
-│   │   │   ├── feed/                # Day-grouped timeline feed & memory cards
-│   │   │   ├── flashbacks/          # Time-travel memory collections
-│   │   │   ├── media_viewer/        # Full-screen photo & video players
-│   │   │   ├── profile/             # Album management & settings
-│   │   │   └── upload/              # Media picker & upload workflow
-│   │   ├── shared/widgets/          # Washi tape, clay card, hanko stamp, nav bar
-│   │   ├── app_router.dart          # GoRouter navigation schema
-│   │   └── main.dart                # App entrypoint & theme initialization
-│   ├── test/                        # Flutter unit & widget tests
-│   └── pubspec.yaml                 # Flutter packages & asset configuration
-├── start.py                         # One-click dev environment runner
-├── .gitignore                       # Repository-wide ignore rules
-└── README.md                        # Documentation
+│   │   ├── shared/
+│   │   ├── app_router.dart
+│   │   └── main.dart
+│   └── assets/
+│
+├── backend/
+│   ├── routes/
+│   ├── services/
+│   ├── middleware/
+│   ├── __tests__/
+│   └── server.js
+│
+├── assets/
+├── start.py
+└── README.md
 ```
 
 ---
 
-## 🚀 Getting Started
+# 🚀 Getting Started
 
-### Prerequisites
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) (v3.11+ recommended)
-- [Node.js](https://nodejs.org/) (v18 or newer)
-- [Python](https://www.python.org/) 3.9+ (for `start.py` orchestrator)
-- [Android Studio](https://developer.android.com/studio) with an Android Emulator or physical device
+## Prerequisites
 
----
+- Flutter 3.11+
+- Dart 3
+- Node.js 18+
+- Python 3.9+
+- Android Studio
 
-### Option 1: One-Click Dev Launcher (`start.py`)
-
-Kioku includes an automated python script that starts the Node backend, powers up the Android emulator, reverse-forwards necessary ports, builds the debug APK, and launches the app:
+## One-click development
 
 ```bash
 python start.py
 ```
 
+The launcher automatically:
+
+- Starts the backend
+- Boots the Android emulator
+- Reverse-forwards ports
+- Builds & launches the Flutter app
+
 ---
 
-### Option 2: Manual Setup
+## Manual Setup
 
-#### 1. Backend Setup
+### Backend
+
 ```bash
 cd backend
 npm install
 
-# Copy environment template and configure secrets
 cp .env.example .env
 
-# Run the backend server (starts on http://localhost:4000)
 npm start
 ```
 
-#### 2. Mobile App Setup
+Runs at:
+
+```text
+http://localhost:4000
+```
+
+### Flutter
+
 ```bash
 cd flutter_mobile
 
-# Fetch packages
 flutter pub get
-
-# Launch on connected device / emulator
 flutter run
 ```
 
 ---
 
-## 🔑 Google Drive & OAuth Configuration
+# ☁ Google Drive Setup
 
-If you wish to synchronize albums to your Google Drive account:
+Kioku can run entirely offline, but Google Drive enables seamless private syncing.
 
-1. Create a project in the [Google Cloud Console](https://console.cloud.google.com/).
-2. Enable the **Google Drive API**.
-3. Configure the **OAuth Consent Screen** and add the following scope:
-   - `https://www.googleapis.com/auth/drive.file`
-4. Create an **Android OAuth Client ID** using your debug SHA-1 fingerprint (`gradlew signingReport`).
-5. (Optional for backend sync): Run `node scripts/getRefreshToken.js` in the `backend/` directory to generate a permanent refresh token.
+1. Create a Google Cloud project
+2. Enable **Google Drive API**
+3. Configure OAuth Consent
+4. Add scope:
 
-*Note: You can also use Kioku completely offline in **Guest / Local Mode** without configuring Google credentials.*
+```text
+https://www.googleapis.com/auth/drive.file
+```
+
+5. Create an Android OAuth client
+6. (Optional) Generate a backend refresh token
 
 ---
 
-## 🧪 Testing & Verification
+# 🧪 Testing
 
-Kioku has comprehensive test coverage across both frontend and backend:
+### Flutter
 
-### Mobile Tests
 ```bash
-cd flutter_mobile
-
-# Run all widget and unit tests
-flutter test
-
-# Run static analysis
 flutter analyze
+flutter test
 ```
 
-### Backend Tests
+### Backend
+
 ```bash
 cd backend
-
-# Run Jest test suites
 npm test
 ```
 
 ---
 
-## 📄 License
+# 🌸 Philosophy
 
-This project is licensed under the [MIT License](LICENSE).
+> **The best memories aren't the loudest ones.**
+
+Kioku was created around a simple idea:
+
+Digital memories should feel as comforting as opening an old scrapbook—filled with paper, ink, photographs, and the people who make those moments meaningful.
+
+No feeds. No followers. Just memories.
+
+---
+
+<div align="center">
+
+### Made with ❤️ for meaningful moments
+
+**Kioku · 記憶**
+
+</div>
