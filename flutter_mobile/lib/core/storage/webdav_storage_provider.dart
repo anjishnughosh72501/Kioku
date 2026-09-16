@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
+import '../utils/retry.dart';
 import 'storage_provider.dart';
 
 class WebDavConfig {
@@ -103,16 +104,18 @@ class WebDavStorageProvider implements StorageProvider {
 
   @override
   Future<Uint8List> getBlob(String objectId, {required String containerId}) async {
-    final uri = _buildUri('$containerId/$objectId.enc');
-    final res = await _client.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 45));
+    return retryAsync(() async {
+      final uri = _buildUri('$containerId/$objectId.enc');
+      final res = await _client.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 45));
 
-    if (res.statusCode != 200) {
-      throw http.ClientException(
-        'WebDAV getBlob failed (${res.statusCode}): ${res.body}',
-        uri,
-      );
-    }
-    return res.bodyBytes;
+      if (res.statusCode != 200) {
+        throw http.ClientException(
+          'WebDAV getBlob failed (${res.statusCode}): ${res.body}',
+          uri,
+        );
+      }
+      return res.bodyBytes;
+    });
   }
 
   @override
@@ -130,34 +133,36 @@ class WebDavStorageProvider implements StorageProvider {
 
   @override
   Future<List<String>> listBlobs(String containerId) async {
-    final uri = _buildUri(containerId);
-    final req = http.Request('PROPFIND', uri)
-      ..headers.addAll({
-        ..._authHeaders,
-        'Depth': '1',
-      });
+    return retryAsync(() async {
+      final uri = _buildUri(containerId);
+      final req = http.Request('PROPFIND', uri)
+        ..headers.addAll({
+          ..._authHeaders,
+          'Depth': '1',
+        });
 
-    final streamedRes = await _client.send(req).timeout(const Duration(seconds: 45));
-    final res = await http.Response.fromStream(streamedRes);
+      final streamedRes = await _client.send(req).timeout(const Duration(seconds: 45));
+      final res = await http.Response.fromStream(streamedRes);
 
-    if (res.statusCode != 207 && (res.statusCode < 200 || res.statusCode >= 300)) {
-      return [];
-    }
-
-    final keys = <String>[];
-    try {
-      final doc = XmlDocument.parse(res.body);
-      final hrefNodes = doc.findAllElements('href', namespace: '*');
-      for (final node in hrefNodes) {
-        final href = Uri.decodeComponent(node.innerText);
-        if (href.endsWith('.enc')) {
-          final fileName = href.split('/').last;
-          final objectId = fileName.substring(0, fileName.length - 4);
-          keys.add(objectId);
-        }
+      if (res.statusCode != 207 && (res.statusCode < 200 || res.statusCode >= 300)) {
+        return [];
       }
-    } catch (_) {}
 
-    return keys;
+      final keys = <String>[];
+      try {
+        final doc = XmlDocument.parse(res.body);
+        final hrefNodes = doc.findAllElements('href', namespace: '*');
+        for (final node in hrefNodes) {
+          final href = Uri.decodeComponent(node.innerText);
+          if (href.endsWith('.enc')) {
+            final fileName = href.split('/').last;
+            final objectId = fileName.substring(0, fileName.length - 4);
+            keys.add(objectId);
+          }
+        }
+      } catch (_) {}
+
+      return keys;
+    });
   }
 }

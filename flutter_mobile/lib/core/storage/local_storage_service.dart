@@ -229,15 +229,46 @@ class LocalStorageService {
     }
   }
 
+  final Map<String, String> _memoryPathIndex = {};
+
+  void _indexMemories(List<KiokuMemory> memories) {
+    for (final m in memories) {
+      if (m.localPath != null) {
+        _memoryPathIndex[m.id] = m.localPath!;
+      }
+    }
+  }
+
   /// Resolves the local path for a memory id if present
   String? getLocalPath(String memoryId) {
     if (File(memoryId).existsSync()) return memoryId;
-    return null;
+    return _memoryPathIndex[memoryId];
   }
 
   /// Reads bytes for a local memory file.
-  Future<Uint8List?> getPhotoBytes(String memoryId) async {
+  Future<Uint8List?> getPhotoBytes(String memoryId, {String? albumId}) async {
+    final indexedPath = _memoryPathIndex[memoryId];
+    if (indexedPath != null) {
+      final f = File(indexedPath);
+      if (await f.exists()) {
+        return await f.readAsBytes();
+      }
+    }
+
+    if (albumId != null) {
+      final albumMemories = await getMemories(albumId);
+      _indexMemories(albumMemories);
+      final match = albumMemories.where((m) => m.id == memoryId).firstOrNull;
+      if (match != null && match.localPath != null) {
+        final f = File(match.localPath!);
+        if (await f.exists()) {
+          return await f.readAsBytes();
+        }
+      }
+    }
+
     final all = await getAllMemories();
+    _indexMemories(all);
     final match = all.where((m) => m.id == memoryId).firstOrNull;
     if (match != null && match.localPath != null) {
       final f = File(match.localPath!);

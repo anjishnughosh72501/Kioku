@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:http/http.dart' as http;
 import '../drive/app_drive.dart';
+import '../utils/retry.dart';
 import 'storage_provider.dart';
 
 class DriveStorageProvider implements StorageProvider {
@@ -45,22 +46,24 @@ class DriveStorageProvider implements StorageProvider {
 
   @override
   Future<Uint8List> getBlob(String objectId, {required String containerId}) async {
-    final token = await AppDrive.instance.accessToken();
-    final client = http.Client();
-    try {
-      final resp = await client.get(
-        Uri.parse(
-          'https://www.googleapis.com/drive/v3/files/$objectId?alt=media',
-        ),
-        headers: {'Authorization': 'Bearer $token'},
-      ).timeout(const Duration(seconds: 45));
-      if (resp.statusCode != 200) {
-        throw http.ClientException('Drive fetch failed ($objectId): ${resp.statusCode}');
+    return retryAsync(() async {
+      final token = await AppDrive.instance.accessToken();
+      final client = http.Client();
+      try {
+        final resp = await client.get(
+          Uri.parse(
+            'https://www.googleapis.com/drive/v3/files/$objectId?alt=media',
+          ),
+          headers: {'Authorization': 'Bearer $token'},
+        ).timeout(const Duration(seconds: 45));
+        if (resp.statusCode != 200) {
+          throw http.ClientException('Drive fetch failed ($objectId): ${resp.statusCode}');
+        }
+        return resp.bodyBytes;
+      } finally {
+        client.close();
       }
-      return resp.bodyBytes;
-    } finally {
-      client.close();
-    }
+    });
   }
 
   @override
@@ -71,26 +74,28 @@ class DriveStorageProvider implements StorageProvider {
 
   @override
   Future<List<String>> listBlobs(String containerId) async {
-    final driveApi = await AppDrive.instance.api();
-    final List<String> allIds = [];
-    String? pageToken;
+    return retryAsync(() async {
+      final driveApi = await AppDrive.instance.api();
+      final List<String> allIds = [];
+      String? pageToken;
 
-    do {
-      final res = await driveApi.files.list(
-        q: "'$containerId' in parents and trashed=false",
-        orderBy: 'createdTime desc',
-        pageSize: 100,
-        pageToken: pageToken,
-        $fields: 'nextPageToken,files(id,name)',
-      );
-      for (final f in res.files ?? []) {
-        if (f.id != null) {
-          allIds.add(f.id!);
+      do {
+        final res = await driveApi.files.list(
+          q: "'$containerId' in parents and trashed=false",
+          orderBy: 'createdTime desc',
+          pageSize: 100,
+          pageToken: pageToken,
+          $fields: 'nextPageToken,files(id,name)',
+        );
+        for (final f in res.files ?? []) {
+          if (f.id != null) {
+            allIds.add(f.id!);
+          }
         }
-      }
-      pageToken = res.nextPageToken;
-    } while (pageToken != null);
+        pageToken = res.nextPageToken;
+      } while (pageToken != null);
 
-    return allIds;
+      return allIds;
+    });
   }
 }

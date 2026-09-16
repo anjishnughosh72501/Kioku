@@ -2,7 +2,6 @@
 /// signed-in Google user. Files stay private; every read uses the user's token.
 library;
 
-import 'dart:collection';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -13,47 +12,7 @@ import 'package:http/http.dart' as http;
 
 import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/services/user_profile_service.dart';
-
-class _BudgetLRU {
-  _BudgetLRU({required this.maxBytes});
-  final int maxBytes;
-  final LinkedHashMap<String, Uint8List> _map = LinkedHashMap<String, Uint8List>();
-  int _used = 0;
-
-  Uint8List? get(String key) {
-    final v = _map.remove(key);
-    if (v != null) {
-      _map[key] = v; // promote to MRU
-    }
-    return v;
-  }
-
-  void put(String key, Uint8List bytes) {
-    if (_map.containsKey(key)) {
-      _used -= _map[key]!.length;
-      _map.remove(key);
-    }
-    while (_used + bytes.length > maxBytes && _map.isNotEmpty) {
-      final oldestKey = _map.keys.first;
-      _used -= _map[oldestKey]!.length;
-      _map.remove(oldestKey);
-    }
-    _map[key] = bytes;
-    _used += bytes.length;
-  }
-
-  void remove(String key) {
-    final v = _map.remove(key);
-    if (v != null) {
-      _used -= v.length;
-    }
-  }
-
-  void clear() {
-    _map.clear();
-    _used = 0;
-  }
-}
+import 'package:flutter_mobile/core/utils/lru_cache.dart';
 
 class AppDrive {
   AppDrive._();
@@ -66,7 +25,7 @@ class AppDrive {
   String? _accessToken;
   DateTime? _apiExpiry;
 
-  final _BudgetLRU _bytesCache = _BudgetLRU(maxBytes: 50 * 1024 * 1024); // 50MB
+  final ByteBudgetLruCache _bytesCache = ByteBudgetLruCache(maxBytes: 50 * 1024 * 1024); // 50MB
 
   bool get isBound => _account != null;
 

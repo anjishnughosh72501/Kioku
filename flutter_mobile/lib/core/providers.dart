@@ -22,6 +22,7 @@ import 'package:flutter_mobile/core/storage/s3_storage_provider.dart';
 import 'package:flutter_mobile/core/storage/webdav_storage_provider.dart';
 import 'package:flutter_mobile/core/storage/mesh_storage_provider.dart';
 import 'package:flutter_mobile/core/storage/storage_settings_service.dart';
+import 'package:flutter_mobile/core/utils/lru_cache.dart';
 import 'package:flutter_mobile/features/feed/data/encrypted_memory_repository.dart';
 
 /// Core Clean Architecture Repository Providers
@@ -106,12 +107,27 @@ final storageProviderProvider = Provider<StorageProvider>((ref) {
   }
 });
 
+final memoryMediaCacheProvider = Provider<ByteBudgetLruCache>((ref) {
+  return ByteBudgetLruCache(maxBytes: 50 * 1024 * 1024);
+});
+
+final memoryThumbCacheProvider = Provider<ByteBudgetLruCache>((ref) {
+  return ByteBudgetLruCache(maxBytes: 20 * 1024 * 1024);
+});
+
+final memoryMetadataCacheProvider = Provider<Map<String, KiokuMemory>>((ref) {
+  return <String, KiokuMemory>{};
+});
+
 final encryptedMemoryRepositoryProvider =
     Provider<EncryptedMemoryRepository>((ref) {
   final keyStore = ref.watch(keyStoreProvider);
   return EncryptedMemoryRepository(
     provider: () => ref.watch(storageProviderProvider),
     keyStore: keyStore,
+    mediaCache: ref.watch(memoryMediaCacheProvider),
+    thumbCache: ref.watch(memoryThumbCacheProvider),
+    metadataCache: ref.watch(memoryMetadataCacheProvider),
   );
 });
 
@@ -121,10 +137,32 @@ final memoryRepositoryProvider =
 final uploadRepositoryProvider =
     Provider<IUploadRepository>((ref) => ref.watch(encryptedMemoryRepositoryProvider));
 
+class UserProfileNotifier extends StateNotifier<({String username, String friendCode})> {
+  UserProfileNotifier()
+      : super((
+          username: UserProfileService.instance.username,
+          friendCode: UserProfileService.instance.friendCode,
+        )) {
+    _listener = (profile) {
+      if (mounted) {
+        state = (username: profile.username, friendCode: profile.friendCode);
+      }
+    };
+    UserProfileService.instance.addListener(_listener);
+  }
+
+  late final void Function(UserProfile) _listener;
+
+  @override
+  void dispose() {
+    UserProfileService.instance.removeListener(_listener);
+    super.dispose();
+  }
+}
+
 final userProfileProvider =
-    StateProvider<({String username, String friendCode})>((ref) {
-  final svc = UserProfileService.instance;
-  return (username: svc.username, friendCode: svc.friendCode);
+    StateNotifierProvider<UserProfileNotifier, ({String username, String friendCode})>((ref) {
+  return UserProfileNotifier();
 });
 
 final getMemoriesUseCaseProvider = Provider<GetMemoriesUseCase>(

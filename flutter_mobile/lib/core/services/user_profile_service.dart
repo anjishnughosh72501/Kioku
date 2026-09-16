@@ -20,6 +20,10 @@ class UserProfileService {
   static const String _keyConnectedFriends = 'kioku_connected_friends';
 
   UserProfile? _currentProfile;
+  final List<void Function(UserProfile)> _listeners = [];
+
+  void addListener(void Function(UserProfile) listener) => _listeners.add(listener);
+  void removeListener(void Function(UserProfile) listener) => _listeners.remove(listener);
 
   UserProfile? get currentProfile => _currentProfile;
 
@@ -67,6 +71,9 @@ class UserProfileService {
       friendCode: friendCode,
     );
     _currentProfile = profile;
+    for (final listener in List.of(_listeners)) {
+      listener(profile);
+    }
     return profile;
   }
 

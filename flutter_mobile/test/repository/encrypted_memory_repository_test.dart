@@ -47,6 +47,34 @@ class MockStorageProvider implements StorageProvider {
   }
 }
 
+class MockFailingStorageProvider implements StorageProvider {
+  @override
+  StorageProviderType get type => StorageProviderType.local;
+
+  @override
+  StorageCapabilities get capabilities => const StorageCapabilities(displayName: 'FailingMock');
+
+  @override
+  Future<String> putBlob(
+    Uint8List ciphertext, {
+    required String containerId,
+    required String objectId,
+  }) async {
+    throw const HttpException('Simulated storage write error');
+  }
+
+  @override
+  Future<Uint8List> getBlob(String objectId, {required String containerId}) async {
+    throw const HttpException('Simulated storage read error');
+  }
+
+  @override
+  Future<void> deleteBlob(String objectId, {required String containerId}) async {}
+
+  @override
+  Future<List<String>> listBlobs(String containerId) async => [];
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   SodiumWindows.registerWith();
@@ -196,6 +224,101 @@ void main() {
 
       final recoveredMasterKey = await restoredKs.getMasterKey();
       expect(recoveredMasterKey, equals(originalMasterKey));
+    });
+
+    test('restoreFromRecoveryPhrase throws on invalid phrase word count', () async {
+      SharedPreferences.setMockInitialValues({});
+      final storage = InMemorySecureStorage();
+      final ks = KeyStore(storage: storage);
+      await ks.initialize();
+
+      // Clear keystore to simulate wipe
+      storage.clear();
+      final newKs = KeyStore(storage: storage);
+
+      // 5 words instead of 24
+      await expectLater(
+        newKs.restoreFromRecoveryPhrase('apple banana cherry dog elephant'),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('restoreFromRecoveryPhrase handles extra whitespace gracefully', () async {
+      SharedPreferences.setMockInitialValues({});
+      final storage = InMemorySecureStorage();
+      final ks = KeyStore(storage: storage);
+      final phrase = await ks.initialize();
+      final originalMasterKey = await ks.getMasterKey();
+
+      storage.clear();
+      final restoredKs = KeyStore(storage: storage);
+
+      // Phrase with leading/trailing and duplicate whitespace
+      final messyPhrase = '  ${phrase!.replaceAll(' ', '   ')}  ';
+      await restoredKs.restoreFromRecoveryPhrase(messyPhrase);
+      expect(await restoredKs.hasMasterKey(), isTrue);
+
+      final recoveredMasterKey = await restoredKs.getMasterKey();
+      expect(recoveredMasterKey, equals(originalMasterKey));
+    });
+  });
+
+  group('EncryptedMemoryRepository pagination and failure tests', () {
+    test('getMemoriesPage returns page slices and tracks nextPageToken', () async {
+      final tempDir = Directory.systemTemp.createTempSync('kioku_page_test_');
+      const albumId = 'album_pagination';
+
+      for (var i = 1; i <= 5; i++) {
+        final f = File('${tempDir.path}/img_$i.jpg');
+        f.writeAsBytesSync(Uint8List.fromList('Photo $i'.codeUnits));
+        await repository.uploadMemory(
+          albumId: albumId,
+          file: f,
+          mimeType: 'image/jpeg',
+          caption: 'Item $i',
+          takenAt: '2026-09-16T12:0$i:00Z',
+        );
+      }
+
+      // First page of 2 items
+      final page1 = await repository.getMemoriesPage(albumId, pageSize: 2);
+      expect(page1.items.length, equals(2));
+      expect(page1.nextPageToken, equals('2'));
+
+      // Second page of 2 items
+      final page2 = await repository.getMemoriesPage(albumId, pageSize: 2, pageToken: page1.nextPageToken);
+      expect(page2.items.length, equals(2));
+      expect(page2.nextPageToken, equals('4'));
+
+      // Third page of 1 item
+      final page3 = await repository.getMemoriesPage(albumId, pageSize: 2, pageToken: page2.nextPageToken);
+      expect(page3.items.length, equals(1));
+      expect(page3.nextPageToken, isNull);
+
+      tempDir.deleteSync(recursive: true);
+    });
+
+    test('uploadMemory failure on storage write propagates exception cleanly', () async {
+      final tempDir = Directory.systemTemp.createTempSync('kioku_upload_fail_');
+      final f = File('${tempDir.path}/img_fail.jpg');
+      f.writeAsBytesSync(Uint8List.fromList('Photo data'.codeUnits));
+
+      final failingProvider = MockFailingStorageProvider();
+      final failingRepo = EncryptedMemoryRepository(
+        provider: () => failingProvider,
+        keyStore: keyStore,
+      );
+
+      await expectLater(
+        failingRepo.uploadMemory(
+          albumId: 'album_err',
+          file: f,
+          mimeType: 'image/jpeg',
+        ),
+        throwsA(isA<HttpException>()),
+      );
+
+      tempDir.deleteSync(recursive: true);
     });
   });
 }

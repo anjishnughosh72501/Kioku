@@ -23,6 +23,21 @@ class VideoPlayerScreen extends ConsumerStatefulWidget {
   final String mediaId;
   final KiokuMemory? memory;
 
+  static Future<void> sweepStaleTempVideos([Directory? targetDir]) async {
+    try {
+      final tempDir = targetDir ?? await getTemporaryDirectory();
+      if (!tempDir.existsSync()) return;
+      final entities = tempDir.listSync();
+      for (final entity in entities) {
+        if (entity is File && entity.path.contains('dec_') && entity.path.endsWith('.mp4')) {
+          try {
+            entity.deleteSync();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
+
   @override
   ConsumerState<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
 }
@@ -37,22 +52,8 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
   @override
   void initState() {
     super.initState();
-    _sweepStaleTempVideos();
+    VideoPlayerScreen.sweepStaleTempVideos();
     _initializePlayer();
-  }
-
-  static Future<void> _sweepStaleTempVideos() async {
-    try {
-      final tempDir = await getTemporaryDirectory();
-      final entities = tempDir.listSync();
-      for (final entity in entities) {
-        if (entity is File && entity.path.contains('dec_') && entity.path.endsWith('.mp4')) {
-          try {
-            entity.deleteSync();
-          } catch (_) {}
-        }
-      }
-    } catch (_) {}
   }
 
   void _cleanupTempFile() {

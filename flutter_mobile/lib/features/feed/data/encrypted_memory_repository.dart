@@ -1,4 +1,3 @@
-import 'dart:collection';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -11,68 +10,34 @@ import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/services/user_profile_service.dart';
 import 'package:flutter_mobile/core/storage/local_storage_service.dart';
 import 'package:flutter_mobile/core/storage/storage_provider.dart';
+import 'package:flutter_mobile/core/utils/lru_cache.dart';
 import 'package:flutter_mobile/features/feed/domain/i_memory_repository.dart';
 import 'package:flutter_mobile/features/upload/domain/i_upload_repository.dart';
-
-class _DecryptedLRUCache {
-  _DecryptedLRUCache({required this.maxBytes});
-  final int maxBytes;
-  final LinkedHashMap<String, Uint8List> _map = LinkedHashMap<String, Uint8List>();
-  int _used = 0;
-
-  Uint8List? get(String key) {
-    final v = _map.remove(key);
-    if (v != null) {
-      _map[key] = v;
-    }
-    return v;
-  }
-
-  void put(String key, Uint8List bytes) {
-    if (_map.containsKey(key)) {
-      _used -= _map[key]!.length;
-      _map.remove(key);
-    }
-    while (_used + bytes.length > maxBytes && _map.isNotEmpty) {
-      final oldestKey = _map.keys.first;
-      _used -= _map[oldestKey]!.length;
-      _map.remove(oldestKey);
-    }
-    _map[key] = bytes;
-    _used += bytes.length;
-  }
-
-  void remove(String key) {
-    final v = _map.remove(key);
-    if (v != null) {
-      _used -= v.length;
-    }
-  }
-
-  void clear() {
-    _map.clear();
-    _used = 0;
-  }
-}
 
 class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository {
   final StorageProvider Function() _providerGetter;
   final KeyStore _keyStore;
 
+  // In-memory decrypted cache (50MB for full media, 20MB for thumbnails)
+  final ByteBudgetLruCache _mediaCache;
+  final ByteBudgetLruCache _thumbCache;
+
+  // Metadata cache per objectId to avoid re-decrypting envelope headers on every scroll
+  final Map<String, KiokuMemory> _metadataCache;
+
   EncryptedMemoryRepository({
     required StorageProvider Function() provider,
     KeyStore? keyStore,
+    ByteBudgetLruCache? mediaCache,
+    ByteBudgetLruCache? thumbCache,
+    Map<String, KiokuMemory>? metadataCache,
   })  : _providerGetter = provider,
-        _keyStore = keyStore ?? KeyStore.instance;
+        _keyStore = keyStore ?? KeyStore.instance,
+        _mediaCache = mediaCache ?? ByteBudgetLruCache(maxBytes: 50 * 1024 * 1024),
+        _thumbCache = thumbCache ?? ByteBudgetLruCache(maxBytes: 20 * 1024 * 1024),
+        _metadataCache = metadataCache ?? <String, KiokuMemory>{};
 
   StorageProvider get provider => _providerGetter();
-
-  // In-memory decrypted cache (50MB for full media, 20MB for thumbnails)
-  final _DecryptedLRUCache _mediaCache = _DecryptedLRUCache(maxBytes: 50 * 1024 * 1024);
-  final _DecryptedLRUCache _thumbCache = _DecryptedLRUCache(maxBytes: 20 * 1024 * 1024);
-
-  // Metadata cache per objectId to avoid re-decrypting envelope headers on every scroll
-  final Map<String, KiokuMemory> _metadataCache = {};
 
   // ===== IMemoryRepository Implementation =====
 
@@ -131,6 +96,53 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
     ];
   }
 
+  Future<KiokuMemory?> _fetchAndDecryptMemory(
+    String objectId,
+    String albumId,
+    Uint8List collectionKey,
+  ) async {
+    final cached = _metadataCache[objectId];
+    if (cached != null) return cached;
+
+    try {
+      final blob = await provider.getBlob(objectId, containerId: albumId);
+      final envelope = EncryptedEnvelope.fromBlob(blob, objectId: objectId);
+
+      // Unwrap fileKey using collectionKey (AEK)
+      final fileKey = CryptoCore.instance.unwrapKey(
+        envelope.wrappedFileKey,
+        envelope.fileKeyNonce,
+        collectionKey,
+      );
+
+      // Decrypt metadata JSON
+      final meta = CryptoCore.instance.decryptMetadata(
+        envelope.encryptedMetadata,
+        envelope.metadataNonce,
+        fileKey,
+      );
+
+      // Cache decrypted thumbnail if available
+      if (envelope.encryptedThumbnail != null && envelope.thumbnailNonce != null) {
+        final thumbBytes = CryptoCore.instance.decryptBytes(
+          envelope.encryptedThumbnail!,
+          envelope.thumbnailNonce!,
+          fileKey,
+        );
+        _thumbCache.put(objectId, thumbBytes);
+      }
+
+      final memory = KiokuMemory.fromDecryptedMetadata(
+        id: objectId,
+        metadata: meta,
+      );
+      _metadataCache[objectId] = memory;
+      return memory;
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   Future<List<KiokuMemory>> getMemories(String albumId) async {
     await CryptoCore.instance.init();
@@ -139,49 +151,9 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
 
     final memories = <KiokuMemory>[];
     for (final objectId in blobIds) {
-      // Check metadata cache first
-      final cached = _metadataCache[objectId];
-      if (cached != null) {
-        memories.add(cached);
-        continue;
-      }
-
-      try {
-        final blob = await provider.getBlob(objectId, containerId: albumId);
-        final envelope = EncryptedEnvelope.fromBlob(blob, objectId: objectId);
-
-        // Unwrap fileKey using collectionKey (AEK)
-        final fileKey = CryptoCore.instance.unwrapKey(
-          envelope.wrappedFileKey,
-          envelope.fileKeyNonce,
-          collectionKey,
-        );
-
-        // Decrypt metadata JSON
-        final meta = CryptoCore.instance.decryptMetadata(
-          envelope.encryptedMetadata,
-          envelope.metadataNonce,
-          fileKey,
-        );
-
-        // Cache decrypted thumbnail if available
-        if (envelope.encryptedThumbnail != null && envelope.thumbnailNonce != null) {
-          final thumbBytes = CryptoCore.instance.decryptBytes(
-            envelope.encryptedThumbnail!,
-            envelope.thumbnailNonce!,
-            fileKey,
-          );
-          _thumbCache.put(objectId, thumbBytes);
-        }
-
-        final memory = KiokuMemory.fromDecryptedMetadata(
-          id: objectId,
-          metadata: meta,
-        );
-        _metadataCache[objectId] = memory;
+      final memory = await _fetchAndDecryptMemory(objectId, albumId, collectionKey);
+      if (memory != null) {
         memories.add(memory);
-      } catch (_) {
-        // Skip unreadable or corrupted blobs
       }
     }
 
@@ -195,12 +167,27 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
     int pageSize = 30,
     String? pageToken,
   }) async {
-    final all = await getMemories(albumId);
+    await CryptoCore.instance.init();
+    final blobIds = await provider.listBlobs(albumId);
     final offset = pageToken != null ? int.tryParse(pageToken) ?? 0 : 0;
-    final end = (offset + pageSize).clamp(0, all.length);
-    final slice = offset < all.length ? all.sublist(offset, end) : <KiokuMemory>[];
-    final next = end < all.length ? end.toString() : null;
-    return (items: slice, nextPageToken: next);
+    if (offset >= blobIds.length) {
+      return (items: <KiokuMemory>[], nextPageToken: null);
+    }
+    final end = (offset + pageSize).clamp(0, blobIds.length);
+    final targetBlobIds = blobIds.sublist(offset, end);
+    final collectionKey = await _keyStore.getOrCreateCollectionKey(albumId);
+
+    final pageMemories = <KiokuMemory>[];
+    for (final objectId in targetBlobIds) {
+      final memory = await _fetchAndDecryptMemory(objectId, albumId, collectionKey);
+      if (memory != null) {
+        pageMemories.add(memory);
+      }
+    }
+
+    pageMemories.sort((a, b) => (b.takenAt ?? DateTime(0)).compareTo(a.takenAt ?? DateTime(0)));
+    final next = end < blobIds.length ? end.toString() : null;
+    return (items: pageMemories, nextPageToken: next);
   }
 
   @override

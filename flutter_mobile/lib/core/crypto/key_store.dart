@@ -308,12 +308,16 @@ class KeyStore {
 
   /// Restores masterKey from recovery phrase
   Future<void> restoreFromRecoveryPhrase(String phrase) async {
+    final trimmed = phrase.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (!RecoveryService.instance.validatePhrase(trimmed)) {
+      throw ArgumentError('Invalid 24-word recovery phrase');
+    }
     final blob = await getRecoveryBlob();
     if (blob == null) {
       throw StateError('No recovery blob found to restore from');
     }
     final recoveredMasterKey = RecoveryService.instance.recoverMasterKey(
-      phrase: phrase,
+      phrase: trimmed,
       encryptedMasterKey: blob.encryptedMasterKey,
       nonce: blob.nonce,
     );

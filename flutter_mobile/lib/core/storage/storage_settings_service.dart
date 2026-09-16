@@ -8,7 +8,11 @@ class StorageSettingsService {
   final FlutterSecureStorage _storage;
 
   const StorageSettingsService([FlutterSecureStorage? storage])
-      : _storage = storage ?? const FlutterSecureStorage();
+      : _storage = storage ??
+            const FlutterSecureStorage(
+              aOptions: AndroidOptions(encryptedSharedPreferences: true),
+              iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+            );
 
   static const _kActiveProviderType = 'kioku_storage_active_type';
   static const _kS3Config = 'kioku_storage_s3_config';

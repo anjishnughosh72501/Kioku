@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
+import '../utils/retry.dart';
 import 'storage_provider.dart';
 
 class S3StorageConfig {
@@ -169,21 +170,23 @@ class S3StorageProvider implements StorageProvider {
 
   @override
   Future<Uint8List> getBlob(String objectId, {required String containerId}) async {
-    final uri = _buildUri('$containerId/$objectId.enc');
-    final headers = _signRequest(
-      method: 'GET',
-      uri: uri,
-      payload: Uint8List(0),
-    );
-
-    final res = await _client.get(uri, headers: headers).timeout(const Duration(seconds: 45));
-    if (res.statusCode != 200) {
-      throw http.ClientException(
-        'S3 getBlob failed (${res.statusCode}): ${res.body}',
-        uri,
+    return retryAsync(() async {
+      final uri = _buildUri('$containerId/$objectId.enc');
+      final headers = _signRequest(
+        method: 'GET',
+        uri: uri,
+        payload: Uint8List(0),
       );
-    }
-    return res.bodyBytes;
+
+      final res = await _client.get(uri, headers: headers).timeout(const Duration(seconds: 45));
+      if (res.statusCode != 200) {
+        throw http.ClientException(
+          'S3 getBlob failed (${res.statusCode}): ${res.body}',
+          uri,
+        );
+      }
+      return res.bodyBytes;
+    });
   }
 
   @override
@@ -206,32 +209,34 @@ class S3StorageProvider implements StorageProvider {
 
   @override
   Future<List<String>> listBlobs(String containerId) async {
-    final prefix = '$containerId/';
-    final uri = _buildUri('', {'prefix': prefix});
-    final headers = _signRequest(
-      method: 'GET',
-      uri: uri,
-      payload: Uint8List(0),
-    );
-
-    final res = await _client.get(uri, headers: headers).timeout(const Duration(seconds: 45));
-    if (res.statusCode != 200) {
-      throw http.ClientException(
-        'S3 listBlobs failed (${res.statusCode}): ${res.body}',
-        uri,
+    return retryAsync(() async {
+      final prefix = '$containerId/';
+      final uri = _buildUri('', {'prefix': prefix});
+      final headers = _signRequest(
+        method: 'GET',
+        uri: uri,
+        payload: Uint8List(0),
       );
-    }
 
-    final doc = XmlDocument.parse(res.body);
-    final keys = <String>[];
-    for (final node in doc.findAllElements('Key')) {
-      final text = node.innerText;
-      if (text.startsWith(prefix) && text.endsWith('.enc')) {
-        final filename = text.substring(prefix.length);
-        final objectId = filename.substring(0, filename.length - 4);
-        keys.add(objectId);
+      final res = await _client.get(uri, headers: headers).timeout(const Duration(seconds: 45));
+      if (res.statusCode != 200) {
+        throw http.ClientException(
+          'S3 listBlobs failed (${res.statusCode}): ${res.body}',
+          uri,
+        );
       }
-    }
-    return keys;
+
+      final doc = XmlDocument.parse(res.body);
+      final keys = <String>[];
+      for (final node in doc.findAllElements('Key')) {
+        final text = node.innerText;
+        if (text.startsWith(prefix) && text.endsWith('.enc')) {
+          final filename = text.substring(prefix.length);
+          final objectId = filename.substring(0, filename.length - 4);
+          keys.add(objectId);
+        }
+      }
+      return keys;
+    });
   }
 }
