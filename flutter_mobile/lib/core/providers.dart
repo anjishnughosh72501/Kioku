@@ -9,21 +9,85 @@ import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/features/auth/domain/i_auth_repository.dart';
 import 'package:flutter_mobile/features/auth/data/auth_repository.dart';
 import 'package:flutter_mobile/features/feed/domain/i_memory_repository.dart';
-import 'package:flutter_mobile/features/feed/data/memory_repository.dart';
 import 'package:flutter_mobile/features/feed/domain/use_cases/get_memories_use_case.dart';
 import 'package:flutter_mobile/core/services/user_profile_service.dart';
 import 'package:flutter_mobile/features/upload/domain/i_upload_repository.dart';
-import 'package:flutter_mobile/features/upload/data/upload_repository.dart';
+
+import 'package:flutter_mobile/core/crypto/key_store.dart';
+import 'package:flutter_mobile/core/storage/storage_provider.dart';
+import 'package:flutter_mobile/core/storage/local_storage_provider.dart';
+import 'package:flutter_mobile/core/storage/drive_storage_provider.dart';
+import 'package:flutter_mobile/core/storage/s3_storage_provider.dart';
+import 'package:flutter_mobile/core/storage/webdav_storage_provider.dart';
+import 'package:flutter_mobile/core/storage/mesh_storage_provider.dart';
+import 'package:flutter_mobile/core/storage/storage_settings_service.dart';
+import 'package:flutter_mobile/features/feed/data/encrypted_memory_repository.dart';
 
 /// Core Clean Architecture Repository Providers
 final authRepositoryProvider =
     Provider<IAuthRepository>((ref) => AuthRepository());
 
+final keyStoreProvider = Provider<KeyStore>((ref) => KeyStore.instance);
+
+final localStorageProvider =
+    Provider<LocalStorageProvider>((ref) => const LocalStorageProvider());
+
+final driveStorageProvider =
+    Provider<DriveStorageProvider>((ref) => const DriveStorageProvider());
+
+final storageSettingsServiceProvider =
+    Provider<StorageSettingsService>((ref) => const StorageSettingsService());
+
+final s3ConfigProvider = StateProvider<S3StorageConfig?>((ref) => null);
+final webDavConfigProvider = StateProvider<WebDavConfig?>((ref) => null);
+
+final meshStorageProvider =
+    Provider<MeshStorageProvider>((ref) => MeshStorageProvider());
+
+final activeStorageTypeProvider =
+    StateProvider<StorageProviderType>((ref) => StorageProviderType.local);
+
+final storageProviderProvider = Provider<StorageProvider>((ref) {
+  final activeType = ref.watch(activeStorageTypeProvider);
+  switch (activeType) {
+    case StorageProviderType.drive:
+      return ref.watch(driveStorageProvider);
+    case StorageProviderType.s3:
+      final cfg = ref.watch(s3ConfigProvider);
+      if (cfg != null) {
+        return S3StorageProvider(config: cfg);
+      }
+      return ref.watch(localStorageProvider);
+    case StorageProviderType.webdav:
+      final cfg = ref.watch(webDavConfigProvider);
+      if (cfg != null) {
+        return WebDavStorageProvider(config: cfg);
+      }
+      return ref.watch(localStorageProvider);
+    case StorageProviderType.mesh:
+      return ref.watch(meshStorageProvider);
+    case StorageProviderType.local:
+      if (AppDrive.instance.isBound) {
+        return ref.watch(driveStorageProvider);
+      }
+      return ref.watch(localStorageProvider);
+  }
+});
+
+final encryptedMemoryRepositoryProvider =
+    Provider<EncryptedMemoryRepository>((ref) {
+  final keyStore = ref.watch(keyStoreProvider);
+  return EncryptedMemoryRepository(
+    provider: () => ref.watch(storageProviderProvider),
+    keyStore: keyStore,
+  );
+});
+
 final memoryRepositoryProvider =
-    Provider<IMemoryRepository>((ref) => const MemoryRepository());
+    Provider<IMemoryRepository>((ref) => ref.watch(encryptedMemoryRepositoryProvider));
 
 final uploadRepositoryProvider =
-    Provider<IUploadRepository>((ref) => const UploadRepository());
+    Provider<IUploadRepository>((ref) => ref.watch(encryptedMemoryRepositoryProvider));
 
 final userProfileProvider =
     StateProvider<({String username, String friendCode})>((ref) {

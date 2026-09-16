@@ -1,4 +1,4 @@
-/// Kioku typography system — Fraunces (display/serif) + Inter/NotoSansJP (body)
+/// Kioku typography system — Inter (display & body) + NotoSansJP
 /// Built from AppColors for dynamic theming
 library;
 
@@ -51,51 +51,44 @@ class AppTypography {
 
   /// Builds the complete typography scale from colors
   static AppTypography fromColors(AppColors colors) {
-    // Fraunces for display/serif (warm, editorial)
-    final displayFont = GoogleFonts.frauncesTextTheme().displayLarge!;
-    final displayMediumFont = GoogleFonts.frauncesTextTheme().displayMedium!;
-    final headlineFont = GoogleFonts.frauncesTextTheme().headlineLarge!;
-    final titleFont = GoogleFonts.frauncesTextTheme().titleLarge!;
-    final bodyFont = GoogleFonts.frauncesTextTheme().bodyLarge!;
-
-    // Inter for body/UI (clean, legible)
+    // Inter for all typography (clean, modern, high-legibility Ente-style)
     final interTextTheme = GoogleFonts.interTextTheme();
 
     return AppTypography(
-      // Display — Fraunces SemiBold, large
-      display: displayFont.copyWith(
+      // Display — Inter SemiBold, large with tight negative tracking
+      display: interTextTheme.displayLarge!.copyWith(
         fontSize: 32,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w700,
         color: colors.ink,
-        letterSpacing: -0.5,
+        letterSpacing: -0.8,
         height: 1.2,
       ),
       // Mobile display — slightly smaller
-      displayMobile: displayMediumFont.copyWith(
+      displayMobile: interTextTheme.displayMedium!.copyWith(
         fontSize: 26,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w600,
         color: colors.ink,
-        letterSpacing: -0.3,
+        letterSpacing: -0.5,
         height: 1.25,
       ),
-      // Heading — Fraunces SemiBold
-      heading: headlineFont.copyWith(
+      // Heading — Inter SemiBold
+      heading: interTextTheme.headlineLarge!.copyWith(
         fontSize: 22,
         fontWeight: FontWeight.w600,
         color: colors.ink,
-        letterSpacing: -0.2,
+        letterSpacing: -0.4,
         height: 1.3,
       ),
-      // Subheading — Fraunces Medium
-      subheading: titleFont.copyWith(
+      // Subheading — Inter Medium
+      subheading: interTextTheme.titleLarge!.copyWith(
         fontSize: 16,
         fontWeight: FontWeight.w500,
         color: colors.ink,
-        letterSpacing: -0.1,
+        letterSpacing: -0.2,
         height: 1.4,
       ),
-      // Editorial quote — Fraunces Italic
-      editorialQuote: bodyFont.copyWith(
+      // Editorial quote — Inter Italic
+      editorialQuote: interTextTheme.bodyLarge!.copyWith(
         fontSize: 15,
         fontStyle: FontStyle.italic,
         color: colors.ink,
@@ -166,10 +159,10 @@ class AppTypography {
         letterSpacing: 1.2,
         height: 1.2,
       ),
-      // Kanji/Japanese titles — Fraunces Regular, accent color
-      kanjiTitle: bodyFont.copyWith(
+      // Kanji/Japanese titles — Inter Medium, accent color
+      kanjiTitle: interTextTheme.titleMedium!.copyWith(
         fontSize: 18,
-        fontWeight: FontWeight.w400,
+        fontWeight: FontWeight.w500,
         color: colors.accent,
         height: 1.4,
         letterSpacing: 0,

@@ -79,7 +79,6 @@ class _FlashbacksScreenState extends ConsumerState<FlashbacksScreen> {
                   style: typography.displayLarge?.copyWith(
                     fontSize: 28,
                     color: colors.ink,
-                    fontFamily: 'Fraunces',
                   ),
                 ),
                 const SizedBox(height: AppTheme.spacingXs),

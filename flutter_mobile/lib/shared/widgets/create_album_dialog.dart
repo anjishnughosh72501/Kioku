@@ -71,7 +71,6 @@ class _CreateAlbumDialogState extends ConsumerState<CreateAlbumDialog> {
         'Name your album',
         style: typography.headlineSmall?.copyWith(
           color: colors.ink,
-          fontFamily: 'Fraunces',
         ),
       ),
       content: TextField(

@@ -66,6 +66,15 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     final activeAlbumId = ref.watch(activeAlbumProvider);
     final authState = ref.watch(authControllerProvider);
 
+    final albumsList = albumsAsync.valueOrNull ?? [];
+    if (albumsList.isNotEmpty && activeAlbumId == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && ref.read(activeAlbumProvider) == null) {
+          ref.read(activeAlbumProvider.notifier).set(albumsList.first.id);
+        }
+      });
+    }
+
     return Scaffold(
       backgroundColor: colors.background,
       body: SafeArea(
@@ -313,7 +322,6 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
             fontSize: 20,
             fontWeight: FontWeight.w600,
             color: colors.ink,
-            fontFamily: 'Fraunces',
           ),
         ),
         const SizedBox(width: AppTheme.spacingSm),
@@ -349,13 +357,23 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
   }
 
   Widget _buildEmptyState(AppColors colors, TextTheme typography) {
+    final albums = ref.watch(albumsProvider).valueOrNull ?? [];
+    final activeAlbumId = ref.watch(activeAlbumProvider);
+    final activeAlbum = albums.where((a) => a.id == activeAlbumId).firstOrNull ??
+        (albums.isNotEmpty ? albums.first : null);
+    final hasAlbums = albums.isNotEmpty;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppTheme.spacingXxl),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.auto_stories_outlined, size: 64, color: colors.inkMuted),
+            Icon(
+              hasAlbums ? Icons.photo_library_outlined : Icons.auto_stories_outlined,
+              size: 64,
+              color: colors.inkMuted,
+            ),
             const SizedBox(height: AppTheme.spacingLg),
             Text(
               'No memories yet',
@@ -363,23 +381,48 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
             ),
             const SizedBox(height: AppTheme.spacingSm),
             Text(
-              'Capture your first memory to get started',
+              hasAlbums
+                  ? (activeAlbum != null
+                      ? 'Capture your first memory in "${activeAlbum.title}"'
+                      : 'Capture your first memory to get started')
+                  : 'Create your first album to get started preserving memories.',
               style: typography.bodyMedium?.copyWith(color: colors.inkMuted),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppTheme.spacingMd),
             ClayButton(
-              label: 'Create your first album',
+              label: hasAlbums ? 'Add a memory' : 'Create your first album',
               variant: ClayButtonVariant.primary,
               onPressed: () async {
-                final name = await CreateAlbumDialog.show(context);
-                if (name != null && mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Album "$name" created')),
-                  );
+                if (hasAlbums) {
+                  context.push('/upload');
+                } else {
+                  final name = await CreateAlbumDialog.show(context);
+                  if (name != null && mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Album "$name" created')),
+                    );
+                  }
                 }
               },
             ),
+            if (hasAlbums) ...[
+              const SizedBox(height: AppTheme.spacingSm),
+              TextButton(
+                onPressed: () async {
+                  final name = await CreateAlbumDialog.show(context);
+                  if (name != null && mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Album "$name" created')),
+                    );
+                  }
+                },
+                child: Text(
+                  'Create another album',
+                  style: typography.bodySmall?.copyWith(color: colors.accentDark),
+                ),
+              ),
+            ],
           ],
         ),
       ),

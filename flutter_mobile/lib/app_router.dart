@@ -15,6 +15,9 @@ import 'features/profile/presentation/screens/profile_screen.dart';
 import 'features/media_viewer/presentation/screens/photo_viewer_screen.dart';
 import 'features/media_viewer/presentation/screens/video_player_screen.dart';
 import 'features/auth/presentation/controllers/auth_controller.dart';
+import 'features/auth/presentation/screens/recovery_key_screen.dart';
+import 'features/auth/presentation/screens/migration_screen.dart';
+import 'features/profile/presentation/screens/storage_setup_screen.dart';
 
 /// GoRouter provider with auth state listener
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -150,6 +153,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             },
           );
         },
+      ),
+      GoRoute(
+        path: '/storage-setup',
+        name: 'storage-setup',
+        pageBuilder: (context, state) => const MaterialPage(
+          child: StorageSetupScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/recovery-key',
+        name: 'recovery-key',
+        pageBuilder: (context, state) => MaterialPage(
+          child: RecoveryKeyScreen(
+            recoveryPhrase: state.extra as String?,
+          ),
+        ),
+      ),
+      GoRoute(
+        path: '/migration',
+        name: 'migration',
+        pageBuilder: (context, state) => MaterialPage(
+          child: MigrationScreen(
+            onComplete: () => context.go('/'),
+          ),
+        ),
       ),
     ],
   );

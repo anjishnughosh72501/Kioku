@@ -122,7 +122,14 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
 
   Future<void> _submit() async {
     final file = _pickedFile;
-    final albumId = ref.read(activeAlbumProvider);
+    var albumId = ref.read(activeAlbumProvider);
+    if (albumId == null) {
+      final albums = ref.read(albumsProvider).valueOrNull ?? [];
+      if (albums.isNotEmpty) {
+        albumId = albums.first.id;
+        ref.read(activeAlbumProvider.notifier).set(albumId);
+      }
+    }
     if (file == null) {
       _showMessage('Choose a photo or video first');
       return;
@@ -192,7 +199,6 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           style: typography.headlineSmall?.copyWith(
             fontSize: 20,
             color: colors.accentDark,
-            fontFamily: 'Fraunces',
           ),
         ),
       ),
@@ -424,7 +430,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           Text(
             'Choose a photo or video',
             style: typography.headlineSmall?.copyWith(
-                fontSize: 18, color: colors.ink, fontFamily: 'Fraunces'),
+                fontSize: 18, color: colors.ink),
           ),
           const SizedBox(height: 8),
           Text(

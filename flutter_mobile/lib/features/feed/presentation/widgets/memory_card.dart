@@ -74,7 +74,7 @@ class MemoryCard extends ConsumerWidget {
         backgroundColor: colors.surfaceContainer,
         title: Text(
           'Delete this memory?',
-          style: typography.headlineSmall?.copyWith(color: colors.ink, fontFamily: 'Fraunces'),
+          style: typography.headlineSmall?.copyWith(color: colors.ink),
         ),
         content: Text(
           'This will permanently remove it from your album. This action cannot be undone.',

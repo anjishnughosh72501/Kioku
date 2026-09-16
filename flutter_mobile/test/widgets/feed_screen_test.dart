@@ -68,6 +68,30 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('No memories yet'), findsOneWidget);
+      expect(find.text('Add a memory'), findsOneWidget);
+    });
+
+    testWidgets('renders empty state when no albums exist', (tester) async {
+      final repo = MockMemoryRepo(
+        albums: [],
+        memories: [],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            memoryRepositoryProvider.overrideWithValue(repo),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.coffeeLight(),
+            home: const FeedScreen(),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('No memories yet'), findsOneWidget);
       expect(find.text('Create your first album'), findsOneWidget);
     });
 

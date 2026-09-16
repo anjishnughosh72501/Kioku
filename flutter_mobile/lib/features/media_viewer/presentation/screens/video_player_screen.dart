@@ -15,6 +15,7 @@ import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/providers.dart';
 import 'package:flutter_mobile/core/storage/local_storage_service.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
+import 'package:path_provider/path_provider.dart';
 
 class VideoPlayerScreen extends ConsumerStatefulWidget {
   const VideoPlayerScreen({super.key, required this.mediaId, this.memory});
@@ -42,13 +43,34 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
     try {
       final mem = widget.memory;
       final VideoPlayerController controller;
+      final activeAlbum = ref.read(activeAlbumProvider) ?? '';
 
-      if (mem != null && mem.localPath != null && mem.localPath!.isNotEmpty) {
+      final isEncrypted = (mem?.localPath != null && mem!.localPath!.endsWith('.enc')) ||
+          (mem?.id != null && mem!.id.endsWith('.enc')) ||
+          widget.mediaId.endsWith('.enc');
+
+      if (isEncrypted && activeAlbum.isNotEmpty) {
+        final repo = ref.read(encryptedMemoryRepositoryProvider);
+        final bytes = await repo.getPhotoBytes(widget.mediaId, albumId: activeAlbum);
+        final tempDir = await getTemporaryDirectory();
+        final tempFile = File('${tempDir.path}/dec_${widget.mediaId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.mp4');
+        await tempFile.writeAsBytes(bytes);
+        controller = VideoPlayerController.file(tempFile);
+      } else if (mem != null && mem.localPath != null && mem.localPath!.isNotEmpty) {
         controller = VideoPlayerController.file(File(mem.localPath!));
       } else if (LocalStorageService.instance.isLocalMemory(widget.mediaId)) {
         final path = LocalStorageService.instance.getLocalPath(widget.mediaId);
         if (path != null && File(path).existsSync()) {
-          controller = VideoPlayerController.file(File(path));
+          if (path.endsWith('.enc') && activeAlbum.isNotEmpty) {
+            final repo = ref.read(encryptedMemoryRepositoryProvider);
+            final bytes = await repo.getPhotoBytes(widget.mediaId, albumId: activeAlbum);
+            final tempDir = await getTemporaryDirectory();
+            final tempFile = File('${tempDir.path}/dec_${widget.mediaId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.mp4');
+            await tempFile.writeAsBytes(bytes);
+            controller = VideoPlayerController.file(tempFile);
+          } else {
+            controller = VideoPlayerController.file(File(path));
+          }
         } else {
           throw Exception('Local video file not found');
         }

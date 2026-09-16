@@ -63,7 +63,6 @@ class JoinScreen extends ConsumerWidget {
                     style: typography.displayLarge?.copyWith(
                       fontSize: 40,
                       color: colors.ink,
-                      fontFamily: 'Fraunces',
                       fontWeight: FontWeight.w600,
                     ),
                   ).animate().fadeIn(delay: 250.ms, duration: 400.ms),
@@ -86,7 +85,6 @@ class JoinScreen extends ConsumerWidget {
                           style: typography.headlineSmall?.copyWith(
                             fontSize: 18,
                             color: colors.ink,
-                            fontFamily: 'Fraunces',
                           ),
                         ),
                         const SizedBox(height: AppTheme.spacingSm),

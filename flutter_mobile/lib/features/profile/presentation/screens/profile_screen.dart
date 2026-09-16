@@ -14,6 +14,7 @@ import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
 import 'package:flutter_mobile/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_mobile/features/profile/presentation/widgets/album_row.dart';
 import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
 
@@ -74,7 +75,6 @@ class ProfileScreen extends ConsumerWidget {
                         style: typography.headlineSmall?.copyWith(
                           fontSize: 24,
                           color: colors.ink,
-                          fontFamily: 'Fraunces',
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -83,7 +83,6 @@ class ProfileScreen extends ConsumerWidget {
                         style: typography.headlineSmall?.copyWith(
                           fontSize: 18,
                           color: colors.sage,
-                          fontFamily: 'Fraunces',
                         ),
                       ),
                     ],
@@ -119,7 +118,6 @@ class ProfileScreen extends ConsumerWidget {
                                 style: typography.headlineSmall?.copyWith(
                                   fontSize: 17,
                                   color: colors.ink,
-                                  fontFamily: 'Fraunces',
                                 ),
                               ),
                               const SizedBox(height: 2),
@@ -208,6 +206,141 @@ class ProfileScreen extends ConsumerWidget {
                 ),
               ).animate().fadeIn(duration: 300.ms),
 
+              const SizedBox(height: AppTheme.spacingLg),
+
+              // Zero-Knowledge Encryption & Recovery Key card
+              ClayCard(
+                variant: ClayVariant.elevated,
+                padding: const EdgeInsets.all(AppTheme.spacingLg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.shield_outlined, size: 20, color: colors.primary),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Zero-Knowledge Encryption',
+                          style: typography.bodyMedium?.copyWith(
+                            color: colors.ink,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: colors.accentSoft,
+                            borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                          ),
+                          child: Text(
+                            'Active',
+                            style: typography.bodySmall?.copyWith(
+                              color: colors.accentDark,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppTheme.spacingSm),
+                    Text(
+                      'All photos, videos, and metadata are sealed on this device with XChaCha20-Poly1305 and X25519 before being synced. Storage providers only ever see opaque ciphertext.',
+                      style: typography.bodySmall?.copyWith(
+                        color: colors.inkMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: AppTheme.spacingMd),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => context.push('/recovery-key'),
+                            icon: Icon(Icons.key_outlined, size: 16, color: colors.primary),
+                            label: Text(
+                              'Recovery Key (24 Words)',
+                              style: typography.bodySmall?.copyWith(
+                                color: colors.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: colors.primary.withValues(alpha: 0.5)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ).animate().fadeIn(delay: 150.ms, duration: 300.ms),
+
+              const SizedBox(height: AppTheme.spacingLg),
+
+              // Storage Provider (BYOS) card
+              ClayCard(
+                variant: ClayVariant.elevated,
+                padding: const EdgeInsets.all(AppTheme.spacingLg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.storage_outlined, size: 20, color: colors.primary),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Storage Backend',
+                          style: typography.bodyMedium?.copyWith(
+                            color: colors.ink,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          ref.watch(activeStorageTypeProvider).name.toUpperCase(),
+                          style: typography.bodySmall?.copyWith(
+                            color: colors.primaryDark,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppTheme.spacingSm),
+                    Text(
+                      'Bring your own storage: switch between Local Device, Google Drive, S3 (AWS/R2/B2/MinIO), WebDAV (Nextcloud), or P2P Mesh.',
+                      style: typography.bodySmall?.copyWith(
+                        color: colors.inkMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: AppTheme.spacingMd),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => context.push('/storage-setup'),
+                        icon: Icon(Icons.tune_outlined, size: 16, color: colors.ink),
+                        label: Text(
+                          'Configure Storage',
+                          style: typography.bodySmall?.copyWith(
+                            color: colors.ink,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: colors.divider),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ).animate().fadeIn(delay: 180.ms, duration: 300.ms),
+
+              const SizedBox(height: AppTheme.spacingLg),
+
               // User Profile & Friend Code card
               ClayCard(
                 variant: ClayVariant.elevated,
@@ -268,7 +401,6 @@ class ProfileScreen extends ConsumerWidget {
                               style: typography.headlineSmall?.copyWith(
                                 fontSize: 18,
                                 color: colors.ink,
-                                fontFamily: 'Fraunces',
                               ),
                             ),
                           ],
@@ -430,7 +562,6 @@ class ProfileScreen extends ConsumerWidget {
                             'Sign out?',
                             style: typography.headlineSmall?.copyWith(
                               color: colors.ink,
-                              fontFamily: 'Fraunces',
                             ),
                           ),
                           content: Text(
@@ -492,7 +623,6 @@ class ProfileScreen extends ConsumerWidget {
                       style: typography.headlineSmall?.copyWith(
                         fontSize: 15,
                         color: colors.ink,
-                        fontFamily: 'Fraunces',
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -540,7 +670,7 @@ class ProfileScreen extends ConsumerWidget {
               backgroundColor: colors.surfaceContainer,
               title: Text(
                 'Share "${album.title}"',
-                style: typography.headlineSmall?.copyWith(color: colors.ink, fontFamily: 'Fraunces'),
+                style: typography.headlineSmall?.copyWith(color: colors.ink),
               ),
               content: SingleChildScrollView(
                 child: Column(
@@ -647,7 +777,7 @@ class _Avatar extends StatelessWidget {
             ? Text(
                 authState.email?.substring(0, 1).toUpperCase() ?? '?',
                 style: TextStyle(
-                    color: colors.accentDark, fontSize: 20, fontFamily: 'Fraunces'),
+                    color: colors.accentDark, fontSize: 20, fontWeight: FontWeight.bold),
               )
             : ClipRRect(
                 borderRadius: BorderRadius.circular(26),

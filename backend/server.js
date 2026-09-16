@@ -59,11 +59,15 @@ async function main() {
   await initDB();
   console.log('Database initialized');
 
+  const http = require('http');
+  const { setupSignaling } = require('./services/signalService');
   const { startFlashbackScheduler } = require('./flashbackJob');
   const app = createApp();
+  const server = http.createServer(app);
+  setupSignaling(server);
 
   const PORT = process.env.PORT || 4000;
-  app.listen(PORT, '0.0.0.0', () => {
+  server.listen(PORT, '0.0.0.0', () => {
     console.log(`Kioku backend running on http://localhost:${PORT}`);
     startFlashbackScheduler();
   });

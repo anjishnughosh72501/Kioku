@@ -107,7 +107,6 @@ class _UsernameDialogState extends State<UsernameDialog> {
                 'Welcome to Kioku',
                 textAlign: TextAlign.center,
                 style: typography.headlineSmall?.copyWith(
-                  fontFamily: 'Fraunces',
                   color: colors.ink,
                   fontSize: 22,
                 ),

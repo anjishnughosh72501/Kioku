@@ -28,6 +28,13 @@ dependencies:
   # Storage & Preferences
   shared_preferences: ^2.2.3
   path_provider: ^2.1.6
+  flutter_secure_storage: ^9.2.4
+
+  # Cryptography (Ente-aligned E2EE)
+  sodium_libs: ^2.2.1
+  bip39: ^1.0.6
+  crypto: ^3.0.6
+  xml: ^6.5.0
 
   # Media
   photo_view: ^0.15.0

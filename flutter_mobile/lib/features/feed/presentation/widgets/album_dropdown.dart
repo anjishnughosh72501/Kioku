@@ -63,7 +63,7 @@ class AlbumDropdown extends ConsumerWidget {
               padding: const EdgeInsets.all(AppTheme.spacingMd),
               child: Text(
                 'Your albums',
-                style: typography.headlineSmall?.copyWith(color: colors.ink, fontFamily: 'Fraunces'),
+                style: typography.headlineSmall?.copyWith(color: colors.ink),
               ),
             ),
             ...albums.map((album) {

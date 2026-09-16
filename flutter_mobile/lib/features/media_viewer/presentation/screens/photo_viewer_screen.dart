@@ -35,16 +35,42 @@ class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen> {
   void initState() {
     super.initState();
     _currentCaption = widget.memory?.caption;
+    _bytesFuture = _loadBytes();
+  }
+
+  Future<Uint8List> _loadBytes() async {
+    final activeAlbum = ref.read(activeAlbumProvider) ?? '';
+    if (activeAlbum.isNotEmpty) {
+      try {
+        final repo = ref.read(encryptedMemoryRepositoryProvider);
+        return await repo.getPhotoBytes(widget.mediaId, albumId: activeAlbum);
+      } catch (_) {
+        // Fall back to local plaintext or Drive if not encrypted
+      }
+    }
+
     final mem = widget.memory;
     if (mem != null && mem.localPath != null && mem.localPath!.isNotEmpty) {
-      _bytesFuture = File(mem.localPath!).readAsBytes();
-    } else if (LocalStorageService.instance.isLocalMemory(widget.mediaId)) {
-      _bytesFuture = LocalStorageService.instance
-          .getPhotoBytes(widget.mediaId)
-          .then((b) => b ?? (throw Exception('Photo not found on device')));
-    } else {
-      _bytesFuture = AppDrive.instance.photoBytes(widget.mediaId);
+      final f = File(mem.localPath!);
+      if (await f.exists()) {
+        final bytes = await f.readAsBytes();
+        if (bytes.length >= 4 && bytes[0] == 0x4B && bytes[1] == 0x49 && bytes[2] == 0x4F) {
+          if (activeAlbum.isNotEmpty) {
+            final repo = ref.read(encryptedMemoryRepositoryProvider);
+            return await repo.getPhotoBytes(widget.mediaId, albumId: activeAlbum);
+          }
+        }
+        return bytes;
+      }
     }
+
+    if (LocalStorageService.instance.isLocalMemory(widget.mediaId)) {
+      final b = await LocalStorageService.instance.getPhotoBytes(widget.mediaId);
+      if (b != null) return b;
+      throw Exception('Photo not found on device');
+    }
+
+    return await AppDrive.instance.photoBytes(widget.mediaId);
   }
 
   void _showMoreMenu(BuildContext context, KiokuMemory? item) {
@@ -122,7 +148,7 @@ class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen> {
         backgroundColor: colors.surfaceContainer,
         title: Text(
           'Edit Caption',
-          style: typography.headlineSmall?.copyWith(color: colors.ink, fontFamily: 'Fraunces'),
+          style: typography.headlineSmall?.copyWith(color: colors.ink),
         ),
         content: TextField(
           controller: controller,
@@ -157,7 +183,7 @@ class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen> {
         backgroundColor: colors.surfaceContainer,
         title: Text(
           'Delete this memory?',
-          style: typography.headlineSmall?.copyWith(color: colors.ink, fontFamily: 'Fraunces'),
+          style: typography.headlineSmall?.copyWith(color: colors.ink),
         ),
         content: Text(
           'This will permanently remove it from your album. This action cannot be undone.',
@@ -285,7 +311,6 @@ class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen> {
                         style: typography.headlineSmall?.copyWith(
                           color: Colors.white,
                           fontSize: 16,
-                          fontFamily: 'Fraunces',
                         ),
                       ),
                       const SizedBox(height: 4),

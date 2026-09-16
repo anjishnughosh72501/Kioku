@@ -7,12 +7,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter_mobile/core/services/user_profile_service.dart';
+import 'package:flutter_mobile/core/crypto/key_store.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/app_router.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await UserProfileService.instance.init();
+  await KeyStore.instance.initialize();
 
   runApp(
     const ProviderScope(

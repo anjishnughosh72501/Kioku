@@ -11,6 +11,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_mobile/core/drive/app_drive.dart';
 import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
+import 'package:flutter_mobile/core/providers.dart';
+import 'package:flutter_mobile/features/feed/data/encrypted_memory_repository.dart';
 
 class DriveThumb extends ConsumerStatefulWidget {
   const DriveThumb({super.key, required this.memory});
@@ -35,11 +37,27 @@ class _DriveThumbState extends ConsumerState<DriveThumb> {
     final memory = widget.memory;
     if (_forMemory?.id != memory.id) {
       _forMemory = memory;
+      final activeAlbum = ref.read(activeAlbumProvider) ?? 'default';
+      final repo = ref.read(encryptedMemoryRepositoryProvider);
       if (memory.localPath != null && memory.localPath!.isNotEmpty) {
         _future = File(memory.localPath!).readAsBytes();
       } else {
-        _future = AppDrive.instance.photoBytes(memory.id);
+        _future = _fetchBytes(repo, memory, activeAlbum);
       }
+    }
+  }
+
+  Future<Uint8List> _fetchBytes(
+    EncryptedMemoryRepository repo,
+    KiokuMemory memory,
+    String activeAlbum,
+  ) async {
+    try {
+      final thumb = await repo.getThumbnailBytes(memory.id, albumId: activeAlbum);
+      if (thumb != null) return thumb;
+      return await repo.getPhotoBytes(memory.id, albumId: activeAlbum);
+    } catch (_) {
+      return await AppDrive.instance.photoBytes(memory.id);
     }
   }
 

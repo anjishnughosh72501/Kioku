@@ -89,6 +89,41 @@ class KiokuMemory {
     return 'Anon';
   }
 
+  Map<String, dynamic> toMetadataMap() {
+    return {
+      'file_name': fileName,
+      'mime_type': mimeType,
+      if (caption != null && caption!.trim().isNotEmpty) 'caption': caption!.trim(),
+      'taken_at': takenAtIso,
+      if (uploaderName != null && uploaderName!.isNotEmpty) 'uploader_name': uploaderName,
+      if (uploaderEmail != null && uploaderEmail!.isNotEmpty) 'uploader_email': uploaderEmail,
+      'added_at': addedAt.toIso8601String(),
+      if (sizeBytes != null) 'size_bytes': sizeBytes,
+    };
+  }
+
+  factory KiokuMemory.fromDecryptedMetadata({
+    required String id,
+    required Map<String, dynamic> metadata,
+    String? localPath,
+  }) {
+    final taken = metadata['taken_at']?.toString() ?? DateTime.now().toUtc().toIso8601String();
+    return KiokuMemory(
+      id: id,
+      fileName: metadata['file_name']?.toString() ?? '$id.jpg',
+      mimeType: metadata['mime_type']?.toString() ?? 'image/jpeg',
+      caption: metadata['caption']?.toString(),
+      takenAtIso: taken,
+      uploaderName: metadata['uploader_name']?.toString(),
+      uploaderEmail: metadata['uploader_email']?.toString(),
+      addedAt: DateTime.tryParse(metadata['added_at']?.toString() ?? '') ?? DateTime.now(),
+      thumbnailUrl: null,
+      driveOwnerEmail: null,
+      sizeBytes: (metadata['size_bytes'] as num?)?.toInt(),
+      localPath: localPath,
+    );
+  }
+
   factory KiokuMemory.fromDrive(drive.File f) {
     final props = f.appProperties ?? const <String, String>{};
     final taken =
