@@ -1,15 +1,20 @@
-<div align="center">
+﻿<div align="center">
 
-<img src="assets/kiokulogo.jpg" alt="Kioku Logo" width="180" style="border-radius: 36px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);" />
+<img src="assets/kiokulogo.jpg" width="170" alt="Kioku Logo" style="border-radius: 36px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);"/>
 
 # Kioku · 記憶
-### *A warm, zero-knowledge private memory album and time capsule for close friend groups and couples.*
+
+### *Your private scrapbook for the people who matter most.*
+
+*A warm, zero-knowledge, local-first memory album for the people you love.*
+
+<br>
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.x-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
 [![E2EE](https://img.shields.io/badge/Security-libsodium_E2EE-2e7d32?style=for-the-badge&logo=shield)](https://libsodium.gitbook.io/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
-[![Riverpod](https://img.shields.io/badge/State-Riverpod_2.6-blueviolet?style=for-the-badge)](https://riverpod.dev)
+[![Riverpod](https://img.shields.io/badge/Riverpod-2.6-7F52FF?style=for-the-badge)](https://riverpod.dev)
 [![License](https://img.shields.io/badge/License-MIT-amber?style=for-the-badge)](LICENSE)
 [![Download APK](https://img.shields.io/badge/Download-APK_v2.0.0-E06D53?style=for-the-badge&logo=android&logoColor=white)](releases/kioku-v2.0-release.apk)
 
@@ -22,18 +27,20 @@
 
 ---
 
-## 📖 Overview
+# ✨ Why Kioku?
 
-**Kioku** (記憶, Japanese for *"memory"*) is a cozy, tactile memory-keeping application crafted specifically for small circles—couples, best friends, and family. Rather than broadcasting life onto algorithmic social media feeds, Kioku turns moments into intimate digital scrapbooks reminiscent of handcrafted Japanese stationery.
+Most apps are built for sharing with everyone.
 
-Your photos and videos stay strictly yours. Kioku is built from the ground up with a **zero-knowledge, end-to-end encrypted (E2EE), local-first architecture**:
-- **Zero-Knowledge Privacy**: All photos, videos, and metadata are encrypted client-side using **libsodium** before ever leaving your device. No cloud provider or server can inspect your memories.
+Social feeds encourage performance, metrics, and algorithms. But real life happens in small circles: a quiet coffee with a partner, inside jokes with best friends, or family dinners.
+
+**Kioku** is built around an uncompromising **zero-knowledge, end-to-end encrypted (E2EE), local-first architecture**:
+- **Zero-Knowledge Privacy**: All photos, videos, and metadata are encrypted client-side using **libsodium** before ever leaving your device. No server, cloud provider, or observer can ever peek into your memories.
 - **User-Owned Storage Backends**: Store your encrypted envelopes where you choose—your personal **Google Drive**, **S3-compatible bucket** (AWS S3, Cloudflare R2, MinIO), **WebDAV server** (Nextcloud, Synology), **local on-device storage**, or via **P2P Mesh WebRTC**.
 - **Tactile Japanese Stationery**: Warm cream papers, washi tapes, hanko stamps, and soft claymorphic interactions.
 
 ---
 
-## ✨ Key Features
+# 🌿 Key Features
 
 ### 🌸 Japanese Stationery Aesthetic
 - **Washi Tape & Hanko Stamps**: Organic visual accents with Japanese motifs and authentic ink textures.
@@ -48,8 +55,8 @@ Your photos and videos stay strictly yours. Kioku is built from the ground up wi
   - **Master Key**: Generated on device and held securely in hardware-backed keystores (`flutter_secure_storage`).
   - **Collection Keys**: Unique per-album keys wrapped by the Master Key or device public keys for sharing.
   - **File Keys**: Ephemeral 256-bit keys minted per photo/video and wrapped inside the `.enc` envelope.
-- **BIP39 24-Word Recovery Phrase**: Standard mnemonic key recovery with automatic clipboard protection and dual vault loss guards.
-- **Zero Decrypted Leaks**: Transient video player files are automatically swept and securely deleted upon disposal.
+- **BIP39 24-Word Recovery Phrase**: Standard mnemonic key recovery with 60s clipboard auto-clear and secondary vault recovery backup in `SharedPreferences`.
+- **Zero Decrypted Leaks**: Transient video player files are automatically swept on startup and deleted immediately upon disposal.
 
 ### 🗄️ Multi-Cloud & Local Storage Engine
 - **Google Drive v3**: Native integration with direct authorized streaming (`alt=media`) and prefix filtering.
@@ -72,7 +79,7 @@ Your photos and videos stay strictly yours. Kioku is built from the ground up wi
 
 ---
 
-## 🏗️ Architecture & Security Model
+# 🏗️ Architecture & Security Model
 
 ```mermaid
 graph TD
@@ -115,19 +122,12 @@ graph TD
 
 ---
 
-## 📁 Repository Structure
+# 📂 Project Structure
 
-```
-Kioku/
-├── assets/                          # Shared branding assets (e.g. Kioku logo)
-│   └── kiokulogo.jpg
-├── backend/                         # Node.js companion backend & WebRTC relay
-│   ├── __tests__/                   # Jest test suites (auth, signaling, flashbacks)
-│   ├── middleware/                  # Security headers, rate limiting, and auth
-│   ├── routes/                      # API routes (health, media, flashbacks)
-│   ├── server.js                    # Express application & WebSocket signaling relay
-│   └── package.json                 # Backend dependencies & test scripts
-├── flutter_mobile/                  # Flutter mobile application
+```text
+Kioku
+│
+├── flutter_mobile/
 │   ├── android/
 │   │   ├── app/
 │   │   │   ├── build.gradle.kts     # Kotlin DSL with release signing & R8 configuration
@@ -136,13 +136,7 @@ Kioku/
 │   │   └── key.properties.example   # Template for release signing keystore configuration
 │   ├── ios/                         # iOS project with privacy permission strings
 │   ├── lib/
-│   │   ├── core/
-│   │   │   ├── crypto/              # libsodium core, envelope parser, BIP39 keystore
-│   │   │   ├── drive/               # Google Drive API v3 wrapper
-│   │   │   ├── models/              # Clean Architecture domain models (Memory, Album)
-│   │   │   ├── storage/             # Polymorphic storage providers (Drive, S3, WebDAV, Local, Mesh)
-│   │   │   ├── utils/               # Shared ByteBudgetLruCache, retryAsync utility
-│   │   │   └── theme/               # Fraunces typography, Japanese palette & clay tokens
+│   │   ├── core/                    # libsodium crypto, storage providers, ByteBudgetLRU, retry
 │   │   ├── features/
 │   │   │   ├── auth/                # Sign-in, guest mode, 24-word recovery phrase screen
 │   │   │   ├── feed/                # Day-grouped timeline feed & encrypted memory repository
@@ -150,26 +144,40 @@ Kioku/
 │   │   │   ├── media_viewer/        # Zero-leak video player and photo viewer
 │   │   │   ├── profile/             # Multi-cloud storage setup & friend code profile
 │   │   │   └── upload/              # Image compression, envelope encryption & upload
-│   │   └── main.dart                # Application bootstrap & key store initialization
+│   │   ├── shared/widgets/          # Washi tape, clay card, hanko stamp, bottom nav bar
+│   │   ├── app_router.dart          # GoRouter navigation schema
+│   │   └── main.dart                # App bootstrap & key store initialization
 │   ├── test/                        # 44 unit & widget tests covering E2EE, storage, UI
 │   └── pubspec.yaml                 # Dependencies and assets
+│
+├── backend/
+│   ├── routes/                      # API routes (health, media, flashbacks)
+│   ├── services/                    # Drive & storage services
+│   ├── middleware/                  # Security headers & rate limiting
+│   ├── __tests__/                   # Jest test suites (auth, signaling, flashbacks)
+│   └── server.js                    # Express application & WebSocket signaling relay
+│
+├── releases/                        # Standalone release APKs & SHA-256 checksums
+│   ├── kioku-v2.0-release.apk
+│   └── README.md
+├── assets/
 ├── start.py                         # Unified orchestrator (test, build, emulator, run)
-└── README.md                        # Documentation
+└── README.md
 ```
 
 ---
 
-## 🚀 Getting Started
+# 🚀 Getting Started
 
-### Prerequisites
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) (v3.22+ recommended)
-- [Node.js](https://nodejs.org/) (v18 or newer)
-- [Python](https://www.python.org/) 3.9+ (for the `start.py` orchestrator)
-- [Android Studio](https://developer.android.com/studio) with an Android SDK and Emulator (e.g. `Pixel_7_API_35`)
+## Prerequisites
 
----
+- Flutter 3.22+
+- Dart 3.x
+- Node.js 18+
+- Python 3.9+
+- Android Studio with Android SDK & Emulator
 
-### Option 1: Unified CLI Orchestrator (`start.py`)
+## Option 1: Unified CLI Orchestrator (`start.py`)
 
 The root `start.py` script automates environment checks, SDK detection, port forwarding, emulator boot, APK builds, and testing:
 
@@ -195,58 +203,44 @@ python start.py --no-emulator
 
 ---
 
-### Option 2: Manual Setup
+## Option 2: Manual Setup
 
-#### 1. Companion Backend
+### Backend
+
 ```bash
 cd backend
 npm install
-npm test      # Verify backend test suites
-npm start     # Starts on http://localhost:4000
+cp .env.example .env
+npm start
 ```
 
-#### 2. Flutter Mobile
+Runs at:
+```text
+http://localhost:4000
+```
+
+### Flutter
+
 ```bash
 cd flutter_mobile
 flutter pub get
-
-# Run test suite
 flutter test
-
-# Run app on connected device / emulator
 flutter run
-
-# Build release APK
-flutter build apk --release
 ```
 
 ---
 
-## 🔑 Security & Production Signing
+# ☁ Google Drive & Cloud Storage Setup
 
-### 1. Release Keystore Setup
-To produce signed release APKs or App Bundles for distribution:
-1. Copy the example template:
-   ```bash
-   cp flutter_mobile/android/key.properties.example flutter_mobile/android/key.properties
-   ```
-2. Generate your upload keystore:
-   ```bash
-   keytool -genkey -v -keystore flutter_mobile/android/upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
-   ```
-3. Update `key.properties` with your passwords and file path.
+Kioku can run entirely offline or connect directly to your preferred cloud:
 
-*(During local development, Gradle automatically falls back to debug signing when `key.properties` is absent.)*
-
-### 2. OAuth & Custom Backend Configuration
-- **OAuth Client ID**: Injected at build time via `--dart-define=OAUTH_CLIENT_ID=...` or defaults to the bundled development client ID.
-- **Network Security**: Strict cleartext HTTP restrictions are enforced via `network_security_config.xml`. Remote traffic must use HTTPS; cleartext is restricted to `localhost`, `10.0.2.2`, and `127.0.0.1` for local NAS development.
+1. **Google Drive**: Create a Google Cloud project, enable the **Google Drive API**, add the `https://www.googleapis.com/auth/drive.file` scope, and create an Android OAuth client ID.
+2. **S3 Storage**: Enter your Endpoint, Bucket name, Region, Access Key ID, and Secret Access Key in Settings > Storage Setup.
+3. **WebDAV**: Enter your Server URL, Username, and Password (compatible with Nextcloud and Synology).
 
 ---
 
-## 🧪 Testing & Verification
-
-Kioku maintains rigorous test discipline across both client and server:
+# 🧪 Testing & Verification
 
 ```bash
 # Run all mobile test suites (44 tests covering crypto, storage, providers, UI)
@@ -263,6 +257,22 @@ npm test
 
 ---
 
-## 📄 License
+# 🌸 Philosophy
 
-This project is licensed under the [MIT License](LICENSE).
+> **The best memories aren't the loudest ones.**
+
+Kioku was created around a simple idea:
+
+Digital memories should feel as comforting as opening an old scrapbook—filled with paper, ink, photographs, and the people who make those moments meaningful.
+
+No feeds. No followers. No data mining. Just memories.
+
+---
+
+<div align="center">
+
+### Made with ❤️ for meaningful moments
+
+**Kioku · 記憶**
+
+</div>
