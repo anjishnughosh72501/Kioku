@@ -505,6 +505,11 @@ class ProfileScreen extends ConsumerWidget {
 
               const SizedBox(height: AppTheme.spacingLg),
 
+              // Friends & Circle Section
+              _buildFriendsCard(context, ref, colors, typography, albums),
+
+              const SizedBox(height: AppTheme.spacingLg),
+
               // Appearance & Motion Card
               ClayCard(
                 variant: ClayVariant.elevated,
@@ -875,6 +880,323 @@ class ProfileScreen extends ConsumerWidget {
               ],
             );
           },
+        );
+      },
+    );
+  }
+
+  Widget _buildFriendsCard(
+    BuildContext context,
+    WidgetRef ref,
+    AppColors colors,
+    TextTheme typography,
+    List<Album> albums,
+  ) {
+    final connectedFriends = ref.watch(connectedFriendsProvider);
+
+    return ClayCard(
+      variant: ClayVariant.elevated,
+      padding: const EdgeInsets.all(AppTheme.spacingLg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.people_outline, size: 20, color: colors.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Friends (${connectedFriends.length})',
+                style: typography.bodyMedium?.copyWith(
+                  color: colors.ink,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              OutlinedButton.icon(
+                onPressed: () => _promptAddFriendCode(context, ref, colors, typography),
+                icon: Icon(Icons.person_add_outlined, size: 15, color: colors.primary),
+                label: Text(
+                  'Add Friend',
+                  style: typography.bodySmall?.copyWith(
+                    color: colors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                  ),
+                  side: BorderSide(color: colors.primary.withValues(alpha: 0.5)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppTheme.spacingSm),
+          Text(
+            'Add friends with their Kioku code to keep them in your circle and invite them to albums.',
+            style: typography.bodySmall?.copyWith(
+              fontSize: 11,
+              color: colors.inkMuted,
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacingMd),
+          if (connectedFriends.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: AppTheme.spacingMd, horizontal: AppTheme.spacingSm),
+              decoration: BoxDecoration(
+                color: colors.surfaceContainer,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: colors.divider.withValues(alpha: 0.5)),
+              ),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.person_search_outlined, size: 28, color: colors.inkMuted.withValues(alpha: 0.6)),
+                    const SizedBox(height: 6),
+                    Text(
+                      'No friends added yet',
+                      style: typography.bodySmall?.copyWith(
+                        color: colors.inkMuted,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Tap "Add Friend" above to enter a friend\'s code (e.g. KIOKU-XXXX).',
+                      textAlign: TextAlign.center,
+                      style: typography.bodySmall?.copyWith(
+                        fontSize: 10,
+                        color: colors.inkMuted.withValues(alpha: 0.8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: connectedFriends.length,
+              separatorBuilder: (context, index) => Divider(color: colors.divider, height: 1),
+              itemBuilder: (context, index) {
+                final code = connectedFriends[index];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: colors.surfaceContainerHigh,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: colors.primary.withValues(alpha: 0.3)),
+                        ),
+                        child: Center(
+                          child: Icon(Icons.person_rounded, size: 20, color: colors.primary),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              code,
+                              style: typography.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.8,
+                                color: colors.ink,
+                              ),
+                            ),
+                            Text(
+                              'Connected Friend',
+                              style: typography.bodySmall?.copyWith(
+                                fontSize: 10,
+                                color: colors.inkMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Invite to Album',
+                        icon: Icon(Icons.folder_shared_outlined, size: 18, color: colors.accentDark),
+                        onPressed: () => _promptInviteFriendToAlbum(context, ref, colors, typography, code, albums),
+                      ),
+                      IconButton(
+                        tooltip: 'Remove Friend',
+                        icon: Icon(Icons.close_rounded, size: 16, color: colors.inkMuted),
+                        onPressed: () async {
+                          await ref.read(connectedFriendsProvider.notifier).removeFriend(code);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Removed $code from friends')),
+                            );
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    ).animate().fadeIn(delay: 110.ms, duration: 300.ms);
+  }
+
+  Future<void> _promptAddFriendCode(
+    BuildContext context,
+    WidgetRef ref,
+    AppColors colors,
+    TextTheme typography,
+  ) async {
+    final controller = TextEditingController();
+    String? inlineError;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: colors.surfaceContainer,
+              title: Text(
+                'Add Friend by Code',
+                style: typography.headlineSmall?.copyWith(color: colors.ink, fontSize: 18),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Enter your friend\'s Kioku code (e.g. KIOKU-XXXX).',
+                    style: typography.bodySmall?.copyWith(color: colors.inkMuted),
+                  ),
+                  const SizedBox(height: AppTheme.spacingMd),
+                  TextField(
+                    controller: controller,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: InputDecoration(
+                      hintText: 'KIOKU-XXXX',
+                      errorText: inlineError,
+                      prefixIcon: Icon(Icons.tag_rounded, color: colors.primary),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text('Cancel', style: typography.bodyMedium?.copyWith(color: colors.inkMuted)),
+                ),
+                ClayButton(
+                  label: 'Add Friend',
+                  size: ClayButtonSize.small,
+                  onPressed: () async {
+                    final code = controller.text.trim().toUpperCase();
+                    if (code.isEmpty) {
+                      setDialogState(() => inlineError = 'Please enter a code');
+                      return;
+                    }
+                    if (code == ref.read(userProfileProvider).friendCode) {
+                      setDialogState(() => inlineError = 'That is your own code');
+                      return;
+                    }
+                    final success = await ref.read(connectedFriendsProvider.notifier).addFriend(code);
+                    if (!success) {
+                      setDialogState(() => inlineError = 'Friend already added');
+                      return;
+                    }
+                    if (context.mounted) {
+                      Navigator.of(dialogContext).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Added friend: $code')),
+                      );
+                    }
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _promptInviteFriendToAlbum(
+    BuildContext context,
+    WidgetRef ref,
+    AppColors colors,
+    TextTheme typography,
+    String friendCode,
+    List<Album> albums,
+  ) async {
+    if (albums.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Create an album first before inviting friends')),
+      );
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: colors.surfaceContainer,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusModal)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(AppTheme.spacingMd),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.folder_shared_outlined, size: 20, color: colors.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Invite $friendCode to Album',
+                      style: typography.bodyMedium?.copyWith(
+                        color: colors.ink,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Select an album to share with your friend:',
+                  style: typography.bodySmall?.copyWith(color: colors.inkMuted),
+                ),
+                const SizedBox(height: AppTheme.spacingMd),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: albums.length,
+                    separatorBuilder: (context, index) => Divider(color: colors.divider, height: 1),
+                    itemBuilder: (context, idx) {
+                      final album = albums[idx];
+                      return ListTile(
+                        leading: Icon(Icons.photo_album_outlined, color: colors.primary),
+                        title: Text(album.title, style: typography.bodyMedium?.copyWith(color: colors.ink)),
+                        trailing: Icon(Icons.arrow_forward_ios, size: 14, color: colors.inkMuted),
+                        onTap: () {
+                          Navigator.of(sheetContext).pop();
+                          _promptShareAlbum(context, ref, album, colors, typography);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       },
     );

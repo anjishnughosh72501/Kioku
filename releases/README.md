@@ -6,8 +6,8 @@ This directory contains standalone release builds for Kioku.
 
 | File | Platform | Architecture | Size | SHA-256 Checksum |
 | :--- | :--- | :--- | :--- | :--- |
-| **[`kioku-v3.0-release.apk`](kioku-v3.0-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.7 MB | `3FC18DB5C0933E53BEA3E0F382EBD8B33F93C97E43CEC5515EA90C76394B95E6` |
-| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.7 MB | `3FC18DB5C0933E53BEA3E0F382EBD8B33F93C97E43CEC5515EA90C76394B95E6` |
+| **[`kioku-v3.0-release.apk`](kioku-v3.0-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.8 MB | `88DD0314F867D008464319EBAFA478B15199757546B31CF8570292A26B662F04` |
+| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.8 MB | `88DD0314F867D008464319EBAFA478B15199757546B31CF8570292A26B662F04` |
 
 ---
 
@@ -29,11 +29,19 @@ adb install -r releases/kioku-v3.0-release.apk
 
 ## 📋 Release Highlights (v3.0.0)
 
+### 👥 Friends Management & Direct Album Invites
+- **Enter Friend Code in Profile**: Dedicated "Connected Friends" section in Profile screen to add friends via their unique code (e.g., `KIOKU-XXXX`).
+- **Persistent Friends List**: Friends remain visibly saved with avatar badges, friend code display, and remove options.
+- **One-Tap Album Invites**: Directly invite any saved friend to any album with album selector bottom-sheet and instant link dispatch.
+
+### 🧭 Clean Icon-Only Floating Nav Bar & De-cluttered Feed
+- **Sleek Icon-Only Navigation**: Replaced text labels in the bottom navigation bar with crisp, centered iconography with smooth tooltips, eliminating multi-line text wrapping.
+- **Removed Duplicate Top Bar**: De-cluttered feed header by eliminating the redundant top page shortcut bar.
+
 ### 🗂️ Dedicated Albums Hub & 2×2 Photo Grid
 - **Dedicated Albums Tab**: 4-tab bottom navigation (**Feed** | **Albums** | **Flashbacks** | **Profile**) with dedicated album management.
 - **2×2 Square Photo Grid**: Clean, edge-to-edge 2×2 photo grid in album details for dense, distraction-free visual browsing.
 - **Shareable Deep Links & Invites**: One-tap album invite links generating app-accessible URLs and `kioku://album/<id>` deep links.
-- **Home Quick Actions**: Instant access row on the main feed for rapid capture, album browsing, flashbacks, and profile navigation.
 
 ### 🎨 High-Contrast Dark Theme & Streamlined UI
 - **Enhanced Forest Dark Theme**: Deep rich roasted bean canvas (`#0F0B08`), high-contrast oat grey text (`#B09E92`, WCAG AA compliant), and warm golden caramel accents (`#E5AF72`).

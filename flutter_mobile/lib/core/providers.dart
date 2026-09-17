@@ -165,6 +165,50 @@ final userProfileProvider =
   return UserProfileNotifier();
 });
 
+class ConnectedFriendsNotifier extends StateNotifier<List<String>> {
+  ConnectedFriendsNotifier() : super([]) {
+    _load();
+    _listener = () => _load();
+    UserProfileService.instance.addFriendListener(_listener);
+  }
+
+  late final void Function() _listener;
+
+  Future<void> _load() async {
+    final friends = await UserProfileService.instance.getConnectedFriends();
+    if (mounted) {
+      state = friends;
+    }
+  }
+
+  Future<bool> addFriend(String friendCode) async {
+    final success = await UserProfileService.instance.addFriend(friendCode);
+    if (success) {
+      await _load();
+    }
+    return success;
+  }
+
+  Future<bool> removeFriend(String friendCode) async {
+    final success = await UserProfileService.instance.removeFriend(friendCode);
+    if (success) {
+      await _load();
+    }
+    return success;
+  }
+
+  @override
+  void dispose() {
+    UserProfileService.instance.removeFriendListener(_listener);
+    super.dispose();
+  }
+}
+
+final connectedFriendsProvider =
+    StateNotifierProvider<ConnectedFriendsNotifier, List<String>>((ref) {
+  return ConnectedFriendsNotifier();
+});
+
 final getMemoriesUseCaseProvider = Provider<GetMemoriesUseCase>(
   (ref) => GetMemoriesUseCase(ref.watch(memoryRepositoryProvider)),
 );

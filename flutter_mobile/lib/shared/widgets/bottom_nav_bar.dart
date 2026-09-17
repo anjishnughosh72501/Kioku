@@ -39,8 +39,8 @@ class KiokuBottomNavBar extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOutCubic,
-        height: 68,
-        margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+        height: 58,
+        margin: const EdgeInsets.fromLTRB(24, 0, 24, 14),
         decoration: BoxDecoration(
           color: effectiveBg,
           borderRadius: BorderRadius.circular(AppTheme.radiusNavigation),
@@ -84,7 +84,6 @@ class _NavBarItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.kiokuColors;
-    final typography = Theme.of(context).textTheme;
 
     return Material(
       color: Colors.transparent,
@@ -97,42 +96,29 @@ class _NavBarItem extends StatelessWidget {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 240),
             curve: Curves.easeOutCubic,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: isActive
-                  ? colors.primary.withValues(alpha: 0.12)
+                  ? colors.primary.withValues(alpha: 0.14)
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+              shape: BoxShape.circle,
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedScale(
-                  scale: isActive ? 1.05 : 1.0,
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeOutCubic,
-                  child: IconTheme(
-                    data: IconThemeData(
-                      color: isActive ? colors.accentDark : colors.inkMuted,
-                      size: 22,
-                    ),
-                    child: (isActive && item.activeIcon != null)
-                        ? item.activeIcon!
-                        : item.icon,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                AnimatedDefaultTextStyle(
-                  duration: const Duration(milliseconds: 200),
-                  style: (typography.labelSmall ?? const TextStyle()).copyWith(
-                    fontSize: 11,
+            child: Tooltip(
+              message: item.label,
+              child: AnimatedScale(
+                scale: isActive ? 1.15 : 1.0,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+                child: IconTheme(
+                  data: IconThemeData(
                     color: isActive ? colors.accentDark : colors.inkMuted,
-                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                    letterSpacing: 0.1,
+                    size: 24,
                   ),
-                  child: Text(item.label),
+                  child: (isActive && item.activeIcon != null)
+                      ? item.activeIcon!
+                      : item.icon,
                 ),
-              ],
+              ),
             ),
           ),
         ),

@@ -91,9 +91,32 @@ class UserProfileService {
     if (!list.contains(code)) {
       list.add(code);
       await prefs.setStringList(_keyConnectedFriends, list);
+      _notifyFriendListeners();
       return true;
     }
     return false;
+  }
+
+  Future<bool> removeFriend(String friendCode) async {
+    final code = friendCode.trim().toUpperCase();
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_keyConnectedFriends) ?? [];
+    if (list.remove(code)) {
+      await prefs.setStringList(_keyConnectedFriends, list);
+      _notifyFriendListeners();
+      return true;
+    }
+    return false;
+  }
+
+  final List<void Function()> _friendListeners = [];
+  void addFriendListener(void Function() listener) => _friendListeners.add(listener);
+  void removeFriendListener(void Function() listener) => _friendListeners.remove(listener);
+
+  void _notifyFriendListeners() {
+    for (final listener in List.of(_friendListeners)) {
+      listener();
+    }
   }
 
   static String _generateFriendCode() {
