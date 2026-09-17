@@ -76,6 +76,7 @@ class KeyStore {
   final ISecureStorageProvider _storage;
 
   static const _kMasterKey = 'kioku_sec_master_key';
+  static const _kMasterKeyBackup = 'kioku_sec_master_key_durable_backup';
   static const _kDevicePubKey = 'kioku_sec_dev_pub_key';
   static const _kDeviceSecKey = 'kioku_sec_dev_sec_key';
   static const _kDeviceSecKeyNonce = 'kioku_sec_dev_sec_key_nonce';
@@ -170,9 +171,10 @@ class KeyStore {
     );
 
     // Defense-in-depth: Save secondary copy in SharedPreferences so masterKey can be recovered
-    // even if secure storage is wiped by the OS.
+    // even if secure storage is wiped by the OS or during updates.
     try {
       final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kMasterKeyBackup, base64Encode(masterKey));
       await prefs.setString(_kRecoveryBlobBackup, base64Encode(recoveryBlob.encryptedMasterKey));
       await prefs.setString(_kRecoveryNonceBackup, base64Encode(recoveryBlob.nonce));
     } catch (_) {}
@@ -238,15 +240,15 @@ class KeyStore {
   /// Gets the device secret key (unwrapped with masterKey)
   Future<Uint8List> getDevicePrivateKey() async {
     if (_cachedDeviceSecKey != null) return _cachedDeviceSecKey!;
-    final encRaw = await _storage.read(key: _kDeviceSecKey);
+    final enc = await _storage.read(key: _kDeviceSecKey);
     final nonceRaw = await _storage.read(key: _kDeviceSecKeyNonce);
-    if (encRaw == null || nonceRaw == null) {
+    if (enc == null || nonceRaw == null) {
       await initialize();
       return _cachedDeviceSecKey!;
     }
     final masterKey = await getMasterKey();
     final sk = CryptoCore.instance.unwrapKey(
-      base64Decode(encRaw),
+      base64Decode(enc),
       base64Decode(nonceRaw),
       masterKey,
     );
@@ -256,8 +258,16 @@ class KeyStore {
 
   /// Gets or generates the Album Encryption Key (AEK) / collectionKey for an album
   Future<Uint8List> getOrCreateCollectionKey(String albumId) async {
-    final enc = await _storage.read(key: _kCollectionKeyPrefix + albumId);
-    final nonce = await _storage.read(key: _kCollectionNoncePrefix + albumId);
+    var enc = await _storage.read(key: _kCollectionKeyPrefix + albumId);
+    var nonce = await _storage.read(key: _kCollectionNoncePrefix + albumId);
+    if (enc == null || nonce == null) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        enc = prefs.getString(_kCollectionKeyPrefix + albumId);
+        nonce = prefs.getString(_kCollectionNoncePrefix + albumId);
+      } catch (_) {}
+    }
+
     final masterKey = await getMasterKey();
 
     if (enc != null && nonce != null) {
@@ -286,6 +296,11 @@ class KeyStore {
       key: _kCollectionNoncePrefix + albumId,
       value: base64Encode(wrapped.nonce),
     );
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kCollectionKeyPrefix + albumId, base64Encode(wrapped.cipherText));
+      await prefs.setString(_kCollectionNoncePrefix + albumId, base64Encode(wrapped.nonce));
+    } catch (_) {}
   }
 
   /// Gets the stored recovery blob (encryptedMasterKey, nonce), checking secure storage and backup

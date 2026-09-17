@@ -165,6 +165,7 @@ class LocalStorageService {
     String? takenAt,
     String? uploaderName,
   }) async {
+    final memories = await getMemories(albumId);
     final albumDir = await getAlbumDirectory(albumId);
     final id = 'local_mem_' + DateTime.now().millisecondsSinceEpoch.toString();
 
@@ -189,8 +190,7 @@ class LocalStorageService {
     );
 
     // Save to album index
-    final memories = await getMemories(albumId);
-    final updated = [...memories, memory];
+    final updated = [...memories.where((m) => m.id != id), memory];
     await _saveMemoriesList(albumId, updated);
 
     return memory;
@@ -199,8 +199,37 @@ class LocalStorageService {
   /// Lists memories for a given local album.
   Future<List<KiokuMemory>> getMemories(String albumId) async {
     final prefs = await SharedPreferences.getInstance();
+    final albumDir = await getAlbumDirectory(albumId);
     final raw = prefs.getString(_kMemoriesPrefix + albumId);
-    if (raw == null || raw.isEmpty) return [];
+
+    if (raw == null || raw.isEmpty) {
+      // If index was wiped or absent, reconstruct from physical album directory on disk!
+      if (!await albumDir.exists()) return [];
+      try {
+        final diskFiles = albumDir.listSync();
+        final recovered = <KiokuMemory>[];
+        for (final f in diskFiles) {
+          if (f is File && !f.path.endsWith('.enc')) {
+            final name = f.uri.pathSegments.last;
+            final mime = name.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg';
+            final stat = f.statSync();
+            recovered.add(KiokuMemory(
+              id: name.split('.').first,
+              fileName: name,
+              mimeType: mime,
+              takenAtIso: stat.modified.toIso8601String(),
+              uploaderName: 'You',
+              addedAt: stat.modified,
+              sizeBytes: stat.size,
+              localPath: f.path,
+            ));
+          }
+        }
+        return recovered;
+      } catch (_) {
+        return [];
+      }
+    }
 
     try {
       final list = jsonDecode(raw) as List<dynamic>;
@@ -208,18 +237,24 @@ class LocalStorageService {
       for (final item in list) {
         if (item is Map<String, dynamic>) {
           final localPath = item['localPath']?.toString() ?? '';
+          final fileName = item['fileName']?.toString() ?? '';
+          final fileInDir = File('${albumDir.path}/$fileName');
+          final effectivePath = (fileName.isNotEmpty && fileInDir.existsSync())
+              ? fileInDir.path
+              : (localPath.isNotEmpty && File(localPath).existsSync() ? localPath : null);
+
           // Verify file still exists on disk
-          if (localPath.isNotEmpty && File(localPath).existsSync()) {
+          if (effectivePath != null) {
             memories.add(KiokuMemory(
               id: item['id']?.toString() ?? '',
-              fileName: item['fileName']?.toString() ?? '',
+              fileName: fileName.isNotEmpty ? fileName : (item['id']?.toString() ?? ''),
               mimeType: item['mimeType']?.toString() ?? 'image/jpeg',
               caption: item['caption']?.toString(),
               takenAtIso: item['takenAtIso']?.toString() ?? DateTime.now().toIso8601String(),
               uploaderName: item['uploaderName']?.toString() ?? 'You',
               addedAt: DateTime.tryParse(item['addedAt']?.toString() ?? '') ?? DateTime.now(),
               sizeBytes: (item['sizeBytes'] as num?)?.toInt(),
-              localPath: localPath,
+              localPath: effectivePath,
             ));
           }
         }

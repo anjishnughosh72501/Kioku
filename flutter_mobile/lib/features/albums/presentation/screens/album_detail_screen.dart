@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'package:flutter_mobile/core/crypto/key_store.dart';
 import 'package:flutter_mobile/core/drive/app_drive.dart';
 import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/providers.dart';
@@ -33,10 +36,20 @@ class _AlbumDetailScreenState extends ConsumerState<AlbumDetailScreen> {
     _membersFuture = AppDrive.instance.albumMembers(widget.albumId);
   }
 
-  void _shareInviteLink(String title) {
+  Future<String> _buildInviteUrl(String title) async {
     final userProfile = ref.read(userProfileProvider);
-    final link = 'https://kioku.app/invite?albumId=${widget.albumId}&albumName=${Uri.encodeComponent(title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}';
-    final appUri = 'kioku://invite?albumId=${widget.albumId}&albumName=${Uri.encodeComponent(title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}';
+    String keyParam = '';
+    try {
+      final key = await KeyStore.instance.getOrCreateCollectionKey(widget.albumId);
+      keyParam = '&key=${base64UrlEncode(key)}';
+    } catch (_) {}
+
+    return 'https://kioku.app/invite?albumId=${widget.albumId}&albumName=${Uri.encodeComponent(title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}$keyParam';
+  }
+
+  Future<void> _shareInviteLink(String title) async {
+    final link = await _buildInviteUrl(title);
+    final appUri = link.replaceFirst('https://kioku.app/', 'kioku://');
 
     Share.share(
       'Join my memory album "$title" on Kioku!\n\n'
@@ -46,248 +59,278 @@ class _AlbumDetailScreenState extends ConsumerState<AlbumDetailScreen> {
     );
   }
 
-  Future<void> _inviteByEmail(BuildContext context, AppColors colors, TextTheme typography, String title) async {
-    final controller = TextEditingController();
-    String? inlineError;
-    final emailRegex = RegExp(r'^[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}$');
+  Future<void> _showInviteDialog(BuildContext context, AppColors colors, TextTheme typography, String title) async {
     final friends = ref.read(connectedFriendsProvider);
 
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: colors.surfaceContainer,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusCard)),
-              title: Text(
-                'Invite to "$title"',
-                style: typography.headlineSmall?.copyWith(
-                  color: colors.ink,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
+        return AlertDialog(
+          backgroundColor: colors.surfaceContainer,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusCard)),
+          title: Row(
+            children: [
+              Icon(Icons.person_add_alt_1_rounded, size: 22, color: colors.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Invite to "$title"',
+                  style: typography.headlineSmall?.copyWith(
+                    color: colors.ink,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Connected Friends Section
-                    if (friends.isNotEmpty) ...[
-                      Row(
-                        children: [
-                          Icon(Icons.people_alt_outlined, size: 16, color: colors.primary),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Connected Friends (${friends.length})',
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Connected Friends Section
+                if (friends.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      Icon(Icons.people_alt_outlined, size: 16, color: colors.primary),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Connected Friends (${friends.length})',
+                        style: typography.bodyMedium?.copyWith(
+                          color: colors.ink,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Tap a friend to send an invite link directly:',
+                    style: typography.bodySmall?.copyWith(color: colors.inkMuted, fontSize: 11),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 160),
+                    decoration: BoxDecoration(
+                      color: colors.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: colors.divider, width: 0.5),
+                    ),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      itemCount: friends.length,
+                      separatorBuilder: (_, _) => Divider(color: colors.divider, height: 1),
+                      itemBuilder: (context, index) {
+                        final code = friends[index];
+                        return ListTile(
+                          dense: true,
+                          visualDensity: VisualDensity.compact,
+                          leading: CircleAvatar(
+                            radius: 13,
+                            backgroundColor: colors.primary.withValues(alpha: 0.15),
+                            child: Icon(Icons.person_rounded, size: 14, color: colors.primary),
+                          ),
+                          title: Text(
+                            code,
                             style: typography.bodyMedium?.copyWith(
-                              color: colors.ink,
-                              fontWeight: FontWeight.w600,
                               fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: colors.ink,
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Tap a friend to send them an invitation link:',
-                        style: typography.bodySmall?.copyWith(color: colors.inkMuted, fontSize: 11),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        constraints: const BoxConstraints(maxHeight: 140),
-                        decoration: BoxDecoration(
-                          color: colors.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: colors.divider, width: 0.5),
-                        ),
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          itemCount: friends.length,
-                          separatorBuilder: (_, _) => Divider(color: colors.divider, height: 1),
-                          itemBuilder: (context, index) {
-                            final code = friends[index];
-                            return ListTile(
-                              dense: true,
-                              visualDensity: VisualDensity.compact,
-                              leading: CircleAvatar(
-                                radius: 13,
-                                backgroundColor: colors.primary.withValues(alpha: 0.15),
-                                child: Icon(Icons.person_rounded, size: 14, color: colors.primary),
-                              ),
-                              title: Text(
-                                code,
-                                style: typography.bodyMedium?.copyWith(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: colors.ink,
-                                ),
-                              ),
-                              trailing: Icon(Icons.send_rounded, size: 15, color: colors.accentDark),
-                              onTap: () {
-                                Navigator.of(dialogContext).pop();
-                                final userProfile = ref.read(userProfileProvider);
-                                final link = 'https://kioku.app/invite?albumId=${widget.albumId}&albumName=${Uri.encodeComponent(title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}';
-                                final appUri = 'kioku://invite?albumId=${widget.albumId}&albumName=${Uri.encodeComponent(title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}';
-
-                                Share.share(
-                                  'Hey $code! Join my memory album "$title" on Kioku!\n\n'
-                                  'Tap to open and join:\n$link\n\n'
-                                  'Or app link: $appUri',
-                                  subject: 'Kioku Memory Album: $title',
-                                );
-                              },
+                          trailing: Icon(Icons.send_rounded, size: 15, color: colors.accentDark),
+                          onTap: () async {
+                            Navigator.of(dialogContext).pop();
+                            final link = await _buildInviteUrl(title);
+                            final appUri = link.replaceFirst('https://kioku.app/', 'kioku://');
+                            Share.share(
+                              'Hey $code! Join my memory album "$title" on Kioku!\n\n'
+                              'Tap to open and join:\n$link\n\n'
+                              'Or app link: $appUri',
+                              subject: 'Kioku Memory Album: $title',
                             );
                           },
-                        ),
-                      ),
-                      const SizedBox(height: AppTheme.spacingLg),
-                      Divider(color: colors.divider),
-                      const SizedBox(height: AppTheme.spacingSm),
-                    ],
-
-                    // Direct Email Section
-                    Row(
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: AppTheme.spacingMd),
+                  Divider(color: colors.divider),
+                  const SizedBox(height: AppTheme.spacingSm),
+                ] else ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: colors.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
                       children: [
-                        Icon(Icons.mail_outline, size: 16, color: colors.primary),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Invite by Google Email',
-                          style: typography.bodyMedium?.copyWith(
-                            color: colors.ink,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
+                        Icon(Icons.info_outline, size: 18, color: colors.inkMuted),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Add friends using their Friend Code in your Profile, or share an invite link below to connect automatically!',
+                            style: typography.bodySmall?.copyWith(color: colors.inkMuted, fontSize: 11),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                  ),
+                  const SizedBox(height: AppTheme.spacingMd),
+                ],
+
+                // Share Link Section
+                Row(
+                  children: [
+                    Icon(Icons.link_rounded, size: 16, color: colors.primary),
+                    const SizedBox(width: 6),
                     Text(
-                      'Give read & write access to view and add photos.',
-                      style: typography.bodySmall?.copyWith(color: colors.inkMuted, fontSize: 11),
-                    ),
-                    const SizedBox(height: AppTheme.spacingSm),
-                    TextField(
-                      controller: controller,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: InputDecoration(
-                        hintText: 'friend@gmail.com',
-                        errorText: inlineError,
-                        prefixIcon: Icon(Icons.alternate_email, color: colors.primary, size: 18),
+                      'Album Invite Link',
+                      style: typography.bodyMedium?.copyWith(
+                        color: colors.ink,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
                       ),
                     ),
                   ],
                 ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: Text('Cancel', style: typography.bodyMedium?.copyWith(color: colors.inkMuted)),
+                const SizedBox(height: 6),
+                Text(
+                  'Anyone with this link will automatically connect with you and join this album.',
+                  style: typography.bodySmall?.copyWith(color: colors.inkMuted, fontSize: 11),
                 ),
-                ClayButton(
-                  label: 'Send Invite',
-                  size: ClayButtonSize.small,
-                  onPressed: () async {
-                    final email = controller.text.trim();
-                    if (!emailRegex.hasMatch(email)) {
-                      setDialogState(() => inlineError = 'Enter a valid email address');
-                      return;
-                    }
-                    try {
-                      await ref.read(albumsProvider.notifier).share(widget.albumId, email);
-                      if (context.mounted) {
-                        Navigator.of(dialogContext).pop();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Invited $email to album')),
-                        );
-                        setState(() {
-                          _membersFuture = AppDrive.instance.albumMembers(widget.albumId);
-                        });
-                      }
-                    } catch (e) {
-                      setDialogState(() => inlineError = 'Could not share: $e');
-                    }
-                  },
+                const SizedBox(height: AppTheme.spacingMd),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          Navigator.of(dialogContext).pop();
+                          final link = await _buildInviteUrl(title);
+                          await Clipboard.setData(ClipboardData(text: link));
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Invite link copied to clipboard!')),
+                            );
+                          }
+                        },
+                        icon: Icon(Icons.copy_rounded, size: 16, color: colors.ink),
+                        label: Text(
+                          'Copy Link',
+                          style: typography.bodySmall?.copyWith(
+                            color: colors.ink,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: colors.divider),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ClayButton(
+                        label: 'Share Link',
+                        icon: const Icon(Icons.share_outlined, size: 16),
+                        size: ClayButtonSize.small,
+                        onPressed: () {
+                          Navigator.of(dialogContext).pop();
+                          _shareInviteLink(title);
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ],
-            );
-          },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text('Close', style: typography.bodyMedium?.copyWith(color: colors.inkMuted)),
+            ),
+          ],
         );
       },
     );
   }
 
- @override
- Widget build(BuildContext context) {
- final colors = context.kiokuColors;
- final typography = Theme.of(context).textTheme;
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.kiokuColors;
+    final typography = Theme.of(context).textTheme;
 
- final albums = ref.watch(albumsProvider).value ?? <Album>[];
- final currentAlbum = widget.album ??
- albums.where((a) => a.id == widget.albumId).firstOrNull ??
- Album(id: widget.albumId, name: 'Album');
+    final albums = ref.watch(albumsProvider).value ?? <Album>[];
+    final currentAlbum = widget.album ??
+        albums.where((a) => a.id == widget.albumId).firstOrNull ??
+        Album(id: widget.albumId, name: 'Album');
 
- final memoriesAsync = ref.watch(memoriesProvider);
- final memories = memoriesAsync.value ?? <KiokuMemory>[];
+    final memoriesAsync = ref.watch(memoriesProvider);
+    final memories = memoriesAsync.value ?? <KiokuMemory>[];
 
- return Scaffold(
- backgroundColor: colors.background,
- body: SafeArea(
- child: CustomScrollView(
- slivers: [
- SliverAppBar(
- backgroundColor: colors.background,
- pinned: true,
- elevation: 0,
- title: Text(
- currentAlbum.title,
- style: typography.headlineSmall?.copyWith(
- color: colors.ink,
- fontWeight: FontWeight.w700,
- fontSize: 20,
- ),
- ),
- actions: [
- IconButton(
- tooltip: 'Share Invite Link',
- icon: Icon(Icons.share_outlined, color: colors.accentDark),
- onPressed: () => _shareInviteLink(currentAlbum.title),
- ),
- IconButton(
- tooltip: 'Invite by Email',
- icon: Icon(Icons.person_add_alt_1_outlined, color: colors.primary),
- onPressed: () => _inviteByEmail(context, colors, typography, currentAlbum.title),
- ),
- const SizedBox(width: 4),
- ],
- ),
+    return Scaffold(
+      backgroundColor: colors.background,
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              backgroundColor: colors.background,
+              pinned: true,
+              elevation: 0,
+              title: Text(
+                currentAlbum.title,
+                style: typography.headlineSmall?.copyWith(
+                  color: colors.ink,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 20,
+                ),
+              ),
+              actions: [
+                IconButton(
+                  tooltip: 'Share Invite Link',
+                  icon: Icon(Icons.share_outlined, color: colors.accentDark),
+                  onPressed: () => _shareInviteLink(currentAlbum.title),
+                ),
+                IconButton(
+                  tooltip: 'Invite Friends',
+                  icon: Icon(Icons.person_add_alt_1_outlined, color: colors.primary),
+                  onPressed: () => _showInviteDialog(context, colors, typography, currentAlbum.title),
+                ),
+                const SizedBox(width: 4),
+              ],
+            ),
 
- // Members bar
- SliverToBoxAdapter(
- child: Padding(
- padding: const EdgeInsets.symmetric(
- horizontal: AppTheme.spacingMd,
- vertical: AppTheme.spacingSm,
- ),
- child: FutureBuilder<List<AlbumMember>>(
- future: _membersFuture,
- builder: (context, snapshot) {
- final members = snapshot.data ?? [];
- if (members.isEmpty) return const SizedBox.shrink();
- return Container(
- padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
- decoration: BoxDecoration(
- color: colors.surfaceContainer,
- borderRadius: BorderRadius.circular(AppTheme.radiusCard),
- border: Border.all(color: colors.divider, width: 0.5),
- ),
- child: Row(
- children: [
- Icon(Icons.group_outlined, size: 16, color: colors.inkMuted),
- const SizedBox(width: 8),
- Expanded(
+            // Members bar
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppTheme.spacingMd,
+                  vertical: AppTheme.spacingSm,
+                ),
+                child: FutureBuilder<List<AlbumMember>>(
+                  future: _membersFuture,
+                  builder: (context, snapshot) {
+                    final members = snapshot.data ?? [];
+                    if (members.isEmpty) return const SizedBox.shrink();
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: colors.surfaceContainer,
+                        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+                        border: Border.all(color: colors.divider, width: 0.5),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.group_outlined, size: 16, color: colors.inkMuted),
+                          const SizedBox(width: 8),
+                          Expanded(
                             child: Text(
                               '${members.length} ${members.length == 1 ? "member" : "members"}: ${members.map((m) => m.displayName ?? m.email.split('@').first).join(', ')}',
                               maxLines: 1,

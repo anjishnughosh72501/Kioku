@@ -1,6 +1,7 @@
 /// App-level Riverpod providers for albums, memories, and flashbacks.
 library;
 
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -303,10 +304,26 @@ class Albums extends AsyncNotifier<List<Album>> {
 
   Future<void> setAlbumThumbnail(String albumId, String thumbnailPath) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('album_thumb_$albumId', thumbnailPath);
+    final sourceFile = File(thumbnailPath);
+    String persistentPath = thumbnailPath;
+    if (await sourceFile.exists()) {
+      try {
+        final base = await LocalStorageService.instance.baseDirectory;
+        final thumbsDir = Directory('${base.parent.path}/Thumbnails');
+        if (!await thumbsDir.exists()) {
+          await thumbsDir.create(recursive: true);
+        }
+        final ext = thumbnailPath.contains('.') ? thumbnailPath.split('.').last : 'jpg';
+        final destFile = File('${thumbsDir.path}/album_thumb_$albumId.$ext');
+        await sourceFile.copy(destFile.path);
+        persistentPath = destFile.path;
+      } catch (_) {}
+    }
+
+    await prefs.setString('album_thumb_$albumId', persistentPath);
     if (state.hasValue) {
       state = AsyncData(
-        state.requireValue.map((a) => a.id == albumId ? a.copyWith(thumbnailPath: thumbnailPath) : a).toList(),
+        state.requireValue.map((a) => a.id == albumId ? a.copyWith(thumbnailPath: persistentPath) : a).toList(),
       );
     }
   }

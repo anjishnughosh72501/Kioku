@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:flutter_mobile/core/crypto/key_store.dart';
 import 'package:flutter_mobile/core/providers.dart';
 import 'package:flutter_mobile/core/services/user_profile_service.dart';
 import 'package:flutter_mobile/core/storage/local_storage_service.dart';
@@ -57,6 +59,7 @@ class DeepLinkService {
     final friendCode = uri.queryParameters['friendCode'];
     final from = uri.queryParameters['from'];
     final storage = uri.queryParameters['storage'] ?? 'local';
+    final keyParam = uri.queryParameters['key'];
 
     // Parse path-based album ids (e.g. kioku://album/123 or https://kioku.app/albums/123)
     if (albumId == null || albumId.isEmpty) {
@@ -87,6 +90,17 @@ class DeepLinkService {
     bool albumJoined = false;
     if (albumId != null && albumId.trim().isNotEmpty) {
       final cleanAlbumId = albumId.trim();
+
+      if (keyParam != null && keyParam.isNotEmpty) {
+        try {
+          final normalized = base64Url.normalize(keyParam);
+          final keyBytes = base64Url.decode(normalized);
+          if (keyBytes.length == 32) {
+            await KeyStore.instance.saveCollectionKey(cleanAlbumId, keyBytes);
+          }
+        } catch (_) {}
+      }
+
       await LocalStorageService.instance.ensureAlbum(
         id: cleanAlbumId,
         name: albumName,

@@ -2,19 +2,19 @@
 
 This directory contains standalone release builds for Kioku.
 
-## Current Release: V3.2
+## Current Release: V3.5
 
 | File | Platform | Architecture | Size | SHA-256 Checksum |
 | :--- | :--- | :--- | :--- | :--- |
-| **[`kioku-v3.2-release.apk`](kioku-v3.2-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.9 MB | `051A51EF91ADB66DF998F01D595C9D153550DBBD81BA644439D31B703122321F` |
-| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.9 MB | `051A51EF91ADB66DF998F01D595C9D153550DBBD81BA644439D31B703122321F` |
+| **[`kioku-v3.5-release.apk`](kioku-v3.5-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.9 MB | `9E7B601B5308A99D3344330EA07FC49A48982772369257BC383BD756587DC5FE` |
+| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.9 MB | `9E7B601B5308A99D3344330EA07FC49A48982772369257BC383BD756587DC5FE` |
 
 ---
 
 ## 📲 Installation Instructions
 
 ### Option 1: Direct Device Install (Phone)
-1. Download `kioku-v3.2-release.apk` (or `kioku-release.apk`) directly to your Android device.
+1. Download `kioku-v3.5-release.apk` (or `kioku-release.apk`) directly to your Android device.
 2. Open the downloaded file from your browser's downloads or file manager.
 3. If prompted, enable **"Install unknown apps"** for your browser or file manager in Android Settings.
 4. Tap **Install** and launch Kioku.
@@ -22,55 +22,41 @@ This directory contains standalone release builds for Kioku.
 ### Option 2: Via ADB (Command Line)
 Connect your Android device with USB debugging enabled (or start an emulator) and run:
 ```bash
-adb install -r releases/kioku-v3.2-release.apk
+adb install -r releases/kioku-v3.5-release.apk
 ```
 
 ---
 
-## 📋 Release Highlights (V3.2)
+## 📋 Release Highlights (V3.5)
 
-### 🔗 Direct App Deep Linking & Auto-Join (Friends & Albums)
-- **Instant App Interception**: Registered native Android intent filters and app link handlers for `kioku://invite?...` and `https://kioku.app/invite?...` directly in `MainActivity.kt` and `AndroidManifest.xml`.
-- **Zero GitHub Redirection**: All GitHub links removed from album invitations and profile sharing. Tapping any shared link immediately opens the installed Kioku app.
-- **Automatic Mutual Friend Connection**: Clicking an invite link automatically connects the recipient with the sharer, registering their friend code and display name in their connected friends list without manual entry.
-- **Automatic Album Enrollment**: The shared album is immediately saved and enrolled into the recipient's album roster, navigating straight to the album detail screen with confirmation feedback.
+### 🚫 Complete Removal of Email / Gmail Invites
+- **Code & Link Exclusive**: Removed all email input fields, email regex validation, and Google Drive email share actions from both `AlbumDetailScreen` and `ProfileScreen`.
+- **Pure Friend Codes & Share Links**: Invitations are now managed exclusively through mutual Friend Codes and one-tap shareable deep links.
+- **Dedicated Invite Dialog**: Clean modal displaying Connected Friends with one-tap invite dispatch, a "Copy Link" button, and system share sheet integration.
 
-### 🖼️ Eliminated Feed Image Glitch & Recycled Tile Flickering
-- **Clean Widget Recycling**: Added lifecycle state invalidation (`didUpdateWidget`) in `DriveThumb` and unique item keys in `MemoryCard` to prevent Flutter's scroll recycler from painting previous pictures in place of incoming items.
-- **In-Memory Byte Cache**: Fast-scrolling loads cached image bytes instantaneously, avoiding re-fetching delays and flicker.
+### 🛡️ Cache-Clear Immune & Zero-Corruption Storage Retention
+- **Permanent Thumbnail Storage**: Album thumbnails picked from the gallery are stored directly in permanent app document storage (`/Kioku/Thumbnails/`), completely isolated from Android's temporary `/cache` directory. Clearing cache in Android Settings will **never** delete album thumbnails.
+- **Resilient Feed Loading**: Feed page loading is fully protected against empty state failures or cache wipes with auto-healing fallback.
+- **Disk-Backed Physical Self-Healing**: If the index cache is cleared, `LocalStorageService` dynamically reconstructs the album memory index directly from the physical disk directory with relative path resolution.
+- **Per-Album Provider Routing**: `EncryptedMemoryRepository` dynamically routes calls to `LocalStorageProvider` for device storage albums (`local_...`), preventing Google Drive 404/not-found crashes when browsing local albums.
 
-### 👥 Connected Friends in Album Invites
-- **Integrated Friends Roster**: When adding or inviting members to an album (from either `AlbumDetailScreen` or the profile albums list), the user's connected friends list is prominently displayed at the top of the dialog.
-- **One-Tap Invite Dispatch**: Tap on any connected friend to instantly generate and share the album deep link invite directly.
-- **Direct Email Fallback**: Direct Google Drive email invitation remains accessible immediately below the friends roster.
-
-### 🖼️ Album Thumbnails & Centered Morphing Typography
-- **Custom Album Cover Photos**: Album owners can tap the camera action badge to assign or edit an album thumbnail photo via the system gallery picker.
-- **Seamless Morphing Text**: Centered album title text with soft typographic drop shadows layered over a subtle dark vignette gradient that dynamically morphs and blends into the thumbnail image.
-- **Storage Badge Indicator**: Visual badge chip displaying the underlying storage backend (e.g. `GOOGLE`, `LOCAL`, `S3`, `WEBDAV`, `MESH`).
-
-### 🔒 Per-Album Storage Backend Locking
-- **Creation-Time Storage Selection**: In the `CreateAlbumDialog`, users can choose which storage provider backs that specific album (Local, Google Drive, S3, WebDAV, Mesh).
-- **Default from Profile**: Defaults to the active storage backend chosen on the Profile screen.
-- **Immutable Post-Creation**: Once created, an album's storage backend is locked to maintain encryption key integrity and prevent orphaned cloud storage blobs.
-
-### 🌅 Dynamic Feed Header & Global Update Stream
-- **Personalized Header**: The feed header now prominently displays `"Konnichiwa <User>!"` in a crisp, 22pt bold typography next to the Kioku app icon.
-- **All Updates Stream**: Removed the album dropdown menu from the feed. The feed aggregates and displays all memory updates chronologically across all albums.
-- **Post Author & Album Context**: Memory cards show both the author and the album name.
-
-### 🐛 Route Fix: `/media/:id` Navigation
-- Resolved the `Page Not Found` router exception when tapping photos or videos inside an album by ensuring all media navigation pushes `/media/${memory.id}`.
-
-### 🕊️ Clean Reminiscing Flashbacks
-- When no retrospective memories are generated by the algorithm, all empty period containers are hidden, displaying only the exact message: `"Keep making memories that you reminisce"`.
-
-### ⚡ Frictionless Instant Startup
-- After the initial onboarding, the app bypasses storage chooser dialogs on subsequent startups and navigates directly to the feed.
+### 🔑 End-to-End Shared Album Cryptography & Auto-Key Transfer
+- **Cryptographic Key Exchange in Links**: Generated invite links include the base64url-encoded Album Encryption Key (AEK) via `&key=...`.
+- **Automatic Ingestion**: When an invite link is clicked, `DeepLinkService` parses and writes the AEK into the recipient's `KeyStore`.
+- **Mutual Read/Write Access**: Invited friends can immediately decrypt all existing photos and securely encrypt new uploads to the shared album.
 
 ---
 
 ## 📜 Previous Releases
+
+<details>
+<summary><b>v3.2.0</b> (2026-09-17)</summary>
+
+- Deep linking & automatic mutual friend connections.
+- Elimination of feed image glitches and flickering.
+- Album thumbnails with centered morphing typography.
+- Per-album storage backend selection and immutability.
+</details>
 
 <details>
 <summary><b>v3.0.0</b> (2026-09-17)</summary>

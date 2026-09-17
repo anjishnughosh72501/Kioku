@@ -8,6 +8,7 @@ import 'package:flutter_mobile/core/crypto/key_store.dart';
 import 'package:flutter_mobile/core/drive/app_drive.dart';
 import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/services/user_profile_service.dart';
+import 'package:flutter_mobile/core/storage/local_storage_provider.dart';
 import 'package:flutter_mobile/core/storage/local_storage_service.dart';
 import 'package:flutter_mobile/core/storage/storage_provider.dart';
 import 'package:flutter_mobile/core/utils/lru_cache.dart';
@@ -38,6 +39,13 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
         _metadataCache = metadataCache ?? <String, KiokuMemory>{};
 
   StorageProvider get provider => _providerGetter();
+
+  StorageProvider _resolveProviderForAlbum(String albumId) {
+    if (albumId.startsWith('local_') && provider.type == StorageProviderType.drive) {
+      return const LocalStorageProvider();
+    }
+    return provider;
+  }
 
   // ===== IMemoryRepository Implementation =====
 
@@ -99,13 +107,15 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
   Future<KiokuMemory?> _fetchAndDecryptMemory(
     String objectId,
     String albumId,
-    Uint8List collectionKey,
-  ) async {
+    Uint8List collectionKey, {
+    StorageProvider? activeProvider,
+  }) async {
     final cached = _metadataCache[objectId];
     if (cached != null) return cached;
 
     try {
-      final blob = await provider.getBlob(objectId, containerId: albumId);
+      final effectiveProvider = activeProvider ?? _resolveProviderForAlbum(albumId);
+      final blob = await effectiveProvider.getBlob(objectId, containerId: albumId);
       final envelope = EncryptedEnvelope.fromBlob(blob, objectId: objectId);
 
       // Unwrap fileKey using collectionKey (AEK)
@@ -146,15 +156,34 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
   @override
   Future<List<KiokuMemory>> getMemories(String albumId) async {
     await CryptoCore.instance.init();
-    final blobIds = await provider.listBlobs(albumId);
+    final activeProvider = _resolveProviderForAlbum(albumId);
+    final blobIds = await activeProvider.listBlobs(albumId);
     final collectionKey = await _keyStore.getOrCreateCollectionKey(albumId);
 
     final memories = <KiokuMemory>[];
     for (final objectId in blobIds) {
-      final memory = await _fetchAndDecryptMemory(objectId, albumId, collectionKey);
+      final memory = await _fetchAndDecryptMemory(
+        objectId,
+        albumId,
+        collectionKey,
+        activeProvider: activeProvider,
+      );
       if (memory != null) {
         memories.add(memory);
       }
+    }
+
+    // Merge unencrypted local memories if present on disk
+    if (activeProvider.type == StorageProviderType.local) {
+      try {
+        final localMems = await LocalStorageService.instance.getMemories(albumId);
+        final existingIds = memories.map((m) => m.id).toSet();
+        for (final lm in localMems) {
+          if (!existingIds.contains(lm.id)) {
+            memories.add(lm);
+          }
+        }
+      } catch (_) {}
     }
 
     memories.sort((a, b) => (b.takenAt ?? DateTime(0)).compareTo(a.takenAt ?? DateTime(0)));
@@ -168,7 +197,8 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
     String? pageToken,
   }) async {
     await CryptoCore.instance.init();
-    final blobIds = await provider.listBlobs(albumId);
+    final activeProvider = _resolveProviderForAlbum(albumId);
+    final blobIds = await activeProvider.listBlobs(albumId);
     final offset = pageToken != null ? int.tryParse(pageToken) ?? 0 : 0;
     if (offset >= blobIds.length) {
       return (items: <KiokuMemory>[], nextPageToken: null);
@@ -179,7 +209,12 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
 
     final pageMemories = <KiokuMemory>[];
     for (final objectId in targetBlobIds) {
-      final memory = await _fetchAndDecryptMemory(objectId, albumId, collectionKey);
+      final memory = await _fetchAndDecryptMemory(
+        objectId,
+        albumId,
+        collectionKey,
+        activeProvider: activeProvider,
+      );
       if (memory != null) {
         pageMemories.add(memory);
       }
@@ -193,7 +228,13 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
   @override
   Future<void> deleteMemory(String fileId, {String? albumId}) async {
     if (albumId != null) {
-      await provider.deleteBlob(fileId, containerId: albumId);
+      final activeProvider = _resolveProviderForAlbum(albumId);
+      try {
+        await activeProvider.deleteBlob(fileId, containerId: albumId);
+      } catch (_) {}
+      try {
+        await LocalStorageService.instance.deleteMemory(fileId);
+      } catch (_) {}
     }
     _metadataCache.remove(fileId);
     _mediaCache.remove(fileId);
@@ -296,7 +337,8 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
     final blobBytes = envelope.toBlob();
 
     // 8. Store blob in the active StorageProvider
-    final storedId = await provider.putBlob(
+    final activeProvider = _resolveProviderForAlbum(albumId);
+    final storedId = await activeProvider.putBlob(
       blobBytes,
       containerId: albumId,
       objectId: objectId,
@@ -322,8 +364,21 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
     final cached = _mediaCache.get(memoryId);
     if (cached != null) return cached;
 
+    final activeProvider = _resolveProviderForAlbum(albumId);
+
+    // Check if it's a local unencrypted file on disk first
+    if (memoryId.startsWith('local_') && activeProvider.type == StorageProviderType.local) {
+      try {
+        final bytes = await LocalStorageService.instance.getPhotoBytes(memoryId, albumId: albumId);
+        if (bytes != null) {
+          _mediaCache.put(memoryId, bytes);
+          return bytes;
+        }
+      } catch (_) {}
+    }
+
     await CryptoCore.instance.init();
-    final blob = await provider.getBlob(memoryId, containerId: albumId);
+    final blob = await activeProvider.getBlob(memoryId, containerId: albumId);
     final envelope = EncryptedEnvelope.fromBlob(blob, objectId: memoryId);
 
     final collectionKey = await _keyStore.getOrCreateCollectionKey(albumId);
