@@ -15,7 +15,6 @@ import 'features/profile/presentation/screens/profile_screen.dart';
 import 'features/media_viewer/presentation/screens/photo_viewer_screen.dart';
 import 'features/media_viewer/presentation/screens/video_player_screen.dart';
 import 'features/auth/presentation/controllers/auth_controller.dart';
-import 'features/auth/presentation/screens/recovery_key_screen.dart';
 import 'features/auth/presentation/screens/migration_screen.dart';
 import 'features/profile/presentation/screens/storage_setup_screen.dart';
 import 'features/albums/presentation/screens/albums_screen.dart';
@@ -248,16 +247,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => buildPushTransitionPage(
           key: state.pageKey,
           child: const StorageSetupScreen(),
-        ),
-      ),
-      GoRoute(
-        path: '/recovery-key',
-        name: 'recovery-key',
-        pageBuilder: (context, state) => buildPushTransitionPage(
-          key: state.pageKey,
-          child: RecoveryKeyScreen(
-            recoveryPhrase: state.extra as String?,
-          ),
         ),
       ),
       GoRoute(

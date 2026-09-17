@@ -311,43 +311,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ],
                     ),
                     const SizedBox(height: AppTheme.spacingMd),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => context.push('/recovery-key'),
-                            icon: Icon(Icons.key_outlined, size: 16, color: colors.primary),
-                            label: Text(
-                              'Recovery Key (24 Words)',
-                              style: typography.bodySmall?.copyWith(
-                                color: colors.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              side: BorderSide(color: colors.primary.withValues(alpha: 0.5)),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: () => setState(() => _showEncryptionInfo = !_showEncryptionInfo),
+                        icon: Icon(
+                          _showEncryptionInfo ? Icons.expand_less : Icons.help_outline,
+                          size: 15,
+                          color: colors.inkMuted,
                         ),
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                          onPressed: () => setState(() => _showEncryptionInfo = !_showEncryptionInfo),
-                          icon: Icon(
-                            _showEncryptionInfo ? Icons.expand_less : Icons.help_outline,
-                            size: 15,
-                            color: colors.inkMuted,
-                          ),
-                          label: Text(
-                            _showEncryptionInfo ? 'Hide' : 'Info',
-                            style: typography.bodySmall?.copyWith(color: colors.inkMuted),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: colors.divider),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
+                        label: Text(
+                          _showEncryptionInfo ? 'Hide Details' : 'Encryption Info',
+                          style: typography.bodySmall?.copyWith(color: colors.inkMuted),
                         ),
-                      ],
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: colors.divider),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
                     ),
                     AnimatedCrossFade(
                       firstChild: const SizedBox.shrink(),

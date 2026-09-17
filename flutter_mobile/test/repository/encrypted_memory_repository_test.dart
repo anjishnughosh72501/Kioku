@@ -161,105 +161,72 @@ void main() {
   });
 
   group('KeyStore vault loss protection tests', () {
-    test('fresh install generates master key and backs up recovery blob', () async {
+    test('fresh install generates master key and backs up durable key', () async {
       SharedPreferences.setMockInitialValues({});
       final storage = InMemorySecureStorage();
       final ks = KeyStore(storage: storage);
 
       final phrase = await ks.initialize();
-      expect(phrase, isNotNull);
+      expect(phrase, isNull);
       expect(await ks.hasMasterKey(), isTrue);
       expect(ks.needsRecovery, isFalse);
 
-      // Verify backup recovery blob was written to SharedPreferences
+      // Verify backup master key was written to SharedPreferences
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.containsKey('kioku_sec_recovery_blob_backup'), isTrue);
-      expect(prefs.containsKey('kioku_sec_recovery_nonce_backup'), isTrue);
+      expect(prefs.containsKey('kioku_sec_master_key_durable_backup'), isTrue);
     });
 
-    test('secure storage wiped while vault exists throws VaultRecoveryRequiredException', () async {
+    test('secure storage wiped restores masterKey seamlessly from SharedPreferences backup', () async {
       SharedPreferences.setMockInitialValues({});
       final storage = InMemorySecureStorage();
       final ks = KeyStore(storage: storage);
       await ks.initialize();
+      final originalMasterKey = await ks.getMasterKey();
 
-      // Simulate OS clearing secure storage (wiping master key and recovery blob from keystore)
+      // Simulate OS clearing secure storage
       storage.clear();
 
       // Now create a new KeyStore instance representing app restart
       final newKs = KeyStore(storage: storage);
-      expect(await newKs.hasMasterKey(), isFalse);
+      // hasMasterKey returns true because it finds the durable backup in SharedPreferences
+      expect(await newKs.hasMasterKey(), isTrue);
+      expect(newKs.needsRecovery, isFalse);
 
-      // Because recovery blob backup exists in SharedPreferences, initialize should NOT overwrite!
-      await expectLater(
-        newKs.initialize(),
-        throwsA(isA<VaultRecoveryRequiredException>()),
-      );
-      expect(newKs.needsRecovery, isTrue);
-
-      // getMasterKey should also throw VaultRecoveryRequiredException
-      await expectLater(
-        newKs.getMasterKey(),
-        throwsA(isA<VaultRecoveryRequiredException>()),
-      );
-    });
-
-    test('restoreFromRecoveryPhrase restores masterKey using SharedPreferences backup', () async {
-      SharedPreferences.setMockInitialValues({});
-      final storage = InMemorySecureStorage();
-      final ks = KeyStore(storage: storage);
-      final phrase = await ks.initialize();
-      final originalMasterKey = await ks.getMasterKey();
-
-      // Simulate secure storage wipe
-      storage.clear();
-
-      final restoredKs = KeyStore(storage: storage);
-      expect(await restoredKs.hasMasterKey(), isFalse);
-
-      // Restore using phrase
-      await restoredKs.restoreFromRecoveryPhrase(phrase!);
-      expect(await restoredKs.hasMasterKey(), isTrue);
-      expect(restoredKs.needsRecovery, isFalse);
-
-      final recoveredMasterKey = await restoredKs.getMasterKey();
+      // getMasterKey restores key seamlessly without throwing VaultRecoveryRequiredException
+      final recoveredMasterKey = await newKs.getMasterKey();
       expect(recoveredMasterKey, equals(originalMasterKey));
     });
 
-    test('restoreFromRecoveryPhrase throws on invalid phrase word count', () async {
+    test('complete wipe self-heals with fresh master key without throwing lockout exception', () async {
       SharedPreferences.setMockInitialValues({});
       final storage = InMemorySecureStorage();
       final ks = KeyStore(storage: storage);
       await ks.initialize();
 
-      // Clear keystore to simulate wipe
+      // Clear both
       storage.clear();
-      final newKs = KeyStore(storage: storage);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
 
-      // 5 words instead of 24
-      await expectLater(
-        newKs.restoreFromRecoveryPhrase('apple banana cherry dog elephant'),
-        throwsA(isA<ArgumentError>()),
-      );
+      final newKs = KeyStore(storage: storage);
+      expect(await newKs.hasMasterKey(), isFalse);
+
+      // Should initialize and getMasterKey smoothly without error
+      final newKey = await newKs.getMasterKey();
+      expect(newKey, isNotNull);
+      expect(newKey.length, equals(32));
+      expect(newKs.needsRecovery, isFalse);
     });
 
-    test('restoreFromRecoveryPhrase handles extra whitespace gracefully', () async {
+    test('collection key auto-generates seamlessly when adding photos', () async {
       SharedPreferences.setMockInitialValues({});
       final storage = InMemorySecureStorage();
       final ks = KeyStore(storage: storage);
-      final phrase = await ks.initialize();
-      final originalMasterKey = await ks.getMasterKey();
 
-      storage.clear();
-      final restoredKs = KeyStore(storage: storage);
-
-      // Phrase with leading/trailing and duplicate whitespace
-      final messyPhrase = '  ${phrase!.replaceAll(' ', '   ')}  ';
-      await restoredKs.restoreFromRecoveryPhrase(messyPhrase);
-      expect(await restoredKs.hasMasterKey(), isTrue);
-
-      final recoveredMasterKey = await restoredKs.getMasterKey();
-      expect(recoveredMasterKey, equals(originalMasterKey));
+      final collectionKey = await ks.getOrCreateCollectionKey('album_123');
+      expect(collectionKey, isNotNull);
+      expect(collectionKey.length, equals(32));
+      expect(ks.needsRecovery, isFalse);
     });
   });
 

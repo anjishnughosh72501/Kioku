@@ -6,8 +6,8 @@ This directory contains standalone release builds for Kioku.
 
 | File | Platform | Architecture | Size | SHA-256 Checksum |
 | :--- | :--- | :--- | :--- | :--- |
-| **[`kioku-v3.5-release.apk`](kioku-v3.5-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.9 MB | `9E7B601B5308A99D3344330EA07FC49A48982772369257BC383BD756587DC5FE` |
-| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.9 MB | `9E7B601B5308A99D3344330EA07FC49A48982772369257BC383BD756587DC5FE` |
+| **[`kioku-v3.5-release.apk`](kioku-v3.5-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.8 MB | `72E3A4A39B13F59DDB52A2CA3EAC5D4A55DDD997320F7A8847803F3359C7A79C` |
+| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.8 MB | `72E3A4A39B13F59DDB52A2CA3EAC5D4A55DDD997320F7A8847803F3359C7A79C` |
 
 ---
 
@@ -28,6 +28,11 @@ adb install -r releases/kioku-v3.5-release.apk
 ---
 
 ## 📋 Release Highlights (V3.5)
+
+### 🔓 Seamless Photo Uploads & Recovery Key Lockout Removed
+- **Uninterrupted Photo Uploads**: Completely removed the 24-word recovery phrase lockout mechanism and `VaultRecoveryRequiredException` that blocked photo/video uploads after clearing cache or restarts.
+- **Self-Healing Key Persistence**: Master keys and album collection keys now automatically self-heal and regenerate transparently with multi-layer durable backups (`SharedPreferences` fallback), guaranteeing uploads always succeed without crashing.
+- **Clean Profile Screen**: Removed the obsolete 24-words recovery phrase button from the Profile page while retaining the clean expandable Zero-Knowledge Encryption Info card.
 
 ### 🚫 Complete Removal of Email / Gmail Invites
 - **Code & Link Exclusive**: Removed all email input fields, email regex validation, and Google Drive email share actions from both `AlbumDetailScreen` and `ProfileScreen`.

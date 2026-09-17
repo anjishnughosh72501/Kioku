@@ -3,7 +3,6 @@ import 'package:gap/gap.dart';
 import 'package:flutter_mobile/core/crypto/key_store.dart';
 import 'package:flutter_mobile/core/crypto/migration_service.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
-import 'recovery_key_screen.dart';
 
 class MigrationScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -15,8 +14,6 @@ class MigrationScreen extends StatefulWidget {
 }
 
 class _MigrationScreenState extends State<MigrationScreen> {
-  String? _recoveryPhrase;
-  bool _phraseConfirmed = false;
   MigrationProgress? _progress;
 
   @override
@@ -26,20 +23,11 @@ class _MigrationScreenState extends State<MigrationScreen> {
   }
 
   Future<void> _checkAndInit() async {
-    final phrase = await KeyStore.instance.initialize();
-    if (phrase != null) {
-      setState(() => _recoveryPhrase = phrase);
-    } else {
-      // Already had key, start migration directly
-      _startMigration();
-    }
+    await KeyStore.instance.initialize();
+    _startMigration();
   }
 
   void _startMigration() {
-    setState(() {
-      _phraseConfirmed = true;
-    });
-
     MigrationService.instance.migrate().listen(
       (progress) {
         if (mounted) {
@@ -61,14 +49,6 @@ class _MigrationScreenState extends State<MigrationScreen> {
   Widget build(BuildContext context) {
     final colors = context.kiokuColors;
     final typography = context.kiokuTypography;
-
-    // 1. If we have a fresh recovery phrase that hasn't been confirmed yet, show RecoveryKeyScreen
-    if (_recoveryPhrase != null && !_phraseConfirmed) {
-      return RecoveryKeyScreen(
-        recoveryPhrase: _recoveryPhrase!,
-        onConfirmed: _startMigration,
-      );
-    }
 
     // 2. Migration progress screen
     return Scaffold(

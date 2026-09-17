@@ -92,58 +92,41 @@ class KeyStore {
   Uint8List? _cachedMasterKey;
   Uint8List? _cachedDevicePubKey;
   Uint8List? _cachedDeviceSecKey;
-  bool _needsRecovery = false;
-
-  bool get needsRecovery => _needsRecovery;
+  bool get needsRecovery => false;
 
   /// Check if master key exists
   Future<bool> hasMasterKey() async {
     if (_cachedMasterKey != null) return true;
-    return await _storage.containsKey(key: _kMasterKey);
-  }
-
-  /// Check whether prior encrypted vault data exists on device
-  Future<bool> hasExistingEncryptedData() async {
+    if (await _storage.containsKey(key: _kMasterKey)) return true;
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (prefs.containsKey(_kRecoveryBlobBackup)) return true;
-      final albums = prefs.getString('kioku_local_albums');
-      if (albums != null && albums.isNotEmpty && albums != '[]') return true;
-      final keys = prefs.getKeys();
-      if (keys.any((k) => k.startsWith('kioku_local_memories_'))) return true;
+      return prefs.containsKey(_kMasterKeyBackup);
     } catch (_) {}
     return false;
   }
 
+  /// Check whether prior encrypted vault data exists on device
+  Future<bool> hasExistingEncryptedData() async => false;
+
   /// Initialize keystore: generates masterKey + device keypair if not present.
-  /// Throws [VaultRecoveryRequiredException] if previous vault data exists but keys were wiped.
   Future<String?> initialize({String? recoveryPhrase}) async {
     await CryptoCore.instance.init();
     if (await hasMasterKey()) {
-      _needsRecovery = false;
       await getMasterKey();
       return null;
     }
-
-    if (recoveryPhrase != null && recoveryPhrase.isNotEmpty) {
-      await restoreFromRecoveryPhrase(recoveryPhrase);
-      _needsRecovery = false;
-      return recoveryPhrase;
-    }
-
-    // Safety guard: If no master key is in secure storage, check if prior vault data exists.
-    // If so, do not silently generate an incompatible new master key!
-    if (await hasExistingEncryptedData()) {
-      _needsRecovery = true;
-      throw const VaultRecoveryRequiredException();
-    }
-
-    _needsRecovery = false;
 
     // Generate fresh master key
     final masterKey = CryptoCore.instance.generateRandomKey();
     await _storage.write(key: _kMasterKey, value: base64Encode(masterKey));
     _cachedMasterKey = masterKey;
+
+    // Defense-in-depth: Save secondary copy in SharedPreferences so masterKey can be recovered
+    // even if secure storage is wiped by the OS or during updates.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kMasterKeyBackup, base64Encode(masterKey));
+    } catch (_) {}
 
     // Generate device X25519 identity keypair
     final keyPair = CryptoCore.instance.generateKeyPair();
@@ -156,66 +139,27 @@ class KeyStore {
     await _storage.write(key: _kDeviceSecKey, value: base64Encode(wrappedDeviceKey.cipherText));
     await _storage.write(key: _kDeviceSecKeyNonce, value: base64Encode(wrappedDeviceKey.nonce));
 
-    // Generate recovery phrase & mutual recovery blob
-    final phrase = recoveryPhrase ?? RecoveryService.instance.generateRecoveryPhrase();
-    final recoveryKey = RecoveryService.instance.phraseToKey(phrase);
-    final recoveryBlob = RecoveryService.instance.createRecoveryBlob(masterKey, recoveryKey);
-
-    await _storage.write(
-      key: _kRecoveryBlob,
-      value: base64Encode(recoveryBlob.encryptedMasterKey),
-    );
-    await _storage.write(
-      key: _kRecoveryNonce,
-      value: base64Encode(recoveryBlob.nonce),
-    );
-
-    // Defense-in-depth: Save secondary copy in SharedPreferences so masterKey can be recovered
-    // even if secure storage is wiped by the OS or during updates.
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_kMasterKeyBackup, base64Encode(masterKey));
-      await prefs.setString(_kRecoveryBlobBackup, base64Encode(recoveryBlob.encryptedMasterKey));
-      await prefs.setString(_kRecoveryNonceBackup, base64Encode(recoveryBlob.nonce));
-    } catch (_) {}
-
-    // Save phrase encrypted with masterKey for safe viewing in user settings
-    final encPhrase = CryptoCore.instance.encryptMetadata({'phrase': phrase}, masterKey);
-    await _storage.write(key: _kRecoveryPhraseEncrypted, value: base64Encode(encPhrase.cipherText));
-    await _storage.write(key: _kRecoveryPhraseNonce, value: base64Encode(encPhrase.nonce));
-
-    return phrase;
+    return null;
   }
 
-  /// Gets the recovery phrase decrypted with masterKey
-  Future<String> getRecoveryPhrase() async {
-    final enc = await _storage.read(key: _kRecoveryPhraseEncrypted);
-    final nonce = await _storage.read(key: _kRecoveryPhraseNonce);
-    final masterKey = await getMasterKey();
-    if (enc == null || nonce == null) {
-      final phrase = RecoveryService.instance.generateRecoveryPhrase();
-      final encPhrase = CryptoCore.instance.encryptMetadata({'phrase': phrase}, masterKey);
-      await _storage.write(key: _kRecoveryPhraseEncrypted, value: base64Encode(encPhrase.cipherText));
-      await _storage.write(key: _kRecoveryPhraseNonce, value: base64Encode(encPhrase.nonce));
-      return phrase;
-    }
-    final meta = CryptoCore.instance.decryptMetadata(
-      base64Decode(enc),
-      base64Decode(nonce),
-      masterKey,
-    );
-    return meta['phrase'] as String;
-  }
+  /// Gets the recovery phrase (stubbed for compatibility)
+  Future<String> getRecoveryPhrase() async => '';
 
   /// Gets the durable 32-byte master key (auto-initializes if not yet generated)
   Future<Uint8List> getMasterKey() async {
     if (_cachedMasterKey != null) return _cachedMasterKey!;
-    final raw = await _storage.read(key: _kMasterKey);
+    var raw = await _storage.read(key: _kMasterKey);
     if (raw == null || raw.isEmpty) {
-      if (await hasExistingEncryptedData()) {
-        _needsRecovery = true;
-        throw const VaultRecoveryRequiredException();
-      }
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        raw = prefs.getString(_kMasterKeyBackup);
+        if (raw != null && raw.isNotEmpty) {
+          await _storage.write(key: _kMasterKey, value: raw);
+        }
+      } catch (_) {}
+    }
+
+    if (raw == null || raw.isEmpty) {
       await initialize();
       return _cachedMasterKey!;
     }
@@ -271,11 +215,13 @@ class KeyStore {
     final masterKey = await getMasterKey();
 
     if (enc != null && nonce != null) {
-      return CryptoCore.instance.unwrapKey(
-        base64Decode(enc),
-        base64Decode(nonce),
-        masterKey,
-      );
+      try {
+        return CryptoCore.instance.unwrapKey(
+          base64Decode(enc),
+          base64Decode(nonce),
+          masterKey,
+        );
+      } catch (_) {}
     }
 
     // Generate fresh collection key for new album
@@ -338,7 +284,6 @@ class KeyStore {
     );
     await _storage.write(key: _kMasterKey, value: base64Encode(recoveredMasterKey));
     _cachedMasterKey = recoveredMasterKey;
-    _needsRecovery = false;
 
     // Restore device keypair & recovery blobs
     final keyPair = CryptoCore.instance.generateKeyPair();

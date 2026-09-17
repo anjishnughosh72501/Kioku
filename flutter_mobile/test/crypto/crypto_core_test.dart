@@ -184,9 +184,7 @@ void main() {
 
       expect(await keyStore.hasMasterKey(), isFalse);
 
-      final phrase = await keyStore.initialize();
-      expect(phrase, isNotNull);
-      expect(phrase!.split(' ').length, equals(24));
+      await keyStore.initialize();
       expect(await keyStore.hasMasterKey(), isTrue);
 
       final masterKey = await keyStore.getMasterKey();
@@ -209,9 +207,8 @@ void main() {
       final aek2 = await keyStore.getOrCreateCollectionKey('album_cafe_walks');
       expect(aek2, isNot(equals(aek1)));
 
-      // Recovery flow
+      // Durable persistence across KeyStore instances
       final secondKeyStore = KeyStore(storage: inMemoryStorage);
-      await secondKeyStore.restoreFromRecoveryPhrase(phrase);
       final restoredMasterKey = await secondKeyStore.getMasterKey();
       expect(restoredMasterKey, equals(masterKey));
     });
