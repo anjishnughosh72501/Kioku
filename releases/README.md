@@ -6,8 +6,8 @@ This directory contains standalone release builds for Kioku.
 
 | File | Platform | Architecture | Size | SHA-256 Checksum |
 | :--- | :--- | :--- | :--- | :--- |
-| **[`kioku-v3.2-release.apk`](kioku-v3.2-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.9 MB | `3C30F9E88E55B44C4844DB2BD3FEA1F32C1FBCB2C3B74FDEEB2CC69D12696757` |
-| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.9 MB | `3C30F9E88E55B44C4844DB2BD3FEA1F32C1FBCB2C3B74FDEEB2CC69D12696757` |
+| **[`kioku-v3.2-release.apk`](kioku-v3.2-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.9 MB | `051A51EF91ADB66DF998F01D595C9D153550DBBD81BA644439D31B703122321F` |
+| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.9 MB | `051A51EF91ADB66DF998F01D595C9D153550DBBD81BA644439D31B703122321F` |
 
 ---
 
@@ -29,9 +29,19 @@ adb install -r releases/kioku-v3.2-release.apk
 
 ## 📋 Release Highlights (V3.2)
 
+### 🔗 Direct App Deep Linking & Auto-Join (Friends & Albums)
+- **Instant App Interception**: Registered native Android intent filters and app link handlers for `kioku://invite?...` and `https://kioku.app/invite?...` directly in `MainActivity.kt` and `AndroidManifest.xml`.
+- **Zero GitHub Redirection**: All GitHub links removed from album invitations and profile sharing. Tapping any shared link immediately opens the installed Kioku app.
+- **Automatic Mutual Friend Connection**: Clicking an invite link automatically connects the recipient with the sharer, registering their friend code and display name in their connected friends list without manual entry.
+- **Automatic Album Enrollment**: The shared album is immediately saved and enrolled into the recipient's album roster, navigating straight to the album detail screen with confirmation feedback.
+
+### 🖼️ Eliminated Feed Image Glitch & Recycled Tile Flickering
+- **Clean Widget Recycling**: Added lifecycle state invalidation (`didUpdateWidget`) in `DriveThumb` and unique item keys in `MemoryCard` to prevent Flutter's scroll recycler from painting previous pictures in place of incoming items.
+- **In-Memory Byte Cache**: Fast-scrolling loads cached image bytes instantaneously, avoiding re-fetching delays and flicker.
+
 ### 👥 Connected Friends in Album Invites
 - **Integrated Friends Roster**: When adding or inviting members to an album (from either `AlbumDetailScreen` or the profile albums list), the user's connected friends list is prominently displayed at the top of the dialog.
-- **One-Tap Invite Dispatch**: Tap on any connected friend to instantly generate and share the album deep link invite (`kioku://album/<albumId>`) directly.
+- **One-Tap Invite Dispatch**: Tap on any connected friend to instantly generate and share the album deep link invite directly.
 - **Direct Email Fallback**: Direct Google Drive email invitation remains accessible immediately below the friends roster.
 
 ### 🖼️ Album Thumbnails & Centered Morphing Typography

@@ -34,10 +34,14 @@ class _AlbumDetailScreenState extends ConsumerState<AlbumDetailScreen> {
   }
 
   void _shareInviteLink(String title) {
+    final userProfile = ref.read(userProfileProvider);
+    final link = 'https://kioku.app/invite?albumId=${widget.albumId}&albumName=${Uri.encodeComponent(title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}';
+    final appUri = 'kioku://invite?albumId=${widget.albumId}&albumName=${Uri.encodeComponent(title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}';
+
     Share.share(
-      'Join my memory album "$title" on Kioku!\n'
-      'App: https://github.com/anjishnughosh72501/Kioku\n'
-      'Deep link: kioku://album/${widget.albumId}',
+      'Join my memory album "$title" on Kioku!\n\n'
+      'Tap to open and join:\n$link\n\n'
+      'Or app link: $appUri',
       subject: 'Kioku Memory Album: $title',
     );
   }
@@ -124,10 +128,14 @@ class _AlbumDetailScreenState extends ConsumerState<AlbumDetailScreen> {
                               trailing: Icon(Icons.send_rounded, size: 15, color: colors.accentDark),
                               onTap: () {
                                 Navigator.of(dialogContext).pop();
+                                final userProfile = ref.read(userProfileProvider);
+                                final link = 'https://kioku.app/invite?albumId=${widget.albumId}&albumName=${Uri.encodeComponent(title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}';
+                                final appUri = 'kioku://invite?albumId=${widget.albumId}&albumName=${Uri.encodeComponent(title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}';
+
                                 Share.share(
-                                  'Hey $code! Join my memory album "$title" on Kioku!\n'
-                                  'App: https://github.com/anjishnughosh72501/Kioku\n'
-                                  'Deep link: kioku://album/${widget.albumId}',
+                                  'Hey $code! Join my memory album "$title" on Kioku!\n\n'
+                                  'Tap to open and join:\n$link\n\n'
+                                  'Or app link: $appUri',
                                   subject: 'Kioku Memory Album: $title',
                                 );
                               },

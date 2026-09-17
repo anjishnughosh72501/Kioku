@@ -74,6 +74,8 @@ class KiokuMemory {
     this.driveOwnerEmail,
     this.sizeBytes,
     this.localPath,
+    this.albumId,
+    this.albumName,
   });
 
   final String id;
@@ -88,6 +90,42 @@ class KiokuMemory {
   final String? driveOwnerEmail;
   final int? sizeBytes;
   final String? localPath;
+  final String? albumId;
+  final String? albumName;
+
+  KiokuMemory copyWith({
+    String? id,
+    String? fileName,
+    String? mimeType,
+    String? caption,
+    String? takenAtIso,
+    String? uploaderName,
+    String? uploaderEmail,
+    DateTime? addedAt,
+    String? thumbnailUrl,
+    String? driveOwnerEmail,
+    int? sizeBytes,
+    String? localPath,
+    String? albumId,
+    String? albumName,
+  }) {
+    return KiokuMemory(
+      id: id ?? this.id,
+      fileName: fileName ?? this.fileName,
+      mimeType: mimeType ?? this.mimeType,
+      caption: caption ?? this.caption,
+      takenAtIso: takenAtIso ?? this.takenAtIso,
+      uploaderName: uploaderName ?? this.uploaderName,
+      uploaderEmail: uploaderEmail ?? this.uploaderEmail,
+      addedAt: addedAt ?? this.addedAt,
+      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
+      driveOwnerEmail: driveOwnerEmail ?? this.driveOwnerEmail,
+      sizeBytes: sizeBytes ?? this.sizeBytes,
+      localPath: localPath ?? this.localPath,
+      albumId: albumId ?? this.albumId,
+      albumName: albumName ?? this.albumName,
+    );
+  }
 
   bool get isLocal => localPath != null && localPath!.isNotEmpty;
   bool get isVideo => mimeType.startsWith('video/');

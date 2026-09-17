@@ -117,8 +117,8 @@ class MemoryCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final albums = ref.watch(albumsProvider).valueOrNull ?? [];
     final activeAlbumId = ref.watch(activeAlbumProvider);
-    final currentAlbum = albums.where((a) => a.id == activeAlbumId).firstOrNull;
-    final displayAlbum = albumName ?? currentAlbum?.title ?? 'Album';
+    final currentAlbum = albums.where((a) => a.id == (item.albumId ?? activeAlbumId)).firstOrNull;
+    final displayAlbum = albumName ?? item.albumName ?? currentAlbum?.title ?? 'Album';
 
     return ClayCard(
       variant: ClayVariant.defaultCard,
@@ -134,7 +134,10 @@ class MemoryCard extends ConsumerWidget {
               borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusCard)),
               child: Hero(
                 tag: 'memory_media_${item.id}',
-                child: DriveThumb(memory: item),
+                child: DriveThumb(
+                  key: ValueKey('thumb_${item.id}'),
+                  memory: item,
+                ),
               ),
             ),
           ),

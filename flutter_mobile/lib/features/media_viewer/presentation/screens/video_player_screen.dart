@@ -69,7 +69,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
     try {
       final mem = widget.memory;
       final VideoPlayerController controller;
-      final activeAlbum = ref.read(activeAlbumProvider) ?? '';
+      final activeAlbum = mem?.albumId ?? ref.read(activeAlbumProvider) ?? '';
 
       final isEncrypted = (mem?.localPath != null && mem!.localPath!.endsWith('.enc')) ||
           (mem?.id != null && mem!.id.endsWith('.enc')) ||

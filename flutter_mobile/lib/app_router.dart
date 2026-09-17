@@ -21,6 +21,11 @@ import 'features/profile/presentation/screens/storage_setup_screen.dart';
 import 'features/albums/presentation/screens/albums_screen.dart';
 import 'features/albums/presentation/screens/album_detail_screen.dart';
 
+import 'core/services/user_profile_service.dart';
+import 'core/storage/local_storage_service.dart';
+import 'core/providers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 /// GoRouter provider with auth state listener
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authControllerProvider);
@@ -31,10 +36,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final isAuth = authState.isAuthenticated;
       final isJoinScreen = state.matchedLocation == '/join';
+      final isInvite = state.matchedLocation.startsWith('/invite');
 
       if (authState.isLoading) return null;
 
       if (!isAuth && !isJoinScreen) {
+        if (isInvite) {
+          SharedPreferences.getInstance().then((prefs) {
+            prefs.setString('pending_deep_link', state.uri.toString());
+          });
+        }
         return '/join';
       }
 
@@ -131,6 +142,46 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               );
             },
           );
+        },
+      ),
+      GoRoute(
+        path: '/album/:id',
+        name: 'album-alias',
+        redirect: (context, state) {
+          final id = state.pathParameters['id']!;
+          return '/albums/$id';
+        },
+      ),
+      GoRoute(
+        path: '/invite',
+        name: 'invite',
+        redirect: (context, state) async {
+          final uri = state.uri;
+          final albumId = uri.queryParameters['albumId'];
+          final albumName = uri.queryParameters['albumName'] ?? 'Shared Album';
+          final friendCode = uri.queryParameters['friendCode'];
+          final from = uri.queryParameters['from'];
+          final storage = uri.queryParameters['storage'] ?? 'local';
+
+          if (friendCode != null && friendCode.trim().isNotEmpty) {
+            await UserProfileService.instance.addFriend(friendCode.trim(), displayName: from);
+            ref.invalidate(connectedFriendsProvider);
+          }
+
+          if (albumId != null && albumId.trim().isNotEmpty) {
+            final cleanId = albumId.trim();
+            await LocalStorageService.instance.ensureAlbum(
+              id: cleanId,
+              name: albumName,
+              storageType: storage,
+            );
+            await ref.read(albumsProvider.notifier).refresh();
+            await ref.read(activeAlbumProvider.notifier).set(cleanId);
+            await ref.read(memoriesProvider.notifier).refresh();
+            return '/albums/$cleanId';
+          }
+
+          return '/';
         },
       ),
       GoRoute(

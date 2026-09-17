@@ -78,7 +78,7 @@ class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen>
   }
 
   Future<Uint8List> _loadBytes() async {
-    final activeAlbum = ref.read(activeAlbumProvider) ?? '';
+    final activeAlbum = widget.memory?.albumId ?? ref.read(activeAlbumProvider) ?? '';
     if (activeAlbum.isNotEmpty) {
       try {
         final repo = ref.read(encryptedMemoryRepositoryProvider);

@@ -12,7 +12,6 @@ import 'package:flutter_mobile/core/drive/app_drive.dart';
 import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/core/providers.dart';
-import 'package:flutter_mobile/features/feed/data/encrypted_memory_repository.dart';
 
 class DriveThumb extends ConsumerStatefulWidget {
   const DriveThumb({super.key, required this.memory});
@@ -24,38 +23,82 @@ class DriveThumb extends ConsumerStatefulWidget {
 }
 
 class _DriveThumbState extends ConsumerState<DriveThumb> {
-  late Future<Uint8List> _future;
-  KiokuMemory? _forMemory;
+  static final Map<String, Uint8List> _thumbCache = {};
+
+  Uint8List? _bytes;
+  bool _isLoading = false;
+  bool _hasError = false;
+  String? _loadedMemoryId;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _ensureFuture();
+  void initState() {
+    super.initState();
+    _loadBytes();
   }
 
-  void _ensureFuture() {
-    final memory = widget.memory;
-    if (_forMemory?.id != memory.id) {
-      _forMemory = memory;
-      final activeAlbum = ref.read(activeAlbumProvider) ?? 'default';
-      final repo = ref.read(encryptedMemoryRepositoryProvider);
-      if (memory.localPath != null && memory.localPath!.isNotEmpty) {
-        _future = File(memory.localPath!).readAsBytes();
-      } else {
-        _future = _fetchBytes(repo, memory, activeAlbum);
-      }
+  @override
+  void didUpdateWidget(covariant DriveThumb oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.memory.id != widget.memory.id ||
+        oldWidget.memory.localPath != widget.memory.localPath) {
+      _loadBytes();
     }
   }
 
-  Future<Uint8List> _fetchBytes(
-    EncryptedMemoryRepository repo,
-    KiokuMemory memory,
-    String activeAlbum,
-  ) async {
+  void _loadBytes() {
+    final memory = widget.memory;
+    _loadedMemoryId = memory.id;
+
+    // 1. Check in-memory cache
+    final cached = _thumbCache[memory.id];
+    if (cached != null) {
+      setState(() {
+        _bytes = cached;
+        _isLoading = false;
+        _hasError = false;
+      });
+      return;
+    }
+
+    // 2. Immediately clear stale image from previous memory item
+    setState(() {
+      _bytes = null;
+      _isLoading = true;
+      _hasError = false;
+    });
+
+    final targetId = memory.id;
+    _fetchBytes(memory).then((bytes) {
+      if (!mounted || _loadedMemoryId != targetId) return;
+      _thumbCache[targetId] = bytes;
+      setState(() {
+        _bytes = bytes;
+        _isLoading = false;
+        _hasError = false;
+      });
+    }).catchError((_) {
+      if (!mounted || _loadedMemoryId != targetId) return;
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+      });
+    });
+  }
+
+  Future<Uint8List> _fetchBytes(KiokuMemory memory) async {
+    if (memory.localPath != null && memory.localPath!.isNotEmpty) {
+      final file = File(memory.localPath!);
+      if (await file.exists()) {
+        return await file.readAsBytes();
+      }
+    }
+
+    final albumId = memory.albumId ?? ref.read(activeAlbumProvider) ?? 'default';
+    final repo = ref.read(encryptedMemoryRepositoryProvider);
     try {
-      final thumb = await repo.getThumbnailBytes(memory.id, albumId: activeAlbum);
+      final thumb = await repo.getThumbnailBytes(memory.id, albumId: albumId);
       if (thumb != null) return thumb;
-      return await repo.getPhotoBytes(memory.id, albumId: activeAlbum);
+      return await repo.getPhotoBytes(memory.id, albumId: albumId);
     } catch (_) {
       if (!memory.id.startsWith('mem_') && !memory.id.endsWith('.enc')) {
         return await AppDrive.instance.photoBytes(memory.id);
@@ -71,6 +114,7 @@ class _DriveThumbState extends ConsumerState<DriveThumb> {
 
     if (memory.isVideo) {
       return Stack(
+        key: ValueKey('video_${memory.id}'),
         fit: StackFit.expand,
         children: [
           Container(
@@ -93,35 +137,35 @@ class _DriveThumbState extends ConsumerState<DriveThumb> {
       );
     }
 
-    return FutureBuilder<Uint8List>(
-      future: _future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Container(
-            color: colors.surfaceContainerLow,
-            child: Center(
-              child: Icon(Icons.image_outlined, size: 40, color: colors.inkSubtle),
-            ),
-          );
-        }
-        if (snapshot.hasError || snapshot.data == null) {
-          return Container(
-            color: colors.surfaceContainerLow,
-            child: Center(
-              child: Icon(Icons.broken_image_outlined, size: 40, color: colors.inkSubtle),
-            ),
-          );
-        }
-        return Image.memory(
-          snapshot.data!,
-          fit: BoxFit.cover,
-          gaplessPlayback: true,
-          filterQuality: FilterQuality.medium,
-          semanticLabel: memory.caption != null && memory.caption!.isNotEmpty
-              ? memory.caption
-              : 'Memory from ${memory.postmarkDate}',
-        );
-      },
+    if (_isLoading) {
+      return Container(
+        key: ValueKey('loading_${memory.id}'),
+        color: colors.surfaceContainerLow,
+        child: Center(
+          child: Icon(Icons.image_outlined, size: 40, color: colors.inkSubtle),
+        ),
+      );
+    }
+
+    if (_hasError || _bytes == null) {
+      return Container(
+        key: ValueKey('error_${memory.id}'),
+        color: colors.surfaceContainerLow,
+        child: Center(
+          child: Icon(Icons.broken_image_outlined, size: 40, color: colors.inkSubtle),
+        ),
+      );
+    }
+
+    return Image.memory(
+      _bytes!,
+      key: ValueKey('img_${memory.id}'),
+      fit: BoxFit.cover,
+      gaplessPlayback: false,
+      filterQuality: FilterQuality.medium,
+      semanticLabel: memory.caption != null && memory.caption!.isNotEmpty
+          ? memory.caption
+          : 'Memory from ${memory.postmarkDate}',
     );
   }
 }

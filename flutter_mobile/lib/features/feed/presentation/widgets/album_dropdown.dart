@@ -108,10 +108,13 @@ class AlbumDropdown extends ConsumerWidget {
                       icon: Icon(Icons.share_outlined, size: 18, color: colors.accentDark),
                       tooltip: 'Invite friends to album',
                       onPressed: () {
+                        final userProfile = ref.read(userProfileProvider);
+                        final link = 'https://kioku.app/invite?albumId=${album.id}&albumName=${Uri.encodeComponent(album.title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}';
+                        final appUri = 'kioku://invite?albumId=${album.id}&albumName=${Uri.encodeComponent(album.title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}';
                         Share.share(
-                          'Join my memory album "${album.title}" on Kioku!\n'
-                          'Get the app: https://github.com/anjishnughosh72501/Kioku\n'
-                          'Open album: kioku://album/${album.id}',
+                          'Join my memory album "${album.title}" on Kioku!\n\n'
+                          'Tap to open and join:\n$link\n\n'
+                          'Or app link: $appUri',
                           subject: 'Kioku Memory Album: ${album.title}',
                         );
                       },

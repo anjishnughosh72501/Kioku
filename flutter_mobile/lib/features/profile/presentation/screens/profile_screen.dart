@@ -623,9 +623,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                   const SizedBox(width: 8),
                                   InkWell(
                                     onTap: () {
+                                      final link = 'https://kioku.app/invite?friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}';
+                                      final appUri = 'kioku://invite?friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}';
                                       Share.share(
-                                        'Add me on Kioku! My friend code is: ${userProfile.friendCode}',
-                                        subject: 'Kioku Friend Code',
+                                        'Add me on Kioku!\n'
+                                        'Friend code: ${userProfile.friendCode}\n\n'
+                                        'Tap to connect:\n$link\n\n'
+                                        'Or app link: $appUri',
+                                        subject: 'Kioku Friend Invite',
                                       );
                                     },
                                     child: Icon(Icons.share_rounded, size: 16, color: colors.primary),
@@ -1000,10 +1005,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               trailing: Icon(Icons.send_rounded, size: 15, color: colors.accentDark),
                               onTap: () {
                                 Navigator.of(dialogContext).pop();
+                                final userProfile = ref.read(userProfileProvider);
+                                final link = 'https://kioku.app/invite?albumId=${album.id}&albumName=${Uri.encodeComponent(album.title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}';
+                                final appUri = 'kioku://invite?albumId=${album.id}&albumName=${Uri.encodeComponent(album.title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}';
                                 Share.share(
-                                  'Hey $code! Join my memory album "${album.title}" on Kioku!\n'
-                                  'Get the app: https://github.com/anjishnughosh72501/Kioku\n'
-                                  'Open album: kioku://album/${album.id}',
+                                  'Hey $code! Join my memory album "${album.title}" on Kioku!\n\n'
+                                  'Tap to open and join:\n$link\n\n'
+                                  'Or app link: $appUri',
                                   subject: 'Kioku Memory Album: ${album.title}',
                                 );
                               },
@@ -1048,10 +1056,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     const SizedBox(height: AppTheme.spacingMd),
                     OutlinedButton.icon(
                       onPressed: () {
+                        final userProfile = ref.read(userProfileProvider);
+                        final link = 'https://kioku.app/invite?albumId=${album.id}&albumName=${Uri.encodeComponent(album.title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}';
+                        final appUri = 'kioku://invite?albumId=${album.id}&albumName=${Uri.encodeComponent(album.title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}';
                         Share.share(
-                          'Join my memory album "${album.title}" on Kioku!\n'
-                          'Get the app: https://github.com/anjishnughosh72501/Kioku\n'
-                          'Open album: kioku://album/${album.id}',
+                          'Join my memory album "${album.title}" on Kioku!\n\n'
+                          'Tap to open and join:\n$link\n\n'
+                          'Or app link: $appUri',
                           subject: 'Kioku Memory Album: ${album.title}',
                         );
                       },

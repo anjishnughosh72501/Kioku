@@ -22,6 +22,7 @@ import 'package:flutter_mobile/core/storage/s3_storage_provider.dart';
 import 'package:flutter_mobile/core/storage/webdav_storage_provider.dart';
 import 'package:flutter_mobile/core/storage/mesh_storage_provider.dart';
 import 'package:flutter_mobile/core/storage/storage_settings_service.dart';
+import 'package:flutter_mobile/core/storage/local_storage_service.dart';
 import 'package:flutter_mobile/core/utils/lru_cache.dart';
 import 'package:flutter_mobile/features/feed/data/encrypted_memory_repository.dart';
 
@@ -310,6 +311,20 @@ class Albums extends AsyncNotifier<List<Album>> {
     }
   }
 
+  Future<Album> joinAlbum({
+    required String id,
+    required String name,
+    String? storageType,
+  }) async {
+    final album = await LocalStorageService.instance.ensureAlbum(
+      id: id,
+      name: name,
+      storageType: storageType ?? 'local',
+    );
+    await refresh();
+    return album;
+  }
+
   Future<void> share(String albumId, String email) async {
     try {
       await ref.read(memoryRepositoryProvider).shareAlbum(albumId, email);
@@ -330,7 +345,7 @@ final albumMemoriesProvider = FutureProvider.family<List<KiokuMemory>, String>((
 
 final isPaginatingMemoriesProvider = StateProvider<bool>((ref) => false);
 
-/// Memories of the feed (shows all updates or active album).
+/// Memories of the feed (shows all updates across all albums).
 class Memories extends AsyncNotifier<List<KiokuMemory>> {
   String? _nextPageToken;
   bool _hasMore = true;
@@ -341,7 +356,6 @@ class Memories extends AsyncNotifier<List<KiokuMemory>> {
 
   @override
   Future<List<KiokuMemory>> build() async {
-    final albumId = ref.watch(activeAlbumProvider);
     final albums = await ref.watch(albumsProvider.future);
     if (albums.isEmpty) {
       _nextPageToken = null;
@@ -349,19 +363,13 @@ class Memories extends AsyncNotifier<List<KiokuMemory>> {
       return const [];
     }
 
-    if (albumId != null && albumId != 'all' && albums.any((a) => a.id == albumId)) {
-      final page = await ref.watch(memoryRepositoryProvider).getMemoriesPage(albumId);
-      _nextPageToken = page.nextPageToken;
-      _hasMore = page.nextPageToken != null;
-      return page.items;
-    }
-
-    // Feed shows all updates across all albums
+    // Feed shows all updates across all albums irrespective of which album is selected.
     final repo = ref.read(memoryRepositoryProvider);
     final results = await Future.wait(
       albums.map((album) async {
         try {
-          return await repo.getMemories(album.id);
+          final mems = await repo.getMemories(album.id);
+          return mems.map((m) => m.copyWith(albumId: album.id, albumName: album.title)).toList();
         } catch (_) {
           return <KiokuMemory>[];
         }
@@ -375,7 +383,6 @@ class Memories extends AsyncNotifier<List<KiokuMemory>> {
   }
 
   Future<void> refresh() async {
-    final albumId = ref.read(activeAlbumProvider);
     final albums = await ref.read(albumsProvider.future);
     if (albums.isEmpty) {
       state = const AsyncData([]);
@@ -384,18 +391,12 @@ class Memories extends AsyncNotifier<List<KiokuMemory>> {
 
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
-      if (albumId != null && albumId != 'all' && albums.any((a) => a.id == albumId)) {
-        final page = await ref.read(memoryRepositoryProvider).getMemoriesPage(albumId);
-        _nextPageToken = page.nextPageToken;
-        _hasMore = page.nextPageToken != null;
-        return page.items;
-      }
-
       final repo = ref.read(memoryRepositoryProvider);
       final results = await Future.wait(
         albums.map((album) async {
           try {
-            return await repo.getMemories(album.id);
+            final mems = await repo.getMemories(album.id);
+            return mems.map((m) => m.copyWith(albumId: album.id, albumName: album.title)).toList();
           } catch (_) {
             return <KiokuMemory>[];
           }

@@ -11,6 +11,8 @@ import 'package:flutter_mobile/core/crypto/key_store.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/app_router.dart';
 
+import 'package:flutter_mobile/core/services/deep_link_service.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await UserProfileService.instance.init();
@@ -28,11 +30,31 @@ void main() async {
 }
 
 /// Main app widget with theming and routing
-class KiokuApp extends ConsumerWidget {
+class KiokuApp extends ConsumerStatefulWidget {
   const KiokuApp({super.key});
 
-@override
-  Widget build(BuildContext context, WidgetRef ref) {
+  @override
+  ConsumerState<KiokuApp> createState() => _KiokuAppState();
+}
+
+class _KiokuAppState extends ConsumerState<KiokuApp> {
+  @override
+  void initState() {
+    super.initState();
+    DeepLinkService.instance.setHandler((uri) async {
+      if (mounted) {
+        await DeepLinkService.handleIncomingUri(
+          uri: uri,
+          ref: ref,
+          context: context,
+        );
+      }
+    });
+    DeepLinkService.instance.init();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
     final router = ref.watch(appRouterProvider);
 

@@ -102,6 +102,39 @@ class LocalStorageService {
     return newAlbum;
   }
 
+  /// Ensures an album exists by id and name (used when joining via invite link).
+  Future<Album> ensureAlbum({
+    required String id,
+    required String name,
+    String storageType = 'local',
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final albums = await _loadRawAlbums();
+
+    final existing = albums.where((a) => a.id == id).firstOrNull;
+    if (existing != null) {
+      return existing;
+    }
+
+    final newAlbum = Album(
+      id: id,
+      name: name.trim().isEmpty ? 'Shared Album' : name.trim(),
+      storageType: storageType,
+    );
+
+    // Create folder on disk
+    await getAlbumDirectory(id);
+
+    final updated = [
+      ...albums.map((a) => {'id': a.id, 'name': a.name}),
+      {'id': newAlbum.id, 'name': newAlbum.name},
+    ];
+
+    await prefs.setString(_kAlbumsKey, jsonEncode(updated));
+    await prefs.setString('album_storage_$id', storageType);
+    return newAlbum;
+  }
+
   /// Deletes a local album and removes all its photos from disk.
   Future<void> deleteAlbum(String albumId) async {
     final prefs = await SharedPreferences.getInstance();

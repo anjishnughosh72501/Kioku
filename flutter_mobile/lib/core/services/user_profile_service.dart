@@ -82,12 +82,15 @@ class UserProfileService {
     return prefs.getStringList(_keyConnectedFriends) ?? [];
   }
 
-  Future<bool> addFriend(String friendCode) async {
+  Future<bool> addFriend(String friendCode, {String? displayName}) async {
     final code = friendCode.trim().toUpperCase();
     if (code.isEmpty || code == _currentProfile?.friendCode) return false;
 
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList(_keyConnectedFriends) ?? [];
+    if (displayName != null && displayName.trim().isNotEmpty) {
+      await prefs.setString('kioku_friend_name_$code', displayName.trim());
+    }
     if (!list.contains(code)) {
       list.add(code);
       await prefs.setStringList(_keyConnectedFriends, list);
@@ -97,10 +100,16 @@ class UserProfileService {
     return false;
   }
 
+  Future<String?> getFriendName(String friendCode) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('kioku_friend_name_${friendCode.trim().toUpperCase()}');
+  }
+
   Future<bool> removeFriend(String friendCode) async {
     final code = friendCode.trim().toUpperCase();
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList(_keyConnectedFriends) ?? [];
+    await prefs.remove('kioku_friend_name_$code');
     if (list.remove(code)) {
       await prefs.setStringList(_keyConnectedFriends, list);
       _notifyFriendListeners();
