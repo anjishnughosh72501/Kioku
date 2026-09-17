@@ -13,7 +13,7 @@ import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:flutter_mobile/features/feed/presentation/widgets/memory_card.dart';
 
-import 'package:flutter_mobile/core/services/user_profile_service.dart';
+import 'package:flutter_mobile/features/auth/presentation/widgets/username_dialog.dart';
 import 'package:flutter_mobile/features/feed/presentation/widgets/shimmer_skeleton_card.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
 import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
@@ -35,6 +35,11 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     _scrollController.addListener(_onScroll);
     SharedPreferences.getInstance().then((prefs) {
       prefs.setBool('first_startup_completed', true);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        UsernameDialog.showIfNeeded(context);
+      }
     });
   }
 
@@ -107,7 +112,8 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     AppColors colors,
     TextTheme typography,
   ) {
-    final storedName = UserProfileService.instance.username;
+    final profile = ref.watch(userProfileProvider);
+    final storedName = profile.username;
     final firstName = storedName.isNotEmpty && storedName != 'Storyteller'
         ? storedName
         : (authState.displayName?.trim().split(' ').first ?? 'Friend');

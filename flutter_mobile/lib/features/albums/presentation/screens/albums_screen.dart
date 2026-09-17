@@ -19,10 +19,57 @@ class AlbumsScreen extends ConsumerWidget {
     WidgetRef ref,
     Album album,
   ) async {
+    final hasThumb = album.thumbnailPath != null &&
+        album.thumbnailPath!.isNotEmpty &&
+        File(album.thumbnailPath!).existsSync();
+
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from Gallery'),
+              onTap: () => Navigator.of(ctx).pop('gallery'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take Photo'),
+              onTap: () => Navigator.of(ctx).pop('camera'),
+            ),
+            if (hasThumb)
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text('Remove Thumbnail', style: TextStyle(color: Colors.red)),
+                onTap: () => Navigator.of(ctx).pop('remove'),
+              ),
+          ],
+        ),
+      ),
+    );
+
+    if (action == null || !context.mounted) return;
+
+    if (action == 'remove') {
+      await ref.read(albumsProvider.notifier).setAlbumThumbnail(album.id, null);
+      await ref.read(albumsProvider.notifier).refresh();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Thumbnail removed for "${album.title}"')),
+        );
+      }
+      return;
+    }
+
     try {
       final picker = ImagePicker();
       final picked = await picker.pickImage(
-        source: ImageSource.gallery,
+        source: action == 'camera' ? ImageSource.camera : ImageSource.gallery,
         maxWidth: 1200,
         maxHeight: 1200,
         imageQuality: 85,
@@ -31,6 +78,7 @@ class AlbumsScreen extends ConsumerWidget {
         await ref
             .read(albumsProvider.notifier)
             .setAlbumThumbnail(album.id, picked.path);
+        await ref.read(albumsProvider.notifier).refresh();
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -192,110 +240,122 @@ class AlbumsScreen extends ConsumerWidget {
     return ClayCard(
       variant: ClayVariant.defaultCard,
       padding: EdgeInsets.zero,
-      onTap: () {
-        ref.read(activeAlbumProvider.notifier).set(album.id);
-        context.push('/albums/${album.id}', extra: album);
-      },
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppTheme.radiusCard),
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Background Image or tinted stylized paper background
-            if (hasThumb)
-              Image.file(
-                File(album.thumbnailPath!),
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    _buildFallbackBackground(albumTint),
-              )
-            else
-              _buildFallbackBackground(albumTint),
-
-            // Morphing vignette / dark overlay to blend image and text seamlessly
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: hasThumb ? 0.35 : 0.15),
-                    Colors.black.withValues(alpha: hasThumb ? 0.55 : 0.40),
-                    Colors.black.withValues(alpha: hasThumb ? 0.80 : 0.65),
-                  ],
-                  stops: const [0.0, 0.5, 1.0],
-                ),
-              ),
-            ),
-
-            // Centered morphing text and storage badge
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
+            // Card body tap target (navigates to album, long-press to edit thumbnail)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  ref.read(activeAlbumProvider.notifier).set(album.id);
+                  context.push('/albums/${album.id}', extra: album);
+                },
+                onLongPress: () => _pickThumbnailForAlbum(context, ref, album),
+                child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    // Centered album title morphing with the picture
-                    Text(
-                      album.title,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: typography.titleLarge?.copyWith(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.3,
-                        shadows: [
-                          Shadow(
-                            color: Colors.black.withValues(alpha: 0.85),
-                            offset: const Offset(0, 1.5),
-                            blurRadius: 6,
-                          ),
-                          Shadow(
-                            color: Colors.black.withValues(alpha: 0.4),
-                            offset: const Offset(0, 3),
-                            blurRadius: 10,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
+                    // Background Image or tinted stylized paper background
+                    if (hasThumb)
+                      Image.file(
+                        File(album.thumbnailPath!),
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            _buildFallbackBackground(albumTint),
+                      )
+                    else
+                      _buildFallbackBackground(albumTint),
 
-                    // Storage and memories indicator badge
+                    // Morphing vignette / dark overlay to blend image and text seamlessly
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.25),
-                          width: 0.8,
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withValues(alpha: hasThumb ? 0.35 : 0.15),
+                            Colors.black.withValues(alpha: hasThumb ? 0.55 : 0.40),
+                            Colors.black.withValues(alpha: hasThumb ? 0.80 : 0.65),
+                          ],
+                          stops: const [0.0, 0.5, 1.0],
                         ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            album.storageType.toLowerCase() == 'google'
-                                ? Icons.cloud_outlined
-                                : Icons.folder_outlined,
-                            size: 11,
-                            color: Colors.white70,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            album.storageType.toUpperCase(),
-                            style: const TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.8,
-                              color: Colors.white,
+                    ),
+
+                    // Centered morphing text and storage badge
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            // Centered album title morphing with the picture
+                            Text(
+                              album.title,
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: typography.titleLarge?.copyWith(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.3,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black.withValues(alpha: 0.85),
+                                    offset: const Offset(0, 1.5),
+                                    blurRadius: 6,
+                                  ),
+                                  Shadow(
+                                    color: Colors.black.withValues(alpha: 0.4),
+                                    offset: const Offset(0, 3),
+                                    blurRadius: 10,
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 8),
+
+                            // Storage and memories indicator badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.25),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    album.storageType.toLowerCase() == 'google'
+                                        ? Icons.cloud_outlined
+                                        : Icons.folder_outlined,
+                                    size: 11,
+                                    color: Colors.white70,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    album.storageType.toUpperCase(),
+                                    style: const TextStyle(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.8,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -303,30 +363,36 @@ class AlbumsScreen extends ConsumerWidget {
               ),
             ),
 
-            // Top-right host thumbnail picker action button
+            // Top-right host thumbnail picker action button (isolated gesture arena)
             Positioned(
-              top: 6,
-              right: 6,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => _pickThumbnailForAlbum(context, ref, album),
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.45),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.3),
-                        width: 0.8,
+              top: 8,
+              right: 8,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _pickThumbnailForAlbum(context, ref, album),
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.65),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.45),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1.5),
                       ),
-                    ),
-                    child: Icon(
-                      hasThumb ? Icons.edit_outlined : Icons.add_a_photo_outlined,
-                      size: 15,
-                      color: Colors.white,
-                    ),
+                    ],
+                  ),
+                  child: Icon(
+                    hasThumb ? Icons.edit_outlined : Icons.add_a_photo_outlined,
+                    size: 17,
+                    color: Colors.white,
                   ),
                 ),
               ),

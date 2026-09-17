@@ -55,8 +55,9 @@ class LocalStorageService {
         if (item is Map<String, dynamic>) {
           final id = item['id']?.toString() ?? '';
           final name = item['name']?.toString() ?? '';
+          final thumb = item['thumbnailPath']?.toString();
           if (id.isNotEmpty && name.isNotEmpty) {
-            albums.add(Album(id: id, name: name));
+            albums.add(Album(id: id, name: name, thumbnailPath: thumb));
           }
         }
       }
@@ -64,6 +65,34 @@ class LocalStorageService {
     } catch (_) {
       return [];
     }
+  }
+
+  /// Updates the stored thumbnail path for an album in the metadata index.
+  Future<void> updateAlbumThumbnail(String albumId, String? thumbnailPath) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_kAlbumsKey);
+    if (raw == null || raw.isEmpty) return;
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      final updated = <Map<String, dynamic>>[];
+      for (final item in list) {
+        if (item is Map<String, dynamic>) {
+          final id = item['id']?.toString() ?? '';
+          if (id == albumId) {
+            final map = Map<String, dynamic>.from(item);
+            if (thumbnailPath != null && thumbnailPath.isNotEmpty) {
+              map['thumbnailPath'] = thumbnailPath;
+            } else {
+              map.remove('thumbnailPath');
+            }
+            updated.add(map);
+          } else {
+            updated.add(item);
+          }
+        }
+      }
+      await prefs.setString(_kAlbumsKey, jsonEncode(updated));
+    } catch (_) {}
   }
 
   /// Lists all local albums stored on device.

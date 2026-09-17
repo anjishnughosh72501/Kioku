@@ -43,7 +43,10 @@ class MockMemoryRepo implements IMemoryRepository {
 
 void main() {
   setUp(() {
-    SharedPreferences.setMockInitialValues({'active_album_id': 'album_1'});
+    SharedPreferences.setMockInitialValues({
+      'active_album_id': 'album_1',
+      'kioku_username': 'Alice',
+    });
   });
 
   group('FeedScreen', () {

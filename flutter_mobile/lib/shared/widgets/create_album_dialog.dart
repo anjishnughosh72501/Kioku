@@ -127,7 +127,7 @@ class _CreateAlbumDialogState extends ConsumerState<CreateAlbumDialog> {
           children: [
             TextField(
               controller: _controller,
-              autofocus: true,
+              autofocus: false,
               maxLength: 80,
               decoration: InputDecoration(
                 labelText: 'Album Name',

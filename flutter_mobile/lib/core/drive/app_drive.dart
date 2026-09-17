@@ -28,6 +28,7 @@ class AppDrive {
   final ByteBudgetLruCache _bytesCache = ByteBudgetLruCache(maxBytes: 50 * 1024 * 1024); // 50MB
 
   bool get isBound => _account != null;
+  GoogleSignInAccount? get account => _account;
 
   /// Attach the signed-in account. Subsequent Drive calls use its token.
   void bind(GoogleSignInAccount account) {

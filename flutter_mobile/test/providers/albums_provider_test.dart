@@ -48,6 +48,7 @@ class MockMemoryRepository implements IMemoryRepository {
 
 void main() {
   setUp(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
   });
 
@@ -96,6 +97,25 @@ void main() {
       expect(container.read(activeAlbumProvider), '2');
       final currentAlbums = container.read(albumsProvider).value;
       expect(currentAlbums?.any((a) => a.id == '2' && a.name == 'Tokyo 2026'), isTrue);
+    });
+
+    test('setAlbumThumbnail updates album thumbnail and persists in state', () async {
+      final mockRepo = MockMemoryRepository();
+      final container = ProviderContainer(
+        overrides: [
+          memoryRepositoryProvider.overrideWithValue(mockRepo),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      // Load albums first
+      await container.read(albumsProvider.future);
+
+      // Update thumbnail
+      await container.read(albumsProvider.notifier).setAlbumThumbnail('1', 'some/test/path.jpg');
+      final updated = container.read(albumsProvider).value;
+      final album1 = updated?.firstWhere((a) => a.id == '1');
+      expect(album1?.thumbnailPath, 'some/test/path.jpg');
     });
   });
 }

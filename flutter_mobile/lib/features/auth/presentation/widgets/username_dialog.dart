@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_mobile/core/drive/app_drive.dart';
 import 'package:flutter_mobile/core/services/user_profile_service.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
@@ -7,14 +9,31 @@ class UsernameDialog extends StatefulWidget {
   const UsernameDialog({super.key, this.isDismissible = true});
 
   final bool isDismissible;
+  static bool _isShowing = false;
 
   static Future<void> showIfNeeded(BuildContext context) async {
+    if (_isShowing) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString('kioku_username');
+      if (saved != null && saved.trim().isNotEmpty && saved.trim() != 'Storyteller') {
+        return;
+      }
+    } catch (_) {}
+
+    if (!context.mounted) return;
+
     if (!UserProfileService.instance.hasUsername) {
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: true,
-        builder: (context) => const UsernameDialog(isDismissible: true),
-      );
+      _isShowing = true;
+      try {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const UsernameDialog(isDismissible: false),
+        );
+      } finally {
+        _isShowing = false;
+      }
     }
   }
 
@@ -39,8 +58,11 @@ class _UsernameDialogState extends State<UsernameDialog> {
   void initState() {
     super.initState();
     final current = UserProfileService.instance.username;
-    if (current != 'Storyteller') {
+    if (current.isNotEmpty && current != 'Storyteller') {
       _controller.text = current;
+    } else if (AppDrive.instance.account?.displayName != null &&
+        AppDrive.instance.account!.displayName!.isNotEmpty) {
+      _controller.text = AppDrive.instance.account!.displayName!;
     }
   }
 
@@ -123,7 +145,7 @@ class _UsernameDialogState extends State<UsernameDialog> {
               const SizedBox(height: AppTheme.spacingLg),
               TextField(
                 controller: _controller,
-                autofocus: true,
+                autofocus: false,
                 textCapitalization: TextCapitalization.words,
                 decoration: InputDecoration(
                   labelText: 'Username / Nickname',

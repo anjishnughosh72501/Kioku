@@ -3,6 +3,7 @@ library;
 
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/painting.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -266,7 +267,7 @@ class Albums extends AsyncNotifier<List<Album>> {
     final albums = await ref.watch(memoryRepositoryProvider).getAlbums();
     final prefs = await SharedPreferences.getInstance();
     return albums.map((a) {
-      final thumb = prefs.getString('album_thumb_${a.id}');
+      final thumb = prefs.getString('album_thumb_${a.id}') ?? a.thumbnailPath;
       final storage = prefs.getString('album_storage_${a.id}') ?? 'local';
       return a.copyWith(thumbnailPath: thumb, storageType: storage);
     }).toList();
@@ -278,7 +279,7 @@ class Albums extends AsyncNotifier<List<Album>> {
       final albums = await ref.read(memoryRepositoryProvider).getAlbums();
       final prefs = await SharedPreferences.getInstance();
       return albums.map((a) {
-        final thumb = prefs.getString('album_thumb_${a.id}');
+        final thumb = prefs.getString('album_thumb_${a.id}') ?? a.thumbnailPath;
         final storage = prefs.getString('album_storage_${a.id}') ?? 'local';
         return a.copyWith(thumbnailPath: thumb, storageType: storage);
       }).toList();
@@ -302,28 +303,67 @@ class Albums extends AsyncNotifier<List<Album>> {
     }
   }
 
-  Future<void> setAlbumThumbnail(String albumId, String thumbnailPath) async {
+  Future<void> setAlbumThumbnail(String albumId, String? thumbnailPath) async {
     final prefs = await SharedPreferences.getInstance();
-    final sourceFile = File(thumbnailPath);
-    String persistentPath = thumbnailPath;
-    if (await sourceFile.exists()) {
-      try {
-        final base = await LocalStorageService.instance.baseDirectory;
-        final thumbsDir = Directory('${base.parent.path}/Thumbnails');
-        if (!await thumbsDir.exists()) {
-          await thumbsDir.create(recursive: true);
+    String? persistentPath = thumbnailPath;
+
+    try {
+      final base = await LocalStorageService.instance.baseDirectory;
+      final thumbsDir = Directory('${base.parent.path}/Thumbnails');
+      if (!await thumbsDir.exists()) {
+        await thumbsDir.create(recursive: true);
+      }
+
+      // Clean up any old thumbnail files and evict them from imageCache
+      if (await thumbsDir.exists()) {
+        final oldMatches = thumbsDir
+            .listSync()
+            .whereType<File>()
+            .where((f) => f.uri.pathSegments.last.startsWith('album_thumb_$albumId'));
+        for (final oldFile in oldMatches) {
+          try {
+            await FileImage(oldFile).evict();
+            await oldFile.delete();
+          } catch (_) {}
         }
-        final ext = thumbnailPath.contains('.') ? thumbnailPath.split('.').last : 'jpg';
-        final destFile = File('${thumbsDir.path}/album_thumb_$albumId.$ext');
-        await sourceFile.copy(destFile.path);
-        persistentPath = destFile.path;
-      } catch (_) {}
+      }
+
+      if (thumbnailPath != null && thumbnailPath.isNotEmpty) {
+        final sourceFile = File(thumbnailPath);
+        if (await sourceFile.exists()) {
+          final ext = thumbnailPath.contains('.') ? thumbnailPath.split('.').last : 'jpg';
+          final timestamp = DateTime.now().millisecondsSinceEpoch;
+          final destFile = File('${thumbsDir.path}/album_thumb_${albumId}_$timestamp.$ext');
+          await sourceFile.copy(destFile.path);
+          persistentPath = destFile.path;
+        }
+      }
+    } catch (_) {
+      // In unit tests or environments without storage access, fallback to thumbnailPath
     }
 
-    await prefs.setString('album_thumb_$albumId', persistentPath);
+    if (persistentPath != null) {
+      await prefs.setString('album_thumb_$albumId', persistentPath);
+    } else {
+      await prefs.remove('album_thumb_$albumId');
+    }
+
+    // Clear live images & decoded cache to prevent showing stale bitmaps
+    try {
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+    } catch (_) {}
+
+    // Persist to local storage metadata
+    try {
+      await LocalStorageService.instance.updateAlbumThumbnail(albumId, persistentPath);
+    } catch (_) {}
+
     if (state.hasValue) {
       state = AsyncData(
-        state.requireValue.map((a) => a.id == albumId ? a.copyWith(thumbnailPath: persistentPath) : a).toList(),
+        state.requireValue
+            .map((a) => a.id == albumId ? a.copyWith(thumbnailPath: persistentPath) : a)
+            .toList(),
       );
     }
   }

@@ -6,8 +6,8 @@ This directory contains standalone release builds for Kioku.
 
 | File | Platform | Architecture | Size | SHA-256 Checksum |
 | :--- | :--- | :--- | :--- | :--- |
-| **[`kioku-v3.5-release.apk`](kioku-v3.5-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.8 MB | `72E3A4A39B13F59DDB52A2CA3EAC5D4A55DDD997320F7A8847803F3359C7A79C` |
-| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.8 MB | `72E3A4A39B13F59DDB52A2CA3EAC5D4A55DDD997320F7A8847803F3359C7A79C` |
+| **[`kioku-v3.5-release.apk`](kioku-v3.5-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.8 MB | `D2D26BA2E5854244EAA2F656547F0031DE41EA5300707DAD4F490B862C26DB5F` |
+| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.8 MB | `D2D26BA2E5854244EAA2F656547F0031DE41EA5300707DAD4F490B862C26DB5F` |
 
 ---
 
@@ -28,6 +28,15 @@ adb install -r releases/kioku-v3.5-release.apk
 ---
 
 ## 📋 Release Highlights (V3.5)
+
+### 🖼️ Instant Album Thumbnail Updates & Cover Photo Management
+- **Immediate Visual Updates**: Resolved image cache collision and gesture conflicts so updating an album thumbnail instantly reflects across both the Albums hub and Album Details screen without requiring an app restart.
+- **Dedicated Cover Photo Action**: Added convenient thumbnail management options inside `AlbumDetailScreen` (app bar action & cover banner overlay) and long-press support on album cards with options to pick from gallery, capture with camera, or remove thumbnail.
+- **Cache-Busting Storage**: Thumbnails are stored in permanent document storage with versioned timestamp paths and memory cache eviction to avoid stale bitmap caching.
+
+### 👤 Startup Username Onboarding Restored
+- **First-Time Username Prompt**: The interactive username onboarding dialog now reliably prompts the user on startup whenever a username has not yet been chosen or is set to placeholder defaults.
+- **Real-Time Feed Greeting**: As soon as the username is set, the `"Konnichiwa (user)!"` feed header immediately updates to reflect the new identity.
 
 ### 🔓 Seamless Photo Uploads & Recovery Key Lockout Removed
 - **Uninterrupted Photo Uploads**: Completely removed the 24-word recovery phrase lockout mechanism and `VaultRecoveryRequiredException` that blocked photo/video uploads after clearing cache or restarts.

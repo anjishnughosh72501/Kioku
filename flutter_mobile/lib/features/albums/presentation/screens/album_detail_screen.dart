@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:flutter_mobile/core/crypto/key_store.dart';
@@ -57,6 +59,89 @@ class _AlbumDetailScreenState extends ConsumerState<AlbumDetailScreen> {
       'Or app link: $appUri',
       subject: 'Kioku Memory Album: $title',
     );
+  }
+
+  Future<void> _pickThumbnail(
+    BuildContext context,
+    WidgetRef ref,
+    Album album,
+  ) async {
+    final hasThumb = album.thumbnailPath != null &&
+        album.thumbnailPath!.isNotEmpty &&
+        File(album.thumbnailPath!).existsSync();
+
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from Gallery'),
+              onTap: () => Navigator.of(ctx).pop('gallery'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take Photo'),
+              onTap: () => Navigator.of(ctx).pop('camera'),
+            ),
+            if (hasThumb)
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text('Remove Cover Photo', style: TextStyle(color: Colors.red)),
+                onTap: () => Navigator.of(ctx).pop('remove'),
+              ),
+          ],
+        ),
+      ),
+    );
+
+    if (action == null || !context.mounted) return;
+
+    if (action == 'remove') {
+      await ref.read(albumsProvider.notifier).setAlbumThumbnail(album.id, null);
+      await ref.read(albumsProvider.notifier).refresh();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Cover photo removed for "${album.title}"')),
+        );
+      }
+      return;
+    }
+
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: action == 'camera' ? ImageSource.camera : ImageSource.gallery,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 85,
+      );
+      if (picked != null) {
+        await ref
+            .read(albumsProvider.notifier)
+            .setAlbumThumbnail(album.id, picked.path);
+        await ref.read(albumsProvider.notifier).refresh();
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Cover photo updated for "${album.title}"'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not set cover photo: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _showInviteDialog(BuildContext context, AppColors colors, TextTheme typography, String title) async {
@@ -268,12 +353,16 @@ class _AlbumDetailScreenState extends ConsumerState<AlbumDetailScreen> {
     final typography = Theme.of(context).textTheme;
 
     final albums = ref.watch(albumsProvider).value ?? <Album>[];
-    final currentAlbum = widget.album ??
-        albums.where((a) => a.id == widget.albumId).firstOrNull ??
+    final currentAlbum = albums.where((a) => a.id == widget.albumId).firstOrNull ??
+        widget.album ??
         Album(id: widget.albumId, name: 'Album');
 
     final memoriesAsync = ref.watch(memoriesProvider);
     final memories = memoriesAsync.value ?? <KiokuMemory>[];
+
+    final hasCover = currentAlbum.thumbnailPath != null &&
+        currentAlbum.thumbnailPath!.isNotEmpty &&
+        File(currentAlbum.thumbnailPath!).existsSync();
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -294,6 +383,14 @@ class _AlbumDetailScreenState extends ConsumerState<AlbumDetailScreen> {
               ),
               actions: [
                 IconButton(
+                  tooltip: 'Change Cover Photo',
+                  icon: Icon(
+                    hasCover ? Icons.edit_outlined : Icons.add_photo_alternate_outlined,
+                    color: colors.primary,
+                  ),
+                  onPressed: () => _pickThumbnail(context, ref, currentAlbum),
+                ),
+                IconButton(
                   tooltip: 'Share Invite Link',
                   icon: Icon(Icons.share_outlined, color: colors.accentDark),
                   onPressed: () => _shareInviteLink(currentAlbum.title),
@@ -306,6 +403,83 @@ class _AlbumDetailScreenState extends ConsumerState<AlbumDetailScreen> {
                 const SizedBox(width: 4),
               ],
             ),
+
+            // Optional Cover Banner
+            if (hasCover)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppTheme.spacingMd,
+                    vertical: AppTheme.spacingSm,
+                  ),
+                  child: Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+                        child: SizedBox(
+                          height: 150,
+                          width: double.infinity,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Image.file(
+                                File(currentAlbum.thumbnailPath!),
+                                fit: BoxFit.cover,
+                              ),
+                              Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Colors.transparent,
+                                      Colors.black.withValues(alpha: 0.65),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 10,
+                        right: 10,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () => _pickThumbnail(context, ref, currentAlbum),
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.white38, width: 0.8),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.edit_outlined, size: 13, color: Colors.white),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Change Cover',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
             // Members bar
             SliverToBoxAdapter(

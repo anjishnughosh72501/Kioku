@@ -45,7 +45,10 @@ class UserProfileService {
     }
   }
 
-  bool get hasUsername => _currentProfile != null && _currentProfile!.username.isNotEmpty;
+  bool get hasUsername =>
+      _currentProfile != null &&
+      _currentProfile!.username.isNotEmpty &&
+      _currentProfile!.username.trim() != 'Storyteller';
 
   String get friendCode {
     return _currentProfile?.friendCode ?? 'KIOKU-START';
