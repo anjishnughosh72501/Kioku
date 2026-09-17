@@ -922,6 +922,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final controller = TextEditingController();
     String? inlineError;
     final emailRegex = RegExp(r'^[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}$');
+    final friends = ref.read(connectedFriendsProvider);
 
     await showDialog<void>(
       context: context,
@@ -930,18 +931,109 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           builder: (context, setDialogState) {
             return AlertDialog(
               backgroundColor: colors.surfaceContainer,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusCard)),
               title: Text(
                 'Share "${album.title}"',
-                style: typography.headlineSmall?.copyWith(color: colors.ink),
+                style: typography.headlineSmall?.copyWith(
+                  color: colors.ink,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Connected Friends Section
+                    if (friends.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          Icon(Icons.people_alt_outlined, size: 16, color: colors.primary),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Connected Friends (${friends.length})',
+                            style: typography.bodyMedium?.copyWith(
+                              color: colors.ink,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Tap a friend to send an invite directly:',
+                        style: typography.bodySmall?.copyWith(color: colors.inkMuted, fontSize: 11),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 140),
+                        decoration: BoxDecoration(
+                          color: colors.surfaceContainerHigh,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: colors.divider, width: 0.5),
+                        ),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          itemCount: friends.length,
+                          separatorBuilder: (_, _) => Divider(color: colors.divider, height: 1),
+                          itemBuilder: (context, index) {
+                            final code = friends[index];
+                            return ListTile(
+                              dense: true,
+                              visualDensity: VisualDensity.compact,
+                              leading: CircleAvatar(
+                                radius: 13,
+                                backgroundColor: colors.primary.withValues(alpha: 0.15),
+                                child: Icon(Icons.person_rounded, size: 14, color: colors.primary),
+                              ),
+                              title: Text(
+                                code,
+                                style: typography.bodyMedium?.copyWith(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: colors.ink,
+                                ),
+                              ),
+                              trailing: Icon(Icons.send_rounded, size: 15, color: colors.accentDark),
+                              onTap: () {
+                                Navigator.of(dialogContext).pop();
+                                Share.share(
+                                  'Hey $code! Join my memory album "${album.title}" on Kioku!\n'
+                                  'Get the app: https://github.com/anjishnughosh72501/Kioku\n'
+                                  'Open album: kioku://album/${album.id}',
+                                  subject: 'Kioku Memory Album: ${album.title}',
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: AppTheme.spacingLg),
+                      Divider(color: colors.divider),
+                      const SizedBox(height: AppTheme.spacingSm),
+                    ],
+
+                    Row(
+                      children: [
+                        Icon(Icons.mail_outline, size: 16, color: colors.primary),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Invite by Google Email',
+                          style: typography.bodyMedium?.copyWith(
+                            color: colors.ink,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
                     Text(
                       'Invite friends by email so they can view and contribute memories to this album in Kioku.',
-                      style: typography.bodySmall?.copyWith(color: colors.inkMuted),
+                      style: typography.bodySmall?.copyWith(color: colors.inkMuted, fontSize: 11),
                     ),
                     const SizedBox(height: AppTheme.spacingMd),
                     TextField(
@@ -950,6 +1042,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       decoration: InputDecoration(
                         hintText: 'friend@example.com',
                         errorText: inlineError,
+                        prefixIcon: Icon(Icons.alternate_email, color: colors.primary, size: 18),
                       ),
                     ),
                     const SizedBox(height: AppTheme.spacingMd),
@@ -964,7 +1057,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       },
                       icon: Icon(Icons.share_outlined, size: 16, color: colors.accentDark),
                       label: Text(
-                        'Send Invitation to Friends',
+                        'Send Invitation Link',
                         style: typography.bodySmall?.copyWith(
                           color: colors.accentDark,
                           fontWeight: FontWeight.w600,

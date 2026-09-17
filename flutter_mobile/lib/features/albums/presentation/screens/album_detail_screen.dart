@@ -42,80 +42,174 @@ class _AlbumDetailScreenState extends ConsumerState<AlbumDetailScreen> {
     );
   }
 
- Future<void> _inviteByEmail(BuildContext context, AppColors colors, TextTheme typography, String title) async {
- final controller = TextEditingController();
- String? inlineError;
- final emailRegex = RegExp(r'^[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}$');
+  Future<void> _inviteByEmail(BuildContext context, AppColors colors, TextTheme typography, String title) async {
+    final controller = TextEditingController();
+    String? inlineError;
+    final emailRegex = RegExp(r'^[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}$');
+    final friends = ref.read(connectedFriendsProvider);
 
- await showDialog<void>(
- context: context,
- builder: (dialogContext) {
- return StatefulBuilder(
- builder: (context, setDialogState) {
- return AlertDialog(
- backgroundColor: colors.surfaceContainer,
- title: Text(
- 'Invite to "$title"',
- style: typography.headlineSmall?.copyWith(color: colors.ink),
- ),
- content: Column(
- mainAxisSize: MainAxisSize.min,
- crossAxisAlignment: CrossAxisAlignment.start,
- children: [
- Text(
- 'Enter a Google email address to give this person access to view and add photos.',
- style: typography.bodySmall?.copyWith(color: colors.inkMuted),
- ),
- const SizedBox(height: AppTheme.spacingMd),
- TextField(
- controller: controller,
- keyboardType: TextInputType.emailAddress,
- autofocus: true,
- decoration: InputDecoration(
- hintText: 'friend@gmail.com',
- errorText: inlineError,
- prefixIcon: Icon(Icons.mail_outline, color: colors.primary),
- ),
- ),
- ],
- ),
- actions: [
- TextButton(
- onPressed: () => Navigator.of(dialogContext).pop(),
- child: Text('Cancel', style: typography.bodyMedium?.copyWith(color: colors.inkMuted)),
- ),
- ClayButton(
- label: 'Send Invite',
- size: ClayButtonSize.small,
- onPressed: () async {
- final email = controller.text.trim();
- if (!emailRegex.hasMatch(email)) {
- setDialogState(() => inlineError = 'Enter a valid email address');
- return;
- }
- try {
- await ref.read(albumsProvider.notifier).share(widget.albumId, email);
- if (context.mounted) {
- Navigator.of(dialogContext).pop();
- ScaffoldMessenger.of(context).showSnackBar(
- SnackBar(content: Text('Invited $email to album')),
- );
- setState(() {
- _membersFuture = AppDrive.instance.albumMembers(widget.albumId);
- });
- }
- } catch (e) {
- setDialogState(() => inlineError = 'Could not share: $e');
- }
- },
- ),
- ],
- );
- },
- );
- },
- );
- }
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: colors.surfaceContainer,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusCard)),
+              title: Text(
+                'Invite to "$title"',
+                style: typography.headlineSmall?.copyWith(
+                  color: colors.ink,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Connected Friends Section
+                    if (friends.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          Icon(Icons.people_alt_outlined, size: 16, color: colors.primary),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Connected Friends (${friends.length})',
+                            style: typography.bodyMedium?.copyWith(
+                              color: colors.ink,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Tap a friend to send them an invitation link:',
+                        style: typography.bodySmall?.copyWith(color: colors.inkMuted, fontSize: 11),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 140),
+                        decoration: BoxDecoration(
+                          color: colors.surfaceContainerHigh,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: colors.divider, width: 0.5),
+                        ),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          itemCount: friends.length,
+                          separatorBuilder: (_, _) => Divider(color: colors.divider, height: 1),
+                          itemBuilder: (context, index) {
+                            final code = friends[index];
+                            return ListTile(
+                              dense: true,
+                              visualDensity: VisualDensity.compact,
+                              leading: CircleAvatar(
+                                radius: 13,
+                                backgroundColor: colors.primary.withValues(alpha: 0.15),
+                                child: Icon(Icons.person_rounded, size: 14, color: colors.primary),
+                              ),
+                              title: Text(
+                                code,
+                                style: typography.bodyMedium?.copyWith(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: colors.ink,
+                                ),
+                              ),
+                              trailing: Icon(Icons.send_rounded, size: 15, color: colors.accentDark),
+                              onTap: () {
+                                Navigator.of(dialogContext).pop();
+                                Share.share(
+                                  'Hey $code! Join my memory album "$title" on Kioku!\n'
+                                  'App: https://github.com/anjishnughosh72501/Kioku\n'
+                                  'Deep link: kioku://album/${widget.albumId}',
+                                  subject: 'Kioku Memory Album: $title',
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: AppTheme.spacingLg),
+                      Divider(color: colors.divider),
+                      const SizedBox(height: AppTheme.spacingSm),
+                    ],
+
+                    // Direct Email Section
+                    Row(
+                      children: [
+                        Icon(Icons.mail_outline, size: 16, color: colors.primary),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Invite by Google Email',
+                          style: typography.bodyMedium?.copyWith(
+                            color: colors.ink,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Give read & write access to view and add photos.',
+                      style: typography.bodySmall?.copyWith(color: colors.inkMuted, fontSize: 11),
+                    ),
+                    const SizedBox(height: AppTheme.spacingSm),
+                    TextField(
+                      controller: controller,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: InputDecoration(
+                        hintText: 'friend@gmail.com',
+                        errorText: inlineError,
+                        prefixIcon: Icon(Icons.alternate_email, color: colors.primary, size: 18),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text('Cancel', style: typography.bodyMedium?.copyWith(color: colors.inkMuted)),
+                ),
+                ClayButton(
+                  label: 'Send Invite',
+                  size: ClayButtonSize.small,
+                  onPressed: () async {
+                    final email = controller.text.trim();
+                    if (!emailRegex.hasMatch(email)) {
+                      setDialogState(() => inlineError = 'Enter a valid email address');
+                      return;
+                    }
+                    try {
+                      await ref.read(albumsProvider.notifier).share(widget.albumId, email);
+                      if (context.mounted) {
+                        Navigator.of(dialogContext).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Invited $email to album')),
+                        );
+                        setState(() {
+                          _membersFuture = AppDrive.instance.albumMembers(widget.albumId);
+                        });
+                      }
+                    } catch (e) {
+                      setDialogState(() => inlineError = 'Could not share: $e');
+                    }
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
  @override
  Widget build(BuildContext context) {
