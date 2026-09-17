@@ -229,7 +229,7 @@ class ActiveAlbum extends StateNotifier<String?> {
   Future<void> _load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (mounted) {
+      if (mounted && state == null) {
         state = prefs.getString(_key);
       }
     } catch (_) {}
@@ -261,34 +261,52 @@ class AlbumException implements Exception {
 class Albums extends AsyncNotifier<List<Album>> {
   @override
   Future<List<Album>> build() async {
-    listenSelf((previous, next) {
-      final list = next.valueOrNull;
-      if (list != null && list.isNotEmpty && ref.read(activeAlbumProvider) == null) {
-        ref.read(activeAlbumProvider.notifier).set(list.first.id);
-      }
-    });
-
     final albums = await ref.watch(memoryRepositoryProvider).getAlbums();
-    return albums;
+    final prefs = await SharedPreferences.getInstance();
+    return albums.map((a) {
+      final thumb = prefs.getString('album_thumb_${a.id}');
+      final storage = prefs.getString('album_storage_${a.id}') ?? 'local';
+      return a.copyWith(thumbnailPath: thumb, storageType: storage);
+    }).toList();
   }
 
   Future<void> refresh() async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
-      () => ref.read(memoryRepositoryProvider).getAlbums(),
-    );
+    state = await AsyncValue.guard(() async {
+      final albums = await ref.read(memoryRepositoryProvider).getAlbums();
+      final prefs = await SharedPreferences.getInstance();
+      return albums.map((a) {
+        final thumb = prefs.getString('album_thumb_${a.id}');
+        final storage = prefs.getString('album_storage_${a.id}') ?? 'local';
+        return a.copyWith(thumbnailPath: thumb, storageType: storage);
+      }).toList();
+    });
   }
 
-  Future<Album> addAlbum(String name) async {
+  Future<Album> addAlbum(String name, {String? storageType}) async {
     try {
       final album = await ref.read(memoryRepositoryProvider).createAlbum(name);
+      final resolvedStorage = storageType ?? ref.read(activeStorageTypeProvider).name;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('album_storage_${album.id}', resolvedStorage);
+      final enriched = album.copyWith(storageType: resolvedStorage);
       final currentList = state.valueOrNull ?? [];
-      state = AsyncData([...currentList, album]);
+      state = AsyncData([...currentList, enriched]);
       await ref.read(activeAlbumProvider.notifier).set(album.id);
       await refresh();
-      return album;
+      return enriched;
     } on Exception catch (e) {
       throw AlbumException('Could not create album: $e');
+    }
+  }
+
+  Future<void> setAlbumThumbnail(String albumId, String thumbnailPath) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('album_thumb_$albumId', thumbnailPath);
+    if (state.hasValue) {
+      state = AsyncData(
+        state.requireValue.map((a) => a.id == albumId ? a.copyWith(thumbnailPath: thumbnailPath) : a).toList(),
+      );
     }
   }
 
@@ -305,9 +323,14 @@ final albumsProvider = AsyncNotifierProvider<Albums, List<Album>>(
   Albums.new,
 );
 
+/// Provider for memories of a specific album
+final albumMemoriesProvider = FutureProvider.family<List<KiokuMemory>, String>((ref, albumId) async {
+  return await ref.watch(memoryRepositoryProvider).getMemories(albumId);
+});
+
 final isPaginatingMemoriesProvider = StateProvider<bool>((ref) => false);
 
-/// Memories of the active album.
+/// Memories of the feed (shows all updates or active album).
 class Memories extends AsyncNotifier<List<KiokuMemory>> {
   String? _nextPageToken;
   bool _hasMore = true;
@@ -319,29 +342,70 @@ class Memories extends AsyncNotifier<List<KiokuMemory>> {
   @override
   Future<List<KiokuMemory>> build() async {
     final albumId = ref.watch(activeAlbumProvider);
-    if (albumId == null) {
+    final albums = await ref.watch(albumsProvider.future);
+    if (albums.isEmpty) {
       _nextPageToken = null;
       _hasMore = false;
       return const [];
     }
-    final page = await ref.watch(memoryRepositoryProvider).getMemoriesPage(albumId);
-    _nextPageToken = page.nextPageToken;
-    _hasMore = page.nextPageToken != null;
-    return page.items;
+
+    if (albumId != null && albumId != 'all' && albums.any((a) => a.id == albumId)) {
+      final page = await ref.watch(memoryRepositoryProvider).getMemoriesPage(albumId);
+      _nextPageToken = page.nextPageToken;
+      _hasMore = page.nextPageToken != null;
+      return page.items;
+    }
+
+    // Feed shows all updates across all albums
+    final repo = ref.read(memoryRepositoryProvider);
+    final results = await Future.wait(
+      albums.map((album) async {
+        try {
+          return await repo.getMemories(album.id);
+        } catch (_) {
+          return <KiokuMemory>[];
+        }
+      }),
+    );
+    final all = results.expand((m) => m).toList()
+      ..sort((a, b) => b.addedAt.compareTo(a.addedAt));
+    _nextPageToken = null;
+    _hasMore = false;
+    return all;
   }
 
   Future<void> refresh() async {
     final albumId = ref.read(activeAlbumProvider);
-    if (albumId == null) {
+    final albums = await ref.read(albumsProvider.future);
+    if (albums.isEmpty) {
       state = const AsyncData([]);
       return;
     }
+
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
-      final page = await ref.read(memoryRepositoryProvider).getMemoriesPage(albumId);
-      _nextPageToken = page.nextPageToken;
-      _hasMore = page.nextPageToken != null;
-      return page.items;
+      if (albumId != null && albumId != 'all' && albums.any((a) => a.id == albumId)) {
+        final page = await ref.read(memoryRepositoryProvider).getMemoriesPage(albumId);
+        _nextPageToken = page.nextPageToken;
+        _hasMore = page.nextPageToken != null;
+        return page.items;
+      }
+
+      final repo = ref.read(memoryRepositoryProvider);
+      final results = await Future.wait(
+        albums.map((album) async {
+          try {
+            return await repo.getMemories(album.id);
+          } catch (_) {
+            return <KiokuMemory>[];
+          }
+        }),
+      );
+      final all = results.expand((m) => m).toList()
+        ..sort((a, b) => b.addedAt.compareTo(a.addedAt));
+      _nextPageToken = null;
+      _hasMore = false;
+      return all;
     });
   }
 

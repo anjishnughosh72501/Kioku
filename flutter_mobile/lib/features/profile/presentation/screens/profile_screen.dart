@@ -19,11 +19,20 @@ import 'package:flutter_mobile/features/profile/presentation/widgets/album_row.d
 import 'package:flutter_mobile/main.dart';
 import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
 
-class ProfileScreen extends ConsumerWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  bool _showDriveInfo = false;
+  bool _showEncryptionInfo = false;
+  bool _showStorageInfo = false;
+
+  @override
+  Widget build(BuildContext context) {
     final colors = context.kiokuColors;
     final typography = Theme.of(context).textTheme;
     final authState = ref.watch(authControllerProvider);
@@ -183,27 +192,51 @@ class ProfileScreen extends ConsumerWidget {
                               ),
                             ),
                           ),
-                      ],
-                    ),
-                    const SizedBox(height: AppTheme.spacingMd),
-                    Divider(color: colors.divider),
-                    const SizedBox(height: AppTheme.spacingSm),
-                    Row(
-                      children: [
-                        Icon(Icons.lock_outline, size: 14, color: colors.inkMuted),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            'Your memories live in your Google Drive under "Kioku · <Album>". '
-                            'Kioku never runs a central server or sees your private photos.',
-                            style: typography.bodySmall?.copyWith(
-                              fontSize: 11,
-                              color: colors.inkMuted,
-                              height: 1.4,
-                            ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: Icon(
+                            _showDriveInfo ? Icons.info : Icons.info_outline,
+                            size: 16,
+                            color: colors.primary,
                           ),
+                          tooltip: 'Storage info',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => setState(() => _showDriveInfo = !_showDriveInfo),
                         ),
                       ],
+                    ),
+                    AnimatedCrossFade(
+                      firstChild: const SizedBox.shrink(),
+                      secondChild: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: AppTheme.spacingMd),
+                          Divider(color: colors.divider),
+                          const SizedBox(height: AppTheme.spacingSm),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.lock_outline, size: 14, color: colors.inkMuted),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Your memories live in your Google Drive under "Kioku · <Album>". '
+                                  'Kioku never runs a central server or sees your private photos.',
+                                  style: typography.bodySmall?.copyWith(
+                                    fontSize: 11,
+                                    color: colors.inkMuted,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      crossFadeState: _showDriveInfo ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                      duration: const Duration(milliseconds: 240),
                     ),
                   ],
                 ),
@@ -260,15 +293,20 @@ class ProfileScreen extends ConsumerWidget {
                             ],
                           ),
                         ),
+                        const SizedBox(width: 6),
+                        IconButton(
+                          icon: Icon(
+                            _showEncryptionInfo ? Icons.info : Icons.info_outline,
+                            size: 16,
+                            color: colors.primary,
+                          ),
+                          tooltip: 'Encryption details',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => setState(() => _showEncryptionInfo = !_showEncryptionInfo),
+                        ),
                       ],
-                    ),
-                    const SizedBox(height: AppTheme.spacingSm),
-                    Text(
-                      'All photos, videos, and metadata are sealed on this device with XChaCha20-Poly1305 and X25519 before being synced. Storage providers only ever see opaque ciphertext.',
-                      style: typography.bodySmall?.copyWith(
-                        color: colors.inkMuted,
-                        fontSize: 12,
-                      ),
                     ),
                     const SizedBox(height: AppTheme.spacingMd),
                     Row(
@@ -290,7 +328,57 @@ class ProfileScreen extends ConsumerWidget {
                             ),
                           ),
                         ),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: () => setState(() => _showEncryptionInfo = !_showEncryptionInfo),
+                          icon: Icon(
+                            _showEncryptionInfo ? Icons.expand_less : Icons.help_outline,
+                            size: 15,
+                            color: colors.inkMuted,
+                          ),
+                          label: Text(
+                            _showEncryptionInfo ? 'Hide' : 'Info',
+                            style: typography.bodySmall?.copyWith(color: colors.inkMuted),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: colors.divider),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
                       ],
+                    ),
+                    AnimatedCrossFade(
+                      firstChild: const SizedBox.shrink(),
+                      secondChild: Padding(
+                        padding: const EdgeInsets.only(top: AppTheme.spacingMd),
+                        child: Container(
+                          padding: const EdgeInsets.all(AppTheme.spacingSm),
+                          decoration: BoxDecoration(
+                            color: colors.surfaceContainer,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: colors.divider),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.shield_outlined, size: 14, color: colors.primary),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'All photos, videos, and metadata are sealed on this device with XChaCha20-Poly1305 and X25519 before being synced. Storage providers only ever see opaque ciphertext.',
+                                  style: typography.bodySmall?.copyWith(
+                                    color: colors.inkMuted,
+                                    fontSize: 11,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      crossFadeState: _showEncryptionInfo ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                      duration: const Duration(milliseconds: 240),
                     ),
                   ],
                 ),
@@ -333,34 +421,92 @@ class ProfileScreen extends ConsumerWidget {
                             ),
                           ),
                         ),
+                        const SizedBox(width: 6),
+                        IconButton(
+                          icon: Icon(
+                            _showStorageInfo ? Icons.info : Icons.info_outline,
+                            size: 16,
+                            color: colors.primary,
+                          ),
+                          tooltip: 'Storage info',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => setState(() => _showStorageInfo = !_showStorageInfo),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: AppTheme.spacingSm),
-                    Text(
-                      'Bring your own storage: switch between Local Device, Google Drive, S3 (AWS/R2/B2/MinIO), WebDAV (Nextcloud), or P2P Mesh.',
-                      style: typography.bodySmall?.copyWith(
-                        color: colors.inkMuted,
-                        fontSize: 12,
-                      ),
-                    ),
                     const SizedBox(height: AppTheme.spacingMd),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () => context.push('/storage-setup'),
-                        icon: Icon(Icons.tune_outlined, size: 16, color: colors.ink),
-                        label: Text(
-                          'Configure Storage',
-                          style: typography.bodySmall?.copyWith(
-                            color: colors.ink,
-                            fontWeight: FontWeight.w600,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => context.push('/storage-setup'),
+                            icon: Icon(Icons.tune_outlined, size: 16, color: colors.ink),
+                            label: Text(
+                              'Configure Storage',
+                              style: typography.bodySmall?.copyWith(
+                                color: colors.ink,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: colors.divider),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
                           ),
                         ),
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: colors.divider),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: () => setState(() => _showStorageInfo = !_showStorageInfo),
+                          icon: Icon(
+                            _showStorageInfo ? Icons.expand_less : Icons.help_outline,
+                            size: 15,
+                            color: colors.inkMuted,
+                          ),
+                          label: Text(
+                            _showStorageInfo ? 'Hide' : 'Info',
+                            style: typography.bodySmall?.copyWith(color: colors.inkMuted),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: colors.divider),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ],
+                    ),
+                    AnimatedCrossFade(
+                      firstChild: const SizedBox.shrink(),
+                      secondChild: Padding(
+                        padding: const EdgeInsets.only(top: AppTheme.spacingMd),
+                        child: Container(
+                          padding: const EdgeInsets.all(AppTheme.spacingSm),
+                          decoration: BoxDecoration(
+                            color: colors.surfaceContainer,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: colors.divider),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.cloud_sync_outlined, size: 14, color: colors.primary),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Bring your own storage: switch between Local Device, Google Drive, S3 (AWS/R2/B2/MinIO), WebDAV (Nextcloud), or P2P Mesh.',
+                                  style: typography.bodySmall?.copyWith(
+                                    color: colors.inkMuted,
+                                    fontSize: 11,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
+                      crossFadeState: _showStorageInfo ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                      duration: const Duration(milliseconds: 240),
                     ),
                   ],
                 ),
@@ -490,14 +636,6 @@ class ProfileScreen extends ConsumerWidget {
                           ),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: AppTheme.spacingSm),
-                    Text(
-                      'Share this code with friends so they know who shared memories with them.',
-                      style: typography.bodySmall?.copyWith(
-                        fontSize: 11,
-                        color: colors.inkMuted,
-                      ),
                     ),
                   ],
                 ),

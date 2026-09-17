@@ -10,14 +10,14 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/providers.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
-import 'package:flutter_mobile/shared/widgets/clay_card.dart';
 import 'package:flutter_mobile/features/auth/presentation/controllers/auth_controller.dart';
-import 'package:flutter_mobile/features/feed/presentation/widgets/album_dropdown.dart';
 import 'package:flutter_mobile/features/feed/presentation/widgets/memory_card.dart';
 
 import 'package:flutter_mobile/core/services/user_profile_service.dart';
 import 'package:flutter_mobile/features/feed/presentation/widgets/shimmer_skeleton_card.dart';
+import 'package:flutter_mobile/shared/widgets/clay_card.dart';
 import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class FeedScreen extends ConsumerStatefulWidget {
   const FeedScreen({super.key});
@@ -33,6 +33,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setBool('first_startup_completed', true);
+    });
   }
 
   void _onScroll() {
@@ -57,18 +60,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     final colors = context.kiokuColors;
     final typography = Theme.of(context).textTheme;
     final memoriesAsync = ref.watch(memoriesProvider);
-    final albumsAsync = ref.watch(albumsProvider);
-    final activeAlbumId = ref.watch(activeAlbumProvider);
     final authState = ref.watch(authControllerProvider);
-
-    final albumsList = albumsAsync.valueOrNull ?? [];
-    if (albumsList.isNotEmpty && activeAlbumId == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && ref.read(activeAlbumProvider) == null) {
-          ref.read(activeAlbumProvider.notifier).set(albumsList.first.id);
-        }
-      });
-    }
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -92,7 +84,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                 toolbarHeight: 76,
                 flexibleSpace: FlexibleSpaceBar(
                   collapseMode: CollapseMode.parallax,
-                  background: _buildHeader(activeAlbumId, albumsAsync, authState, colors, typography)
+                  background: _buildHeader(authState, colors, typography)
                       .animate()
                       .fadeIn(duration: 350.ms)
                       .slideY(begin: -0.06, end: 0, duration: 300.ms),
@@ -111,8 +103,6 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
   }
 
   Widget _buildHeader(
-    String? activeAlbumId,
-    AsyncValue<List<Album>> albumsAsync,
     AuthState authState,
     AppColors colors,
     TextTheme typography,
@@ -121,11 +111,6 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     final firstName = storedName.isNotEmpty && storedName != 'Storyteller'
         ? storedName
         : (authState.displayName?.trim().split(' ').first ?? 'Friend');
-    final albums = albumsAsync.value ?? <Album>[];
-    final active = albums.where((a) => a.id == activeAlbumId).firstOrNull;
-    final currentYear = active != null
-        ? ''
-        : '${DateTime.now().year}';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -135,12 +120,13 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
         AppTheme.spacingSm,
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
-            width: 44,
-            height: 44,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(color: colors.divider, width: 1),
               boxShadow: [
                 BoxShadow(
@@ -156,41 +142,32 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
           const SizedBox(width: AppTheme.spacingMd),
           Expanded(
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Hello, $firstName',
-                  style: typography.bodyMedium?.copyWith(
-                    color: colors.inkMuted,
-                    fontSize: 14,
+                  'Konnichiwa $firstName!',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: typography.displayMedium?.copyWith(
+                    color: colors.ink,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
                   ),
                 ),
-                if (albums.isEmpty)
-                  Text(
-                    'Your memory album',
-                    style: typography.bodyMedium?.copyWith(
-                      color: colors.ink,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  )
-                else
-                  AlbumDropdown(
-                    albums: albums,
-                    activeAlbumId: activeAlbumId,
-                    colors: colors,
-                    typography: typography,
+                const SizedBox(height: 2),
+                Text(
+                  'All updates',
+                  style: typography.bodySmall?.copyWith(
+                    color: colors.inkMuted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
                   ),
+                ),
               ],
             ),
           ),
-          if (currentYear.isNotEmpty)
-            Text(
-              currentYear,
-              style: typography.bodyMedium?.copyWith(
-                color: colors.ink,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
         ],
       ),
     );
@@ -248,6 +225,10 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     }
 
     final groups = ref.watch(groupedMemoriesProvider);
+    final albumsList = ref.watch(albumsProvider).valueOrNull ?? [];
+    final activeAlbumId = ref.watch(activeAlbumProvider);
+    final currentAlbumName = albumsList.where((a) => a.id == activeAlbumId).firstOrNull?.title;
+
     final flatItems = <_FeedEntry>[];
     for (final group in groups) {
       flatItems.add(_FeedDayHeaderEntry(group.day));
@@ -282,7 +263,12 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                     AppTheme.spacingMd,
                     AppTheme.spacingMd,
                   ),
-                  child: MemoryCard(item: entry.memory, colors: colors, typography: typography),
+                  child: MemoryCard(
+                    item: entry.memory,
+                    colors: colors,
+                    typography: typography,
+                    albumName: currentAlbumName,
+                  ),
                 );
                 final disableAnims = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
                 if (disableAnims) return card;

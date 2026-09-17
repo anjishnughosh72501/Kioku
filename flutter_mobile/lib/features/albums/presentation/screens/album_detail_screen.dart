@@ -246,7 +246,7 @@ class _AlbumDetailScreenState extends ConsumerState<AlbumDetailScreen> {
  final memory = memories[index];
  return RepaintBoundary(
  child: GestureDetector(
- onTap: () => context.push('/media/', extra: memory),
+ onTap: () => context.push('/media/${memory.id}', extra: memory),
  child: ClipRRect(
  borderRadius: BorderRadius.circular(AppTheme.radiusPhoto),
  child: Stack(

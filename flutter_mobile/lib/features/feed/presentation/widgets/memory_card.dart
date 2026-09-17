@@ -15,11 +15,13 @@ class MemoryCard extends ConsumerWidget {
     required this.item,
     required this.colors,
     required this.typography,
+    this.albumName,
   });
 
   final KiokuMemory item;
   final AppColors colors;
   final TextTheme typography;
+  final String? albumName;
 
   void _showContextMenu(BuildContext context, WidgetRef ref) {
     showModalBottomSheet<void>(
@@ -113,6 +115,11 @@ class MemoryCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final albums = ref.watch(albumsProvider).valueOrNull ?? [];
+    final activeAlbumId = ref.watch(activeAlbumProvider);
+    final currentAlbum = albums.where((a) => a.id == activeAlbumId).firstOrNull;
+    final displayAlbum = albumName ?? currentAlbum?.title ?? 'Album';
+
     return ClayCard(
       variant: ClayVariant.defaultCard,
       padding: EdgeInsets.zero,
@@ -137,26 +144,64 @@ class MemoryCard extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                       decoration: BoxDecoration(
-                        color: colors.accentSoft,
+                        color: colors.primary.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-                      ),
-                      child: Text(
-                        item.uploaderLabel,
-                        style: typography.bodySmall?.copyWith(
-                          color: colors.accentDark,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
+                        border: Border.all(
+                          color: colors.primary.withValues(alpha: 0.25),
+                          width: 0.5,
                         ),
                       ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.photo_library_outlined, size: 12, color: colors.primary),
+                          const SizedBox(width: 4),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 160),
+                            child: Text(
+                              displayAlbum,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: typography.bodySmall?.copyWith(
+                                color: colors.primary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    const Spacer(),
                     Text(
                       item.postmarkDate,
                       style: typography.bodySmall?.copyWith(color: colors.inkMuted, fontSize: 11),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 7),
+                Row(
+                  children: [
+                    Icon(Icons.person_outline_rounded, size: 14, color: colors.inkMuted),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Posted by ',
+                      style: typography.bodySmall?.copyWith(
+                        color: colors.inkMuted,
+                        fontSize: 11,
+                      ),
+                    ),
+                    Text(
+                      item.uploaderLabel,
+                      style: typography.bodySmall?.copyWith(
+                        color: colors.ink,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),

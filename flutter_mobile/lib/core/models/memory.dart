@@ -6,23 +6,44 @@ import 'package:googleapis/drive/v3.dart' as drive;
 /// An album is a folder in the signed-in user's (or a friend's) Drive.
 /// Folder names are prefixed with [Album.prefix] so they are easy to find.
 class Album {
-  const Album({required this.id, required this.name});
+  const Album({
+    required this.id,
+    required this.name,
+    this.thumbnailPath,
+    this.storageType = 'local',
+  });
 
   static const String prefix = 'Kioku · ';
 
   final String id;
   final String name;
+  final String? thumbnailPath;
+  final String storageType;
 
   static Album fromDriveFolder(drive.File f) {
     final raw = f.name?.toString() ?? '';
     final name = raw.startsWith(prefix) ? raw.substring(prefix.length) : raw;
-    return Album(id: f.id ?? '', name: name);
+    return Album(id: f.id ?? '', name: name, storageType: 'drive');
   }
 
   /// Display name without the Kioku prefix.
   String get title => name;
 
   static String driveName(String albumName) => '$prefix$albumName';
+
+  Album copyWith({
+    String? id,
+    String? name,
+    String? thumbnailPath,
+    String? storageType,
+  }) {
+    return Album(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      thumbnailPath: thumbnailPath ?? this.thumbnailPath,
+      storageType: storageType ?? this.storageType,
+    );
+  }
 }
 
 /// A person the album folder is shared with.

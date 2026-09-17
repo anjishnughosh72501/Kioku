@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/providers.dart';
@@ -10,6 +13,41 @@ import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
 
 class AlbumsScreen extends ConsumerWidget {
   const AlbumsScreen({super.key});
+
+  Future<void> _pickThumbnailForAlbum(
+    BuildContext context,
+    WidgetRef ref,
+    Album album,
+  ) async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 85,
+      );
+      if (picked != null) {
+        await ref
+            .read(albumsProvider.notifier)
+            .setAlbumThumbnail(album.id, picked.path);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Thumbnail updated for "${album.title}"'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not set thumbnail: $e')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -38,182 +76,286 @@ class AlbumsScreen extends ConsumerWidget {
             onPressed: () async {
               final name = await CreateAlbumDialog.show(context);
               if (name != null && context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Album "$name" created')),
-                  );
- }
- },
- ),
- const SizedBox(width: 8),
- ],
- ),
- body: SafeArea(
- child: RefreshIndicator(
- color: colors.primary,
- onRefresh: () async {
- await ref.read(albumsProvider.notifier).refresh();
- },
- child: albumsAsync.isLoading && albums.isEmpty
- ? Center(child: CircularProgressIndicator(color: colors.primary))
- : albums.isEmpty
- ? _buildEmptyState(context, colors, typography)
- : _buildAlbumGrid(context, ref, albums, colors, typography),
- ),
- ),
- );
- }
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Album "$name" created')),
+                );
+              }
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: SafeArea(
+        child: RefreshIndicator(
+          color: colors.primary,
+          onRefresh: () async {
+            await ref.read(albumsProvider.notifier).refresh();
+          },
+          child: albumsAsync.isLoading && albums.isEmpty
+              ? Center(child: CircularProgressIndicator(color: colors.primary))
+              : albums.isEmpty
+                  ? _buildEmptyState(context, colors, typography)
+                  : _buildAlbumGrid(context, ref, albums, colors, typography),
+        ),
+      ),
+    );
+  }
 
- Widget _buildEmptyState(
- BuildContext context,
- AppColors colors,
- TextTheme typography,
- ) {
- return ListView(
- physics: const AlwaysScrollableScrollPhysics(),
- children: [
- const SizedBox(height: 100),
- Center(
- child: Padding(
- padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
- child: Column(
- mainAxisAlignment: MainAxisAlignment.center,
- children: [
- Icon(
- Icons.photo_library_outlined,
- size: 64,
- color: colors.inkMuted.withValues(alpha: 0.6),
- ),
- const SizedBox(height: AppTheme.spacingLg),
- Text(
- 'No albums yet',
- style: typography.headlineSmall?.copyWith(
- color: colors.ink,
- fontSize: 20,
- fontWeight: FontWeight.w600,
- ),
- ),
- const SizedBox(height: AppTheme.spacingSm),
- Text(
- 'Create an album to organize your photos and share with close friends.',
- textAlign: TextAlign.center,
- style: typography.bodyMedium?.copyWith(
- color: colors.inkMuted,
- ),
- ),
- const SizedBox(height: AppTheme.spacingLg),
- ClayButton(
- label: 'Create First Album',
- icon: const Icon(Icons.add, size: 18),
- variant: ClayButtonVariant.primary,
- onPressed: () => CreateAlbumDialog.show(context),
- ),
- ],
- ),
- ),
- ),
- ],
- );
- }
+  Widget _buildEmptyState(
+    BuildContext context,
+    AppColors colors,
+    TextTheme typography,
+  ) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        const SizedBox(height: 100),
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.photo_library_outlined,
+                  size: 64,
+                  color: colors.inkMuted.withValues(alpha: 0.6),
+                ),
+                const SizedBox(height: AppTheme.spacingLg),
+                Text(
+                  'No albums yet',
+                  style: typography.headlineSmall?.copyWith(
+                    color: colors.ink,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: AppTheme.spacingSm),
+                Text(
+                  'Create an album to organize your photos and share with close friends.',
+                  textAlign: TextAlign.center,
+                  style: typography.bodyMedium?.copyWith(
+                    color: colors.inkMuted,
+                  ),
+                ),
+                const SizedBox(height: AppTheme.spacingLg),
+                ClayButton(
+                  label: 'Create First Album',
+                  icon: const Icon(Icons.add, size: 18),
+                  variant: ClayButtonVariant.primary,
+                  onPressed: () => CreateAlbumDialog.show(context),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
- Widget _buildAlbumGrid(
- BuildContext context,
- WidgetRef ref,
- List<Album> albums,
- AppColors colors,
- TextTheme typography,
- ) {
- return GridView.builder(
- physics: const AlwaysScrollableScrollPhysics(),
- padding: const EdgeInsets.all(AppTheme.spacingMd),
- gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
- crossAxisCount: 2,
- crossAxisSpacing: 14,
- mainAxisSpacing: 14,
- childAspectRatio: 0.88,
- ),
- itemCount: albums.length,
- itemBuilder: (context, index) {
- final album = albums[index];
- return _buildAlbumTile(context, ref, album, colors, typography);
- },
- );
- }
+  Widget _buildAlbumGrid(
+    BuildContext context,
+    WidgetRef ref,
+    List<Album> albums,
+    AppColors colors,
+    TextTheme typography,
+  ) {
+    return GridView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(AppTheme.spacingMd),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 14,
+        mainAxisSpacing: 14,
+        childAspectRatio: 0.85,
+      ),
+      itemCount: albums.length,
+      itemBuilder: (context, index) {
+        final album = albums[index];
+        return _buildAlbumTile(context, ref, album, colors, typography);
+      },
+    );
+  }
 
- Widget _buildAlbumTile(
- BuildContext context,
- WidgetRef ref,
- Album album,
- AppColors colors,
- TextTheme typography,
- ) {
- final albumTint = colors.withAlbumTint(album.id);
+  Widget _buildAlbumTile(
+    BuildContext context,
+    WidgetRef ref,
+    Album album,
+    AppColors colors,
+    TextTheme typography,
+  ) {
+    final albumTint = colors.withAlbumTint(album.id);
+    final hasThumb = album.thumbnailPath != null &&
+        album.thumbnailPath!.isNotEmpty &&
+        File(album.thumbnailPath!).existsSync();
 
- return ClayCard(
- variant: ClayVariant.defaultCard,
- padding: EdgeInsets.zero,
- onTap: () {
+    return ClayCard(
+      variant: ClayVariant.defaultCard,
+      padding: EdgeInsets.zero,
+      onTap: () {
         ref.read(activeAlbumProvider.notifier).set(album.id);
         context.push('/albums/${album.id}', extra: album);
       },
- child: Column(
- crossAxisAlignment: CrossAxisAlignment.stretch,
- children: [
- Expanded(
- child: Container(
- decoration: BoxDecoration(
- color: albumTint.accentSoft.withValues(alpha: 0.5),
- borderRadius: BorderRadius.vertical(
- top: Radius.circular(AppTheme.radiusCard),
- ),
- ),
- child: Center(
- child: Icon(
- Icons.photo_library_rounded,
- size: 44,
- color: albumTint.primaryDark,
- ),
- ),
- ),
- ),
- Padding(
- padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
- child: Column(
- crossAxisAlignment: CrossAxisAlignment.start,
- children: [
- Text(
- album.title,
- maxLines: 1,
- overflow: TextOverflow.ellipsis,
- style: typography.bodyMedium?.copyWith(
- color: colors.ink,
- fontWeight: FontWeight.w600,
- ),
- ),
- const SizedBox(height: 3),
- Row(
- children: [
- Icon(
- Icons.folder_shared_outlined,
- size: 13,
- color: colors.inkMuted,
- ),
- const SizedBox(width: 4),
- Expanded(
- child: Text(
- 'Album',
- style: typography.bodySmall?.copyWith(
- fontSize: 11,
- color: colors.inkMuted,
- ),
- ),
- ),
- ],
- ),
- ],
- ),
- ),
- ],
- ),
- );
- }
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Background Image or tinted stylized paper background
+            if (hasThumb)
+              Image.file(
+                File(album.thumbnailPath!),
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    _buildFallbackBackground(albumTint),
+              )
+            else
+              _buildFallbackBackground(albumTint),
+
+            // Morphing vignette / dark overlay to blend image and text seamlessly
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: hasThumb ? 0.35 : 0.15),
+                    Colors.black.withValues(alpha: hasThumb ? 0.55 : 0.40),
+                    Colors.black.withValues(alpha: hasThumb ? 0.80 : 0.65),
+                  ],
+                  stops: const [0.0, 0.5, 1.0],
+                ),
+              ),
+            ),
+
+            // Centered morphing text and storage badge
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Centered album title morphing with the picture
+                    Text(
+                      album.title,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: typography.titleLarge?.copyWith(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black.withValues(alpha: 0.85),
+                            offset: const Offset(0, 1.5),
+                            blurRadius: 6,
+                          ),
+                          Shadow(
+                            color: Colors.black.withValues(alpha: 0.4),
+                            offset: const Offset(0, 3),
+                            blurRadius: 10,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Storage and memories indicator badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.25),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            album.storageType.toLowerCase() == 'google'
+                                ? Icons.cloud_outlined
+                                : Icons.folder_outlined,
+                            size: 11,
+                            color: Colors.white70,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            album.storageType.toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.8,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Top-right host thumbnail picker action button
+            Positioned(
+              top: 6,
+              right: 6,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _pickThumbnailForAlbum(context, ref, album),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.3),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Icon(
+                      hasThumb ? Icons.edit_outlined : Icons.add_a_photo_outlined,
+                      size: 15,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFallbackBackground(AppColors albumTint) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            albumTint.accentSoft.withValues(alpha: 0.6),
+            albumTint.primaryDark.withValues(alpha: 0.7),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.photo_library_rounded,
+          size: 48,
+          color: Colors.white.withValues(alpha: 0.3),
+        ),
+      ),
+    );
+  }
 }

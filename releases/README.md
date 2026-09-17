@@ -2,19 +2,19 @@
 
 This directory contains standalone release builds for Kioku.
 
-## Current Release: v3.0.0
+## Current Release: V3.2
 
 | File | Platform | Architecture | Size | SHA-256 Checksum |
 | :--- | :--- | :--- | :--- | :--- |
-| **[`kioku-v3.0-release.apk`](kioku-v3.0-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.8 MB | `88DD0314F867D008464319EBAFA478B15199757546B31CF8570292A26B662F04` |
-| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.8 MB | `88DD0314F867D008464319EBAFA478B15199757546B31CF8570292A26B662F04` |
+| **[`kioku-v3.2-release.apk`](kioku-v3.2-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.9 MB | `0B73466B82A5C27A8EEA92BF5175808F9A841E96FA491147C94C4EEFF3112043` |
+| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.9 MB | `0B73466B82A5C27A8EEA92BF5175808F9A841E96FA491147C94C4EEFF3112043` |
 
 ---
 
 ## 📲 Installation Instructions
 
 ### Option 1: Direct Device Install (Phone)
-1. Download `kioku-v3.0-release.apk` (or `kioku-release.apk`) directly to your Android device.
+1. Download `kioku-v3.2-release.apk` (or `kioku-release.apk`) directly to your Android device.
 2. Open the downloaded file from your browser's downloads or file manager.
 3. If prompted, enable **"Install unknown apps"** for your browser or file manager in Android Settings.
 4. Tap **Install** and launch Kioku.
@@ -22,40 +22,49 @@ This directory contains standalone release builds for Kioku.
 ### Option 2: Via ADB (Command Line)
 Connect your Android device with USB debugging enabled (or start an emulator) and run:
 ```bash
-adb install -r releases/kioku-v3.0-release.apk
+adb install -r releases/kioku-v3.2-release.apk
 ```
 
 ---
 
-## 📋 Release Highlights (v3.0.0)
+## 📋 Release Highlights (V3.2)
 
-### 👥 Friends Management & Direct Album Invites
-- **Enter Friend Code in Profile**: Dedicated "Connected Friends" section in Profile screen to add friends via their unique code (e.g., `KIOKU-XXXX`).
-- **Persistent Friends List**: Friends remain visibly saved with avatar badges, friend code display, and remove options.
-- **One-Tap Album Invites**: Directly invite any saved friend to any album with album selector bottom-sheet and instant link dispatch.
+### 🖼️ Album Thumbnails & Centered Morphing Typography
+- **Custom Album Cover Photos**: Album owners can tap the camera action badge to assign or edit an album thumbnail photo via the system gallery picker.
+- **Seamless Morphing Text**: Centered album title text with soft typographic drop shadows layered over a subtle dark vignette gradient that dynamically morphs and blends into the thumbnail image.
+- **Storage Badge Indicator**: Visual badge chip displaying the underlying storage backend (e.g. `GOOGLE`, `LOCAL`, `S3`, `WEBDAV`, `MESH`).
 
-### 🧭 Clean Icon-Only Floating Nav Bar & De-cluttered Feed
-- **Sleek Icon-Only Navigation**: Replaced text labels in the bottom navigation bar with crisp, centered iconography with smooth tooltips, eliminating multi-line text wrapping.
-- **Removed Duplicate Top Bar**: De-cluttered feed header by eliminating the redundant top page shortcut bar.
+### 🔒 Per-Album Storage Backend Locking
+- **Creation-Time Storage Selection**: In the `CreateAlbumDialog`, users can choose which storage provider backs that specific album (Local, Google Drive, S3, WebDAV, Mesh).
+- **Default from Profile**: Defaults to the active storage backend chosen on the Profile screen.
+- **Immutable Post-Creation**: Once created, an album's storage backend is locked to maintain encryption key integrity and prevent orphaned cloud storage blobs.
 
-### 🗂️ Dedicated Albums Hub & 2×2 Photo Grid
-- **Dedicated Albums Tab**: 4-tab bottom navigation (**Feed** | **Albums** | **Flashbacks** | **Profile**) with dedicated album management.
-- **2×2 Square Photo Grid**: Clean, edge-to-edge 2×2 photo grid in album details for dense, distraction-free visual browsing.
-- **Shareable Deep Links & Invites**: One-tap album invite links generating app-accessible URLs and `kioku://album/<id>` deep links.
+### 🌅 Dynamic Feed Header & Global Update Stream
+- **Personalized Header**: The feed header now prominently displays `"Konnichiwa <User>!"` in a crisp, 22pt bold typography next to the Kioku app icon.
+- **All Updates Stream**: Removed the album dropdown menu from the feed. The feed aggregates and displays all memory updates chronologically across all albums.
+- **Post Author & Album Context**: Memory cards show both the author and the album name.
 
-### 🎨 High-Contrast Dark Theme & Streamlined UI
-- **Enhanced Forest Dark Theme**: Deep rich roasted bean canvas (`#0F0B08`), high-contrast oat grey text (`#B09E92`, WCAG AA compliant), and warm golden caramel accents (`#E5AF72`).
-- **First-Launch Friction Removed**: Direct feed access without forcing a blocking username/friend-code dialog.
-- **Screen-Reader Accessibility**: Added `ExcludeSemantics` to decorative washi tape and hanko elements.
+### 🐛 Route Fix: `/media/:id` Navigation
+- Resolved the `Page Not Found` router exception when tapping photos or videos inside an album by ensuring all media navigation pushes `/media/${memory.id}`.
 
-### 🛡️ Zero-Knowledge End-to-End Encryption (E2EE)
-- **libsodium Cryptographic Engine**: Industrial-grade `XChaCha20-Poly1305` chunked streaming encryption for media and `crypto_secretbox` for metadata.
-- **Three-Tier Key Hierarchy**: MasterKey in hardware-backed keystore, per-album CollectionKeys, and per-media FileKeys.
-- **BIP39 24-Word Recovery Phrase**: Standard mnemonic key recovery with 60s clipboard auto-clear and secondary vault recovery backup in `SharedPreferences`.
+### 🕊️ Clean Reminiscing Flashbacks
+- When no retrospective memories are generated by the algorithm, all empty period containers are hidden, displaying only the exact message: `"Keep making memories that you reminisce"`.
+
+### ⚡ Frictionless Instant Startup
+- After the initial onboarding, the app bypasses storage chooser dialogs on subsequent startups and navigates directly to the feed.
 
 ---
 
 ## 📜 Previous Releases
+
+<details>
+<summary><b>v3.0.0</b> (2026-09-17)</summary>
+
+- Friends Management & Direct Album Invites.
+- Clean Icon-Only Floating Nav Bar & De-cluttered Feed.
+- Dedicated Albums Hub & 2×2 Photo Grid.
+- High-Contrast Dark Theme & Zero-Knowledge End-to-End Encryption.
+</details>
 
 <details>
 <summary><b>v2.0.0</b> (2026-09-16)</summary>
@@ -69,4 +78,4 @@ adb install -r releases/kioku-v3.0-release.apk
 
 - Initial preview release with Japanese stationery aesthetic, offline local storage, and Google Drive sync.
 </details>
-</details>
+

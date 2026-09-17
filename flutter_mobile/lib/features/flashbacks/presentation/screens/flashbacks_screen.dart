@@ -28,11 +28,12 @@ class _FlashbacksScreenState extends ConsumerState<FlashbacksScreen> {
     final colors = context.kiokuColors;
     final typography = Theme.of(context).textTheme;
     final setsAsync = ref.watch(flashbacksProvider);
-    final sets = setsAsync.value ?? <FlashbackSetData>[];
+    final allSets = setsAsync.value ?? <FlashbackSetData>[];
+    final populatedSets = allSets.where((s) => s.items.isNotEmpty).toList();
 
     final currentSets = _selectedPeriod == 'all'
-        ? sets
-        : sets.where((s) => s.period == _selectedPeriod).toList();
+        ? populatedSets
+        : populatedSets.where((s) => s.period == _selectedPeriod).toList();
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -45,7 +46,7 @@ class _FlashbacksScreenState extends ConsumerState<FlashbacksScreen> {
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               SliverToBoxAdapter(
-                child: _buildHeader(sets, colors, typography)
+                child: _buildHeader(populatedSets, colors, typography)
                     .animate()
                     .fadeIn(duration: 400.ms)
                     .slideY(begin: -0.1, end: 0, duration: 400.ms),
@@ -210,16 +211,19 @@ class _FlashbacksScreenState extends ConsumerState<FlashbacksScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.auto_awesome_outlined, size: 64, color: colors.inkMuted),
+                  Icon(
+                    Icons.auto_awesome_outlined,
+                    size: 56,
+                    color: colors.inkMuted.withValues(alpha: 0.6),
+                  ),
                   const SizedBox(height: AppTheme.spacingLg),
                   Text(
-                    'No flashbacks yet',
-                    style: typography.headlineSmall?.copyWith(color: colors.ink, fontSize: 20),
-                  ),
-                  const SizedBox(height: AppTheme.spacingSm),
-                  Text(
-                    'Memories will appear here as time passes',
-                    style: typography.bodyMedium?.copyWith(color: colors.inkMuted),
+                    'Keep making memories that you reminisce',
+                    style: typography.headlineSmall?.copyWith(
+                      color: colors.ink,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ],

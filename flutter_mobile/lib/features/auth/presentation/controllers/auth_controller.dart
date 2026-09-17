@@ -6,6 +6,7 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:meta/meta.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter_mobile/core/drive/app_drive.dart';
 import 'package:flutter_mobile/core/providers.dart';
@@ -67,15 +68,26 @@ class AuthController extends StateNotifier<AuthState> {
   final IAuthRepository _authRepo;
 
   /// Restore a previous Google session with minimal UI.
+  /// After first startup, if no Google session is present, automatically enter
+  /// guest/local mode so the app directly opens to feed without storage prompt.
   Future<void> _bootstrap() async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final hasStartedBefore = prefs.getBool('first_startup_completed') ?? false;
+
       final account = await _authRepo.tryRestoreSession();
+      if (!mounted) return;
       if (account == null) {
+        if (hasStartedBefore) {
+          state = state.copyWith(isGuest: true, isLoading: false, error: null);
+          return;
+        }
         state = state.copyWith(isLoading: false);
         return;
       }
       await _finishSignIn(account);
     } catch (e) {
+      if (!mounted) return;
       state = state.copyWith(
         isLoading: false,
         error: 'Could not restore previous session: $e',
@@ -85,6 +97,9 @@ class AuthController extends StateNotifier<AuthState> {
 
   /// Enter local/offline mode without signing into Google.
   void continueAsGuest() {
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setBool('first_startup_completed', true);
+    });
     state = state.copyWith(isGuest: true, isLoading: false, error: null);
   }
 
@@ -118,9 +133,12 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> _finishSignIn(GoogleSignInAccount account) async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('first_startup_completed', true);
       AppDrive.instance.bind(account);
       // Pre-authorize the Drive scope so the first Drive call works instantly.
       await AppDrive.instance.accessToken();
+      if (!mounted) return;
       state = AuthState(
         isSignedIn: true,
         email: account.email,
@@ -129,6 +147,7 @@ class AuthController extends StateNotifier<AuthState> {
       );
     } catch (e) {
       AppDrive.instance.clear();
+      if (!mounted) return;
       state = AuthState(
         isLoading: false,
         error: 'Connected to Google but could not reach Drive: $e',
