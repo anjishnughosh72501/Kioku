@@ -16,10 +16,9 @@ class UsernameDialog extends StatefulWidget {
     try {
       final prefs = await SharedPreferences.getInstance();
       final alreadyPrompted = prefs.getBool('kioku_username_prompted') ?? false;
-      final startupCompleted = prefs.getBool('first_startup_completed') ?? false;
 
-      // Never prompt on later startups
-      if (alreadyPrompted || startupCompleted) {
+      // Never prompt again if already prompted and saved
+      if (alreadyPrompted) {
         return;
       }
 
@@ -34,16 +33,10 @@ class UsernameDialog extends StatefulWidget {
 
     _isShowing = true;
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('kioku_username_prompted', true);
-      await prefs.setBool('first_startup_completed', true);
-
-      if (!context.mounted) return;
-
       await showDialog<void>(
         context: context,
-        barrierDismissible: true,
-        builder: (context) => const UsernameDialog(isDismissible: true),
+        barrierDismissible: false,
+        builder: (context) => const UsernameDialog(isDismissible: false),
       );
     } finally {
       _isShowing = false;

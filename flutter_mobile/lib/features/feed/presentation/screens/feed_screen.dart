@@ -36,8 +36,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     _scrollController.addListener(_onScroll);
     SharedPreferences.getInstance().then((prefs) {
       final hasPrompted = prefs.getBool('kioku_username_prompted') ?? false;
-      final hasCompleted = prefs.getBool('first_startup_completed') ?? false;
-      if (!hasPrompted && !hasCompleted) {
+      if (!hasPrompted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             UsernameDialog.showIfNeeded(context);

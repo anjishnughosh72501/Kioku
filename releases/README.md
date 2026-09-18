@@ -6,8 +6,8 @@ Official standalone release builds for Kioku are distributed via [GitHub Release
 
 | File | Platform | Architecture | Size | SHA-256 Checksum | GitHub Release |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`kioku-v3.7-release.apk`** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.6 MB | `827077E3613BF08A0895C4CF8CDFE2094E6F2D64CF2AD42F329ABB10E6AAA230` | [Download v3.7](https://github.com/anjishnughosh72501/Kioku/releases/tag/v3.7) |
-| **`kioku-release.apk`** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.6 MB | `827077E3613BF08A0895C4CF8CDFE2094E6F2D64CF2AD42F329ABB10E6AAA230` | [Latest Release](https://github.com/anjishnughosh72501/Kioku/releases/latest) |
+| **`kioku-v3.7-release.apk`** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.6 MB | `24D4B34D20E20414165323476253DFA700D55BF711FB94F56715E71D816A9FFD` | [Download v3.7](https://github.com/anjishnughosh72501/Kioku/releases/tag/v3.7) |
+| **`kioku-release.apk`** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.6 MB | `24D4B34D20E20414165323476253DFA700D55BF711FB94F56715E71D816A9FFD` | [Latest Release](https://github.com/anjishnughosh72501/Kioku/releases/latest) |
 
 ---
 
@@ -28,6 +28,10 @@ adb install -r releases/kioku-v3.7-release.apk
 ---
 
 ## 📋 Release Highlights (V3.7)
+
+### 👤 First-Setup Profile & Username Prompt
+- **First-Setup Identity Gate**: Asks the user for their username/nickname immediately after selecting Local Storage or completing Google Sign-In during initial setup.
+- **Persistent & Non-Repeating**: Securely stores the profile identity and never prompts on subsequent app startups, booting directly to the feed.
 
 ### 🔒 App Lock & Privacy Gate (P1-8)
 - **Automatic Resume Lock**: Re-locks the decrypted photo gallery and album view whenever Kioku returns from the background.

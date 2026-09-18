@@ -10,6 +10,8 @@ import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/shared/widgets/washi_tape.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
 import 'package:flutter_mobile/features/auth/presentation/controllers/auth_controller.dart';
+import 'package:flutter_mobile/features/auth/presentation/widgets/username_dialog.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class JoinScreen extends ConsumerWidget {
   const JoinScreen({super.key});
@@ -138,8 +140,18 @@ class JoinScreen extends ConsumerWidget {
                             icon: Icon(Icons.offline_pin_outlined, size: 18, color: colors.ink),
                             variant: ClayButtonVariant.secondary,
                             fullWidth: true,
-                            onPressed: () =>
-                                ref.read(authControllerProvider.notifier).continueAsGuest(),
+                            onPressed: () async {
+                              final prefs = await SharedPreferences.getInstance();
+                              final alreadyPrompted = prefs.getBool('kioku_username_prompted') ?? false;
+                              if (!alreadyPrompted && context.mounted) {
+                                await showDialog<void>(
+                                  context: context,
+                                  barrierDismissible: false,
+                                  builder: (ctx) => const UsernameDialog(isDismissible: false),
+                                );
+                              }
+                              ref.read(authControllerProvider.notifier).continueAsGuest();
+                            },
                           ).animate().fadeIn(delay: 500.ms, duration: 300.ms),
                         ],
 
