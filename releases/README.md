@@ -6,8 +6,8 @@ This directory contains standalone release builds for Kioku.
 
 | File | Platform | Architecture | Size | SHA-256 Checksum |
 | :--- | :--- | :--- | :--- | :--- |
-| **[`kioku-v3.6-release.apk`](kioku-v3.6-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.4 MB | `86CC17DDA51F8D7951F93E4F3D88417DB5FA6788A65BEA3258A737C41768CF12` |
-| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.4 MB | `86CC17DDA51F8D7951F93E4F3D88417DB5FA6788A65BEA3258A737C41768CF12` |
+| **[`kioku-v3.6-release.apk`](kioku-v3.6-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.4 MB | `A432781EDC5E8729261BB0013FC6DC7D2D0762EF9FF57AEBE735A5C3EDE6E857` |
+| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.4 MB | `A432781EDC5E8729261BB0013FC6DC7D2D0762EF9FF57AEBE735A5C3EDE6E857` |
 
 ---
 
@@ -28,6 +28,11 @@ adb install -r releases/kioku-v3.6-release.apk
 ---
 
 ## 📋 Release Highlights (V3.6)
+
+### 🚀 Streamlined First-Time Startup & Frictionless Subsequent Launches
+- **First-Startup Exclusive Setup**: Google Sign-In and Username/Nickname prompts appear strictly on first app install/startup.
+- **Zero-Friction Later Startups**: Subsequent launches bypass all auth screens and dialogs completely, booting straight into the memories feed (`/`) in under 1 second.
+- **Silent Background Session Restoration**: Active Google Drive sessions restore transparently in the background without blocking the UI or redirecting away on temporary network drops.
 
 ### 🗂️ Per-Album Memory Isolation & Feed Filtering
 - **Strict Album Scoping**: Fixed the issue where all memories showed repeatedly across every album. Each album now strictly loads and renders only its own photos and videos across Local storage, Google Drive, and multi-cloud providers.
