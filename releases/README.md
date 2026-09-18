@@ -1,21 +1,20 @@
 # Kioku Releases
 
-Official standalone release builds for Kioku are distributed via [GitHub Releases](https://github.com/anjishnughosh72501/Kioku/releases).
-Binary artifacts (`.apk`) are managed outside the Git tree to keep repository clone size minimal while providing cryptographic verification hashes below.
+Official standalone release builds for Kioku are distributed via [GitHub Releases](https://github.com/anjishnughosh72501/Kioku/releases) and packaged in the `releases/` directory.
 
-### Current Release: V3.6
+### Current Release: V3.7
 
 | File | Platform | Architecture | Size | SHA-256 Checksum | GitHub Release |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`kioku-v3.6-release.apk`** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.4 MB | `A432781EDC5E8729261BB0013FC6DC7D2D0762EF9FF57AEBE735A5C3EDE6E857` | [Download v3.6](https://github.com/anjishnughosh72501/Kioku/releases/tag/v3.6) |
-| **`kioku-release.apk`** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.4 MB | `A432781EDC5E8729261BB0013FC6DC7D2D0762EF9FF57AEBE735A5C3EDE6E857` | [Latest Release](https://github.com/anjishnughosh72501/Kioku/releases/latest) |
+| **`kioku-v3.7-release.apk`** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.6 MB | `827077E3613BF08A0895C4CF8CDFE2094E6F2D64CF2AD42F329ABB10E6AAA230` | [Download v3.7](https://github.com/anjishnughosh72501/Kioku/releases/tag/v3.7) |
+| **`kioku-release.apk`** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.6 MB | `827077E3613BF08A0895C4CF8CDFE2094E6F2D64CF2AD42F329ABB10E6AAA230` | [Latest Release](https://github.com/anjishnughosh72501/Kioku/releases/latest) |
 
 ---
 
 ## 📲 Installation Instructions
 
 ### Option 1: Direct Device Install (Phone)
-1. Download `kioku-v3.6-release.apk` (or `kioku-release.apk`) directly to your Android device.
+1. Download `kioku-v3.7-release.apk` (or `kioku-release.apk`) directly to your Android device.
 2. Open the downloaded file from your browser's downloads or file manager.
 3. If prompted, enable **"Install unknown apps"** for your browser or file manager in Android Settings.
 4. Tap **Install** and launch Kioku.
@@ -23,76 +22,58 @@ Binary artifacts (`.apk`) are managed outside the Git tree to keep repository cl
 ### Option 2: Via ADB (Command Line)
 Connect your Android device with USB debugging enabled (or start an emulator) and run:
 ```bash
-adb install -r releases/kioku-v3.6-release.apk
+adb install -r releases/kioku-v3.7-release.apk
 ```
 
 ---
 
-## 📋 Release Highlights (V3.6)
+## 📋 Release Highlights (V3.7)
 
-### 🚀 Streamlined First-Time Startup & Frictionless Subsequent Launches
-- **First-Startup Exclusive Setup**: Google Sign-In and Username/Nickname prompts appear strictly on first app install/startup.
-- **Zero-Friction Later Startups**: Subsequent launches bypass all auth screens and dialogs completely, booting straight into the memories feed (`/`) in under 1 second.
-- **Silent Background Session Restoration**: Active Google Drive sessions restore transparently in the background without blocking the UI or redirecting away on temporary network drops.
+### 🔒 App Lock & Privacy Gate (P1-8)
+- **Automatic Resume Lock**: Re-locks the decrypted photo gallery and album view whenever Kioku returns from the background.
+- **PIN Keypad Overlay**: Tactile numeric PIN lock screen with custom dot indicators and instant verification.
+- **BIP-39 Recovery Fallback**: "Forgot PIN?" flow allows resetting credentials seamlessly using the user's 24-word backup recovery mnemonic phrase.
+- **User Preference Management**: Enable/disable App Lock and manage PINs directly from the Profile screen.
 
-### 🗂️ Per-Album Memory Isolation & Feed Filtering
-- **Strict Album Scoping**: Fixed the issue where all memories showed repeatedly across every album. Each album now strictly loads and renders only its own photos and videos across Local storage, Google Drive, and multi-cloud providers.
-- **Interactive Feed Album Filtering**: The main feed header features a sleek dropdown allowing users to filter memories by specific album or view all updates.
-- **Targeted Memory Uploads**: When uploading new memories, users can select the destination album directly, ensuring correct key assignment and cache invalidation.
-
-### 🤝 Bidirectional Friend Requests & Cross-Account Synchronization
-- **Two-Way Friend Confirmation**: Sending friend requests now requires recipient acceptance with dual-polling and automated acknowledgment (`POST /friends/ack`), immediately connecting friends on both devices.
-- **In-App Album Invites**: Invite connected friends directly to albums using zero-knowledge single-use claim tokens (`crypto_box_seal`) without exposing collection keys.
-- **Instant Album Joining**: Incoming album invites appear on the profile screen with Join and Decline options, unsealing keys and updating the feed in real-time.
-- **Member Roster Sync**: Tracks active album participants dynamically with local storage persistence.
-
-### 🛡️ Store Publishing Readiness & Security Hardening
-- **Zero Raw Key Leakage**: Eliminated collection key exposure in URLs and QR deep links.
-- **Store-Ready First Time UX**: Added branded Japanese aesthetic splash screen, 3-page interactive onboarding walkthrough, and offline Privacy Policy & Terms of Service viewer.
-- **Dead Code Cleanup & Optimization**: Pruned 500+ lines of unreferenced dead code and empty widget modules; 0 analyzer issues across the entire codebase.
-- **Robust Error Resilience**: Zone-guarded global exception handlers, safe temporary video decryption cleanup, and hardware-backed keystore master key protection.
+### 🛡️ Complete Security Audit Roadmap Implementation (Phases 1–4)
+- **Hardened Friends & Invites Authorization (P0-1)**: Device-secret authenticated token minting (`POST /friends/token`) with SHA-256 hashed storage and signed JWT authorization preventing all IDOR vectors.
+- **Atomic Datastore Persistence (P1-5)**: Atomic SQLite buffer swapping (`retro.db.tmp` -> `retro.db`), process termination exit flush hooks, and transactional wrapper (`db.transaction()`).
+- **Comprehensive Negative Security Test Suites (P2-9)**: Expanded automated test suites covering expired tokens, tampered JWT signatures, malformed headers, claim token replay defense, and full streaming envelope encrypt/decrypt round-trip verification.
+- **Privacy-Preserving PII-Scrubbed Error Telemetry (P2-10)**: Local ring buffer error reporter scrubbing file paths, emails, JWTs, and recovery seeds; in-app scrubbed log viewer and export tool.
+- **Horizontal Scaling Signaling Architecture (P2-12)**: Pluggable WebRTC mesh signaling store supporting single-node in-memory mode and multi-node distributed Redis pub/sub.
+- **Threat Model & Release Signing (P0-2, P2-11)**: Production-grade release signing guards in `build.gradle.kts` and formal zero-knowledge threat model documentation (`THREAT_MODEL.md`).
 
 ---
 
 ## 📜 Previous Releases
 
 <details>
+<summary><b>v3.6.0</b> (2026-09-18)</summary>
+
+- **First-Startup Only Google Sign-In & Username**: Restricts Google auth prompts and nickname dialogs strictly to the initial launch, booting straight to Feed on later startups.
+- **Strict Album Scoping & Filtering**: Isolates photos per album and provides an interactive dropdown filter in the feed.
+- **Two-Way Friend Request Confirmation**: Added mutual request accept/decline flows and cross-account synchronization.
+- **Store Publishing Readiness**: Store-ready Privacy Policy, Terms of Service, and zero raw keys in URLs.
+- **SHA-256**: `A432781EDC5E8729261BB0013FC6DC7D2D0762EF9FF57AEBE735A5C3EDE6E857`
+</details>
+
+<details>
 <summary><b>v3.5.0</b> (2026-09-18)</summary>
 
-- Instant album thumbnail updates & cover photo management.
-- Cache-busting storage for local thumbnails.
-- Startup username onboarding restored.
-- Seamless photo uploads & recovery key lockout removed.
+- **Two-Way Friend Confirmation**: Asynchronous friend pairing with acceptance/rejection flows.
+- **In-App Album Invites**: Zero-knowledge single-use claim tokens for peer-to-peer album sharing.
+- **SHA-256**: `3E0C1CFBD673F1C40DE64F2ECB84F0744047D4C82A2E2F80735EC7DB6628A437`
 </details>
 
 <details>
 <summary><b>v3.2.0</b> (2026-09-17)</summary>
 
-- Deep linking & automatic mutual friend connections.
-- Elimination of feed image glitches and flickering.
-- Album thumbnails with centered morphing typography.
-- Per-album storage backend selection and immutability.
+- Multi-Cloud BYOS Storage (Local, Google Drive, S3/R2/B2, WebDAV, Mesh).
+- BIP-39 24-word recovery phrase generator & vault recovery tool.
 </details>
 
 <details>
 <summary><b>v3.0.0</b> (2026-09-17)</summary>
 
-- Friends Management & Direct Album Invites.
-- Clean Icon-Only Floating Nav Bar & De-cluttered Feed.
-- Dedicated Albums Hub & 2×2 Photo Grid.
-- High-Contrast Dark Theme & Zero-Knowledge End-to-End Encryption.
+- Ente-aligned 3-tier key hierarchy, chunked XChaCha20-Poly1305 streaming encryption.
 </details>
-
-<details>
-<summary><b>v2.0.0</b> (2026-09-16)</summary>
-
-- Multi-Cloud BYOS: Google Drive, S3, WebDAV, Local, Mesh.
-- Flashbacks engine with smart retrospective grouping.
-</details>
-
-<details>
-<summary><b>v1.0.0</b> (2026-09-10)</summary>
-
-- Initial preview release with Japanese stationery aesthetic, offline local storage, and Google Drive sync.
-</details>
-
