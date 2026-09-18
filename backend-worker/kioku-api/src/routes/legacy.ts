@@ -3,7 +3,7 @@
 
 import { Hono } from 'hono';
 import { AppEnv, GroupRow, UserRow, MediaRow } from '../types';
-import { generateId, signJwt } from '../crypto';
+import { generateId, signJwt, getJwtSecret } from '../crypto';
 import { requireLegacyAuth } from '../middleware/auth';
 
 export const legacyAuthApp = new Hono<AppEnv>();
@@ -60,7 +60,7 @@ legacyAuthApp.post('/join', async (c) => {
     group.id
   ).run();
 
-  const secret = c.env.JWT_SECRET || 'default-dev-secret-change-in-production-please';
+  const secret = getJwtSecret(c.env);
   const token = await signJwt(
     { userId, groupId: group.id, name: cleanName },
     secret,
@@ -94,7 +94,7 @@ legacyAuthApp.get('/me', requireLegacyAuth, async (c) => {
 // POST /auth/refresh
 legacyAuthApp.post('/refresh', requireLegacyAuth, async (c) => {
   const user = c.get('legacyUser')!;
-  const secret = c.env.JWT_SECRET || 'default-dev-secret-change-in-production-please';
+  const secret = getJwtSecret(c.env);
   const token = await signJwt(
     { userId: user.userId, groupId: user.groupId, name: user.name },
     secret,

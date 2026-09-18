@@ -1,7 +1,7 @@
 // src/middleware/auth.ts
 import { MiddlewareHandler } from 'hono';
 import { AppEnv, FriendAuthPayload, LegacyAuthPayload } from '../types';
-import { verifyJwt } from '../crypto';
+import { verifyJwt, getJwtSecret } from '../crypto';
 
 export const requireFriendAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
   const authHeader = c.req.header('authorization');
@@ -10,9 +10,8 @@ export const requireFriendAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
   }
 
   const token = authHeader.split(' ')[1];
-  const secret = c.env.JWT_SECRET || 'default-dev-secret-change-in-production-please';
-
   try {
+    const secret = getJwtSecret(c.env);
     const decoded = await verifyJwt<FriendAuthPayload>(token, secret);
     if (!decoded || !decoded.friendCode) {
       return c.json({ error: 'Invalid token payload' }, 401);
@@ -31,9 +30,8 @@ export const requireLegacyAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
   }
 
   const token = authHeader.split(' ')[1];
-  const secret = c.env.JWT_SECRET || 'default-dev-secret-change-in-production-please';
-
   try {
+    const secret = getJwtSecret(c.env);
     const decoded = await verifyJwt<LegacyAuthPayload>(token, secret);
     if (!decoded || !decoded.userId || !decoded.groupId) {
       return c.json({ error: 'Invalid token payload' }, 401);

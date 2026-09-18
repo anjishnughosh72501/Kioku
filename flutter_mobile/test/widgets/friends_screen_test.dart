@@ -15,7 +15,7 @@ import 'package:flutter_mobile/features/friends/presentation/screens/friends_scr
 import 'package:flutter_mobile/features/friends/presentation/widgets/invite_share_sheet.dart';
 
 class FakeFriendsListNotifier extends FriendsListNotifier {
-  FakeFriendsListNotifier(Ref ref, List<FriendUser> list) : super(ref) {
+  FakeFriendsListNotifier(super.ref, List<FriendUser> list) {
     state = AsyncValue.data(list);
   }
   @override
@@ -23,7 +23,7 @@ class FakeFriendsListNotifier extends FriendsListNotifier {
 }
 
 class FakeIncomingRequestsNotifier extends IncomingRequestsNotifier {
-  FakeIncomingRequestsNotifier(Ref ref, List<FriendRequest> list) : super(ref) {
+  FakeIncomingRequestsNotifier(super.ref, List<FriendRequest> list) {
     state = AsyncValue.data(list);
   }
   @override
@@ -31,7 +31,7 @@ class FakeIncomingRequestsNotifier extends IncomingRequestsNotifier {
 }
 
 class FakeSentRequestsNotifier extends SentRequestsNotifier {
-  FakeSentRequestsNotifier(Ref ref, List<SentFriendRequest> list) : super(ref) {
+  FakeSentRequestsNotifier(super.ref, List<SentFriendRequest> list) {
     state = AsyncValue.data(list);
   }
   @override

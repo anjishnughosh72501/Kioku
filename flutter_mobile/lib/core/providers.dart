@@ -378,8 +378,37 @@ class AlbumException implements Exception {
 /// All albums visible to the signed-in user (folders they own or that were
 /// shared with them).
 class Albums extends AsyncNotifier<List<Album>> {
+  Future<void> _reconcileServerAlbums() async {
+    try {
+      final remoteList = await UserProfileService.instance.fetchServerAlbums();
+      for (final remote in remoteList) {
+        final id = remote['id']?.toString();
+        final name = (remote['title'] ?? remote['name'])?.toString();
+        final storage = remote['storageType']?.toString() ?? 'local';
+        final owner = remote['ownerUserId']?.toString();
+        final role = remote['role']?.toString() ?? 'member';
+
+        if (id != null && id.isNotEmpty) {
+          await LocalStorageService.instance.ensureAlbum(
+            id: id,
+            name: name ?? 'Shared Album',
+            storageType: storage,
+          );
+          if (owner != null && owner.isNotEmpty) {
+            await LocalStorageService.instance.addAlbumMember(
+              id,
+              owner,
+              role: role == 'owner' ? 'owner' : 'owner',
+            );
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
   @override
   Future<List<Album>> build() async {
+    await _reconcileServerAlbums();
     final albums = await ref.watch(memoryRepositoryProvider).getAlbums();
     final prefs = await SharedPreferences.getInstance();
     return albums.map((a) {
@@ -392,6 +421,7 @@ class Albums extends AsyncNotifier<List<Album>> {
   Future<void> refresh() async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
+      await _reconcileServerAlbums();
       final albums = await ref.read(memoryRepositoryProvider).getAlbums();
       final prefs = await SharedPreferences.getInstance();
       return albums.map((a) {
@@ -412,6 +442,14 @@ class Albums extends AsyncNotifier<List<Album>> {
       final currentList = state.valueOrNull ?? [];
       state = AsyncData([...currentList, enriched]);
       await ref.read(activeAlbumProvider.notifier).set(album.id);
+
+      // Best-effort register on canonical D1 backend
+      UserProfileService.instance.registerAlbumOnServer(
+        albumId: album.id,
+        title: name,
+        storageType: resolvedStorage,
+      ).ignore();
+
       await refresh();
       return enriched;
     } on Exception catch (e) {

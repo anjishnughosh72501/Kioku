@@ -100,6 +100,44 @@ class DeepLinkService {
       }
     }
 
+    final hasFriend = friendCode != null && friendCode.trim().isNotEmpty;
+    final hasAlbum = albumId != null && albumId.trim().isNotEmpty;
+
+    if (!hasFriend && !hasAlbum) {
+      return false;
+    }
+
+    // Require explicit user confirmation before touching local albums or state
+    if (context.mounted) {
+      final friendLabel = from != null && from.isNotEmpty ? from : (friendCode ?? 'A friend');
+      final promptTitle = hasAlbum ? 'Join Shared Album?' : 'Connect with Friend?';
+      final promptBody = hasAlbum
+          ? '$friendLabel wants to share the album "$albumName" with you.'
+          : '$friendLabel wants to connect with you on Kioku.';
+
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(promptTitle),
+          content: Text(promptBody),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Decline'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Accept'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) {
+        return false;
+      }
+    }
+
     bool friendAdded = false;
     if (friendCode != null && friendCode.trim().isNotEmpty) {
       await UserProfileService.instance.addFriend(

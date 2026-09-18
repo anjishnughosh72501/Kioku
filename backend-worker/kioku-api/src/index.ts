@@ -5,6 +5,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { AppEnv, Env } from './types';
 import { friendsApp } from './routes/friends';
+import { albumsApp } from './routes/albums';
 import { claimApp } from './routes/claim';
 import { flashbacksApp, runFlashbackGeneration } from './routes/flashbacks';
 import { landingApp } from './routes/landing';
@@ -49,6 +50,7 @@ app.get('/terms', (c) => {
 
 // Mount application routes
 app.route('/friends', friendsApp);
+app.route('/albums', albumsApp);
 app.route('/claim', claimApp);
 app.route('/flashbacks', flashbacksApp);
 app.route('/signal', signalingApp);

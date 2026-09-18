@@ -82,6 +82,31 @@ void main() {
           headers: {'content-type': 'application/json'},
         );
       }
+      if (path == '/albums') {
+        if (request.method == 'POST') {
+          return http.Response(
+            jsonEncode({'ok': true, 'album': {'id': 'alb_mock_1', 'title': 'Mock Album'}}),
+            201,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response(
+          jsonEncode({
+            'albums': [
+              {
+                'id': 'alb_remote_1',
+                'title': 'Remote Kyoto',
+                'name': 'Remote Kyoto',
+                'ownerUserId': 'KIOKU-HOST',
+                'role': 'member',
+                'storageType': 'local',
+              }
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
       return http.Response('Not Found', 404);
     });
   });
@@ -235,6 +260,60 @@ void main() {
 
       final accepted = await UserProfileService.instance.acceptAlbumInvite(invites.first);
       expect(accepted, isTrue);
+    });
+
+    test('fetchServerAlbums and registerAlbumOnServer interact with canonical backend', () async {
+      await UserProfileService.instance.init();
+
+      final registered = await UserProfileService.instance.registerAlbumOnServer(
+        albumId: 'alb_new_local',
+        title: 'New Album',
+      );
+      expect(registered, isTrue);
+
+      final serverAlbums = await UserProfileService.instance.fetchServerAlbums();
+      expect(serverAlbums.isNotEmpty, isTrue);
+      expect(serverAlbums.first['id'], 'alb_remote_1');
+      expect(serverAlbums.first['title'], 'Remote Kyoto');
+    });
+
+    test('sendFriendRequest returns error and never adds to pending on server failure', () async {
+      await UserProfileService.instance.init();
+
+      // Temporarily swap client to simulate server error
+      final originalClient = UserProfileService.instance.httpClient;
+      UserProfileService.instance.httpClient = MockClient((_) async => http.Response('Server Error', 500));
+
+      final result = await UserProfileService.instance.sendFriendRequest('KIOKU-TARGET-FAIL');
+      expect(result, FriendRequestResult.error);
+
+      // Verify no optimistic mutation occurred in local state
+      final pending = await UserProfileService.instance.getPendingSentRequests();
+      expect(pending.contains('KIOKU-TARGET-FAIL'), isFalse);
+
+      UserProfileService.instance.httpClient = originalClient;
+    });
+
+    test('acceptRequest returns false and does not add friend on server failure', () async {
+      await UserProfileService.instance.init();
+
+      final originalClient = UserProfileService.instance.httpClient;
+      UserProfileService.instance.httpClient = MockClient((_) async => http.Response('Server Error', 500));
+
+      const incoming = FriendRequest(
+        id: 'req_fail_id',
+        fromCode: 'KIOKU-REJECTED',
+        toCode: 'KIOKU-SELF',
+        fromName: 'Malicious',
+      );
+
+      final accepted = await UserProfileService.instance.acceptRequest(incoming);
+      expect(accepted, isFalse);
+
+      final friends = await UserProfileService.instance.getConnectedFriends();
+      expect(friends.contains('KIOKU-REJECTED'), isFalse);
+
+      UserProfileService.instance.httpClient = originalClient;
     });
   });
 }

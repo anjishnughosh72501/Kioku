@@ -2,6 +2,7 @@ export interface Env {
   DB: D1Database;
   JWT_SECRET?: string;
   CORS_ORIGINS?: string;
+  ENVIRONMENT?: string;
 }
 
 export interface FriendAuthPayload {
@@ -51,6 +52,27 @@ export interface InviteRow {
   created_at: number;
 }
 
+export interface AlbumRow {
+  id: string;
+  owner_user_id: string;
+  title: string;
+  storage_type: string;
+  storage_reference: string | null;
+  current_epoch: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface AlbumMemberRow {
+  album_id: string;
+  user_id: string;
+  role: 'owner' | 'member';
+  status: 'active' | 'pending' | 'revoked';
+  joined_at: number;
+  updated_at: number;
+  displayName?: string | null;
+}
+
 export interface AlbumInviteRow {
   id: string;
   album_id: string;
@@ -69,11 +91,15 @@ export interface ClaimTokenRow {
   token: string;
   album_id: string;
   inviter_pub_key: string;
+  inviter_identity: string | null;
+  recipient_identity: string | null;
   recipient_pub_key: string | null;
   sealed_key: string | null;
+  claim_status: 'created' | 'redeemed' | 'sealed' | 'consumed' | 'expired';
   expires_at: number;
   used: number;
-  created_at: string;
+  created_at: number | string;
+  updated_at?: number | null;
 }
 
 export interface GroupRow {

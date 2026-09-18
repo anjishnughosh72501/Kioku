@@ -584,6 +584,9 @@ class UserProfileService {
           list.add(cleanTo);
           await prefs.setStringList(_keyPendingSent, list);
         }
+        if (data['autoAccepted'] == true) {
+          await addFriend(cleanTo, displayName: data['fromName'] as String?);
+        }
         if (data['alreadySent'] == true) {
           return FriendRequestResult.alreadySent;
         }
@@ -591,15 +594,8 @@ class UserProfileService {
         return FriendRequestResult.sent;
       }
     } catch (_) {
-      // Fallback for offline or direct mode: still track pending locally
-      final prefs = await SharedPreferences.getInstance();
-      final list = prefs.getStringList(_keyPendingSent) ?? [];
-      if (!list.contains(cleanTo)) {
-        list.add(cleanTo);
-        await prefs.setStringList(_keyPendingSent, list);
-        _notifyFriendListeners();
-        return FriendRequestResult.sent;
-      }
+      // Do not fake success on network or server errors
+      return FriendRequestResult.error;
     }
     return FriendRequestResult.error;
   }
@@ -685,14 +681,20 @@ class UserProfileService {
   Future<bool> acceptRequest(FriendRequest req) async {
     try {
       final headers = await _authHeaders();
-      await httpClient.post(
+      final res = await httpClient.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/accept'),
         headers: headers,
         body: jsonEncode({
           'requestId': req.id,
         }),
       ).timeout(const Duration(seconds: 4));
-    } catch (_) {}
+
+      if (res.statusCode != 200) {
+        return false;
+      }
+    } catch (_) {
+      return false;
+    }
 
     final added = await addFriend(req.fromCode, displayName: req.fromName);
 
@@ -718,14 +720,20 @@ class UserProfileService {
   Future<bool> declineRequest(FriendRequest req) async {
     try {
       final headers = await _authHeaders();
-      await httpClient.post(
+      final res = await httpClient.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/decline'),
         headers: headers,
         body: jsonEncode({
           'requestId': req.id,
         }),
       ).timeout(const Duration(seconds: 4));
-    } catch (_) {}
+
+      if (res.statusCode != 200) {
+        return false;
+      }
+    } catch (_) {
+      return false;
+    }
 
     // Remove from cached incoming requests
     final prefs = await SharedPreferences.getInstance();
@@ -845,14 +853,20 @@ class UserProfileService {
   Future<bool> acceptAlbumInvite(AlbumInvite invite) async {
     try {
       final headers = await _authHeaders();
-      await httpClient.post(
+      final res = await httpClient.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/albums/accept'),
         headers: headers,
         body: jsonEncode({
           'inviteId': invite.id,
         }),
       ).timeout(const Duration(seconds: 4));
-    } catch (_) {}
+
+      if (res.statusCode != 200) {
+        return false;
+      }
+    } catch (_) {
+      return false;
+    }
 
     // Ensure album exists in local store
     await LocalStorageService.instance.ensureAlbum(
@@ -900,14 +914,20 @@ class UserProfileService {
   Future<bool> declineAlbumInvite(AlbumInvite invite) async {
     try {
       final headers = await _authHeaders();
-      await httpClient.post(
+      final res = await httpClient.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/albums/decline'),
         headers: headers,
         body: jsonEncode({
           'inviteId': invite.id,
         }),
       ).timeout(const Duration(seconds: 4));
-    } catch (_) {}
+
+      if (res.statusCode != 200) {
+        return false;
+      }
+    } catch (_) {
+      return false;
+    }
 
     // Remove from cached incoming album invites
     final prefs = await SharedPreferences.getInstance();
@@ -920,6 +940,51 @@ class UserProfileService {
 
     _notifyFriendListeners();
     return true;
+  }
+
+  /// Fetch all active server-backed albums for this authenticated account from D1
+  Future<List<Map<String, dynamic>>> fetchServerAlbums() async {
+    try {
+      final headers = await _authHeaders();
+      final res = await httpClient.get(
+        Uri.parse('${AppConfig.backendBaseUrl}/albums'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 5));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final list = (data['albums'] as List? ?? []).cast<Map<String, dynamic>>();
+        return list;
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  /// Register an album on the canonical D1 backend
+  Future<bool> registerAlbumOnServer({
+    required String albumId,
+    required String title,
+    String? storageType,
+    String? storageReference,
+  }) async {
+    try {
+      final headers = await _authHeaders();
+      final res = await httpClient.post(
+        Uri.parse('${AppConfig.backendBaseUrl}/albums'),
+        headers: headers,
+        body: jsonEncode({
+          'id': albumId,
+          'title': title,
+          'name': title,
+          'storageType': storageType ?? 'local',
+          'storageReference': storageReference,
+        }),
+      ).timeout(const Duration(seconds: 5));
+
+      return res.statusCode == 200 || res.statusCode == 201;
+    } catch (_) {
+      return false;
+    }
   }
 
   final List<void Function()> _friendListeners = [];

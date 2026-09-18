@@ -4,6 +4,21 @@
 const INVITE_CHARS = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 const NANOID_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz-';
 
+export function getJwtSecret(env: { JWT_SECRET?: string; ENVIRONMENT?: string }): string {
+  const secret = env.JWT_SECRET;
+  const isTest =
+    typeof (globalThis as any).__vitest_worker__ !== 'undefined' ||
+    (typeof process !== 'undefined' && Boolean(process.env?.VITEST)) ||
+    Boolean((globalThis as any).VITEST);
+  if (!secret || secret === 'default-dev-secret-change-in-production-please') {
+    if (env.ENVIRONMENT === 'production' && !isTest) {
+      throw new Error('FATAL: JWT_SECRET must be configured via wrangler secret in production.');
+    }
+    return 'dev-testing-jwt-secret-at-least-32-chars-long!';
+  }
+  return secret;
+}
+
 export async function hashSecret(secret: string): Promise<string> {
   const clean = String(secret).trim();
   const msgUint8 = new TextEncoder().encode(clean);

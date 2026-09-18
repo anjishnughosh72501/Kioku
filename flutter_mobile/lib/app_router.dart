@@ -24,9 +24,6 @@ import 'features/albums/presentation/screens/album_detail_screen.dart';
 import 'features/friends/presentation/screens/friends_screen.dart';
 import 'features/friends/presentation/widgets/invite_accept_dialog.dart';
 
-import 'core/services/user_profile_service.dart';
-import 'core/storage/local_storage_service.dart';
-import 'core/providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Global root navigator key for deep links, dialogs, and notifications
@@ -182,33 +179,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/invite',
         name: 'invite',
-        redirect: (context, state) async {
+        redirect: (context, state) {
           final uri = state.uri;
-          final albumId = uri.queryParameters['albumId'];
-          final albumName = uri.queryParameters['albumName'] ?? 'Shared Album';
-          final friendCode = uri.queryParameters['friendCode'];
-          final from = uri.queryParameters['from'];
-          final storage = uri.queryParameters['storage'] ?? 'local';
-
-          if (friendCode != null && friendCode.trim().isNotEmpty) {
-            await UserProfileService.instance.sendFriendRequest(friendCode.trim(), myName: from);
-            ref.invalidate(connectedFriendsProvider);
+          final code = uri.queryParameters['code'];
+          if (code != null && code.trim().isNotEmpty) {
+            return '/i/${code.trim()}';
           }
-
-          if (albumId != null && albumId.trim().isNotEmpty) {
-            final cleanId = albumId.trim();
-            await LocalStorageService.instance.ensureAlbum(
-              id: cleanId,
-              name: albumName,
-              storageType: storage,
-            );
-            await ref.read(albumsProvider.notifier).refresh();
-            await ref.read(activeAlbumProvider.notifier).set(cleanId);
-            await ref.read(memoriesProvider.notifier).refresh();
-            return '/albums/$cleanId';
-          }
-
-          return '/';
+          // Redirect legacy query parameters to /friends without direct state mutation
+          return '/friends';
         },
       ),
       GoRoute(

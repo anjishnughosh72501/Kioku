@@ -4,6 +4,12 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-09-18",
   "compatibility_flags": ["nodejs_compat"],
+  "routes": [
+    {
+      "pattern": "api.kioku.app/*",
+      "custom_domain": true
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
@@ -13,7 +19,8 @@
     }
   ],
   "vars": {
-    "JWT_SECRET": "default-dev-secret-change-in-production-please"
+    "ENVIRONMENT": "production",
+    "CORS_ORIGINS": "https://kioku.app,https://api.kioku.app"
   },
   "triggers": {
     "crons": ["0 6 * * *"]

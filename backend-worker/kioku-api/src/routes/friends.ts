@@ -4,11 +4,10 @@ import {
   AppEnv,
   FriendAccountRow,
   FriendRequestRow,
-  FriendRow,
   InviteRow,
   AlbumInviteRow,
 } from '../types';
-import { hashSecret, generateInviteCode, generateId, signJwt } from '../crypto';
+import { hashSecret, generateInviteCode, generateId, signJwt, getJwtSecret } from '../crypto';
 import { requireFriendAuth } from '../middleware/auth';
 
 export const friendsApp = new Hono<AppEnv>();
@@ -101,7 +100,7 @@ friendsApp.post('/token', async (c) => {
     }
   }
 
-  const jwtSecret = c.env.JWT_SECRET || 'default-dev-secret-change-in-production-please';
+  const jwtSecret = getJwtSecret(c.env);
   const token = await signJwt(
     { friendCode: cleanCode },
     jwtSecret,
@@ -128,7 +127,31 @@ friendsApp.post('/request', requireFriendAuth, async (c) => {
     return c.json({ error: 'Cannot send a friend request to yourself' }, 400);
   }
 
-  // Check if an active pending request already exists
+  // Verify recipient account exists (Section 5H)
+  const recipient = await c.env.DB.prepare(
+    `SELECT friend_code FROM friend_accounts WHERE friend_code = ?`
+  )
+    .bind(cleanTo)
+    .first<{ friend_code: string }>();
+
+  if (!recipient) {
+    return c.json({ error: 'Recipient friend code does not exist' }, 404);
+  }
+
+  // Check if already friends
+  const u1 = cleanFrom < cleanTo ? cleanFrom : cleanTo;
+  const u2 = cleanFrom < cleanTo ? cleanTo : cleanFrom;
+  const alreadyFriends = await c.env.DB.prepare(
+    `SELECT 1 FROM friends WHERE user_a = ? AND user_b = ?`
+  )
+    .bind(u1, u2)
+    .first();
+
+  if (alreadyFriends) {
+    return c.json({ error: 'Already connected as friends' }, 409);
+  }
+
+  // Check if active pending request already exists from sender
   const existing = await c.env.DB.prepare(
     `SELECT id, status FROM friend_requests WHERE from_code = ? AND to_code = ? AND status = 'pending'`
   )
@@ -139,8 +162,35 @@ friendsApp.post('/request', requireFriendAuth, async (c) => {
     return c.json({ id: existing.id, status: 'pending', alreadySent: true });
   }
 
-  const id = generateId(16);
+  // Handle reciprocal pending request (Section 5A: Clean reciprocal auto-pairing)
+  const reciprocal = await c.env.DB.prepare(
+    `SELECT id, from_name FROM friend_requests WHERE from_code = ? AND to_code = ? AND status = 'pending'`
+  )
+    .bind(cleanTo, cleanFrom)
+    .first<{ id: string; from_name: string | null }>();
+
   const now = Date.now();
+
+  if (reciprocal) {
+    // Atomically accept reciprocal request and create friendship
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE friend_requests SET status = 'accepted', updated_at = ? WHERE id = ?`
+      ).bind(now, reciprocal.id),
+      c.env.DB.prepare(
+        `INSERT OR IGNORE INTO friends (user_a, user_b, created_at) VALUES (?, ?, ?)`
+      ).bind(u1, u2, now),
+    ]);
+
+    return c.json({
+      id: reciprocal.id,
+      status: 'accepted',
+      alreadySent: false,
+      autoAccepted: true,
+    });
+  }
+
+  const id = generateId(16);
 
   await c.env.DB.prepare(
     `INSERT INTO friend_requests (id, from_code, to_code, from_name, status, created_at, updated_at)
@@ -149,7 +199,7 @@ friendsApp.post('/request', requireFriendAuth, async (c) => {
     .bind(id, cleanFrom, cleanTo, fromName ? String(fromName).trim() : null, now, now)
     .run();
 
-  return c.json({ id, status: 'pending', alreadySent: false });
+  return c.json({ id, status: 'pending', alreadySent: false, autoAccepted: false });
 });
 
 // 2. Poll incoming pending requests AND accepted requests for a user (bidirectional sync)
@@ -231,6 +281,10 @@ friendsApp.post('/accept', requireFriendAuth, async (c) => {
     return c.json({ error: 'Unauthorized to accept this request' }, 403);
   }
 
+  if (request.status !== 'pending') {
+    return c.json({ error: `Request is not pending (current: ${request.status})` }, 400);
+  }
+
   const now = Date.now();
   const u1 = cleanCode < request.from_code ? cleanCode : request.from_code;
   const u2 = cleanCode < request.from_code ? request.from_code : cleanCode;
@@ -273,6 +327,10 @@ friendsApp.post('/decline', requireFriendAuth, async (c) => {
     return c.json({ error: 'Unauthorized to decline this request' }, 403);
   }
 
+  if (request.status !== 'pending') {
+    return c.json({ error: `Request is not pending (current: ${request.status})` }, 400);
+  }
+
   const now = Date.now();
   await c.env.DB.prepare(
     `UPDATE friend_requests SET status = 'declined', updated_at = ? WHERE id = ?`
@@ -304,6 +362,10 @@ friendsApp.post('/cancel', requireFriendAuth, async (c) => {
     return c.json({ error: 'Unauthorized to cancel this request' }, 403);
   }
 
+  if (request.status !== 'pending') {
+    return c.json({ error: `Only pending requests can be cancelled (current: ${request.status})` }, 400);
+  }
+
   const now = Date.now();
   await c.env.DB.prepare(
     `UPDATE friend_requests SET status = 'cancelled', updated_at = ? WHERE id = ?`
@@ -333,6 +395,10 @@ friendsApp.post('/resend', requireFriendAuth, async (c) => {
 
   if (request.from_code !== cleanCode) {
     return c.json({ error: 'Unauthorized to resend this request' }, 403);
+  }
+
+  if (request.status !== 'cancelled' && request.status !== 'expired') {
+    return c.json({ error: `Only cancelled or expired requests can be resent (current: ${request.status})` }, 400);
   }
 
   const now = Date.now();
@@ -528,7 +594,7 @@ friendsApp.post('/profile', requireFriendAuth, async (c) => {
   return c.json({ ok: true, username: cleanName });
 });
 
-// --- ALBUM INVITATIONS & CROSS-ACCOUNT SYNC ---
+// --- ALBUM INVITATIONS & CROSS-ACCOUNT SYNC (Server-Authoritative Membership) ---
 
 // 6. Send in-app album invite to a friend
 friendsApp.post('/albums/invite', requireFriendAuth, async (c) => {
@@ -555,14 +621,48 @@ friendsApp.post('/albums/invite', requireFriendAuth, async (c) => {
     return c.json({ error: 'Cannot invite yourself to an album' }, 400);
   }
 
-  const id = generateId(16);
+  // Verify recipient friend code exists (Section 7)
+  const recipient = await c.env.DB.prepare(
+    `SELECT friend_code FROM friend_accounts WHERE friend_code = ?`
+  )
+    .bind(cleanTo)
+    .first<{ friend_code: string }>();
+
+  if (!recipient) {
+    return c.json({ error: 'Recipient friend code does not exist' }, 404);
+  }
+
   const now = Date.now();
 
-  await c.env.DB.prepare(
-    `INSERT INTO album_invites (id, album_id, album_name, from_code, to_code, from_name, claim_token, inviter_pub_key, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
+  // Ensure album exists in canonical server albums table and inviter is active member/owner
+  const callerMember = await c.env.DB.prepare(
+    `SELECT role, status FROM album_members WHERE album_id = ? AND user_id = ? AND status = 'active'`
   )
-    .bind(
+    .bind(albumId, cleanFrom)
+    .first<{ role: string; status: string }>();
+
+  if (!callerMember) {
+    // If not registered yet, auto-register this album with caller as active owner
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT OR IGNORE INTO albums (id, owner_user_id, title, storage_type, current_epoch, created_at, updated_at)
+         VALUES (?, ?, ?, 'local', 1, ?, ?)`
+      ).bind(albumId, cleanFrom, albumName || 'Shared Album', now, now),
+      c.env.DB.prepare(
+        `INSERT OR REPLACE INTO album_members (album_id, user_id, role, status, joined_at, updated_at)
+         VALUES (?, ?, 'owner', 'active', ?, ?)`
+      ).bind(albumId, cleanFrom, now, now),
+    ]);
+  }
+
+  const id = generateId(16);
+
+  // Atomically create invitation and pending album membership
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO album_invites (id, album_id, album_name, from_code, to_code, from_name, claim_token, inviter_pub_key, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
+    ).bind(
       id,
       albumId,
       albumName || 'Shared Album',
@@ -573,8 +673,12 @@ friendsApp.post('/albums/invite', requireFriendAuth, async (c) => {
       inviterPubKey || null,
       now,
       now
-    )
-    .run();
+    ),
+    c.env.DB.prepare(
+      `INSERT OR IGNORE INTO album_members (album_id, user_id, role, status, joined_at, updated_at)
+       VALUES (?, ?, 'member', 'pending', ?, ?)`
+    ).bind(albumId, cleanTo, now, now),
+  ]);
 
   return c.json({ id, status: 'pending' });
 });
@@ -605,7 +709,7 @@ friendsApp.get('/albums/invites/:myCode', requireFriendAuth, async (c) => {
   return c.json({ invites: rows.results || [] });
 });
 
-// 8. Accept an album invite
+// 8. Accept an album invite (Section 7: atomically updates invitation and creates active server membership)
 friendsApp.post('/albums/accept', requireFriendAuth, async (c) => {
   const body = await c.req.json<{ inviteId?: string }>().catch(() => ({}) as any);
   const { inviteId } = body;
@@ -626,12 +730,22 @@ friendsApp.post('/albums/accept', requireFriendAuth, async (c) => {
     return c.json({ error: 'Unauthorized to accept this album invite' }, 403);
   }
 
+  if (invite.status !== 'pending') {
+    return c.json({ error: `Invite is not pending (current: ${invite.status})` }, 400);
+  }
+
   const now = Date.now();
-  await c.env.DB.prepare(
-    `UPDATE album_invites SET status = 'accepted', updated_at = ? WHERE id = ?`
-  )
-    .bind(now, inviteId)
-    .run();
+
+  // Atomically mark invitation accepted AND record active album membership in D1
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE album_invites SET status = 'accepted', updated_at = ? WHERE id = ?`
+    ).bind(now, inviteId),
+    c.env.DB.prepare(
+      `INSERT OR REPLACE INTO album_members (album_id, user_id, role, status, joined_at, updated_at)
+       VALUES (?, ?, 'member', 'active', ?, ?)`
+    ).bind(invite.album_id, cleanCode, now, now),
+  ]);
 
   return c.json({
     ok: true,
@@ -666,11 +780,14 @@ friendsApp.post('/albums/decline', requireFriendAuth, async (c) => {
   }
 
   const now = Date.now();
-  await c.env.DB.prepare(
-    `UPDATE album_invites SET status = 'declined', updated_at = ? WHERE id = ?`
-  )
-    .bind(now, inviteId)
-    .run();
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE album_invites SET status = 'declined', updated_at = ? WHERE id = ?`
+    ).bind(now, inviteId),
+    c.env.DB.prepare(
+      `UPDATE album_members SET status = 'revoked', updated_at = ? WHERE album_id = ? AND user_id = ?`
+    ).bind(now, invite.album_id, cleanCode),
+  ]);
 
   return c.json({ ok: true });
 });

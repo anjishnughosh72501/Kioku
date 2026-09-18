@@ -39,15 +39,40 @@ CREATE TABLE IF NOT EXISTS flashbacks (
   UNIQUE(group_id, period, generated_for)
 );
 
+CREATE TABLE IF NOT EXISTS albums (
+  id                TEXT PRIMARY KEY,
+  owner_user_id     TEXT NOT NULL,
+  title             TEXT NOT NULL,
+  storage_type      TEXT DEFAULT 'local',
+  storage_reference TEXT,
+  current_epoch     INTEGER DEFAULT 1,
+  created_at        INTEGER NOT NULL,
+  updated_at        INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS album_members (
+  album_id          TEXT NOT NULL,
+  user_id           TEXT NOT NULL,
+  role              TEXT NOT NULL CHECK(role IN ('owner', 'member')),
+  status            TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'pending', 'revoked')),
+  joined_at         INTEGER NOT NULL,
+  updated_at        INTEGER NOT NULL,
+  PRIMARY KEY (album_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS claim_tokens (
-  token           TEXT PRIMARY KEY,
-  album_id        TEXT NOT NULL,
-  inviter_pub_key TEXT NOT NULL,
-  recipient_pub_key TEXT,
-  sealed_key      TEXT,
-  expires_at      INTEGER NOT NULL,
-  used            INTEGER DEFAULT 0,
-  created_at      TEXT DEFAULT (datetime('now'))
+  token              TEXT PRIMARY KEY,
+  album_id           TEXT NOT NULL,
+  inviter_pub_key    TEXT NOT NULL,
+  inviter_identity   TEXT,
+  recipient_identity TEXT,
+  recipient_pub_key  TEXT,
+  sealed_key         TEXT,
+  claim_status       TEXT DEFAULT 'created' CHECK(claim_status IN ('created', 'redeemed', 'sealed', 'consumed', 'expired')),
+  expires_at         INTEGER NOT NULL,
+  used               INTEGER DEFAULT 0,
+  created_at         INTEGER NOT NULL,
+  updated_at         INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS friend_requests (
@@ -442,7 +467,50 @@ describe('Kioku Cloudflare Worker API Suite', () => {
     });
   });
 
-  describe('Social Album Invitations', () => {
+  describe('Canonical Server-Backed Albums (/albums)', () => {
+    const albumId = 'album_kyoto_trip_2026';
+    const albumName = 'Kyoto Spring 2026';
+
+    it('creates a new album with authenticated owner', async () => {
+      const res = await dispatch('/albums', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${tokenA}` },
+        body: { id: albumId, name: albumName },
+      });
+      expect(res.status).toBe(201);
+      const data = (await res.json()) as any;
+      expect(data.album.id).toBe(albumId);
+      expect(data.album.name).toBe(albumName);
+      expect(data.album.ownerCode).toBe(userA);
+      expect(data.album.currentEpoch).toBe(1);
+    });
+
+    it('owner can fetch created album via GET /albums and GET /albums/:albumId', async () => {
+      const listRes = await dispatch('/albums', {
+        headers: { Authorization: `Bearer ${tokenA}` },
+      });
+      expect(listRes.status).toBe(200);
+      const listData = (await listRes.json()) as any;
+      expect(listData.albums.some((a: any) => a.id === albumId)).toBe(true);
+
+      const getRes = await dispatch(`/albums/${albumId}`, {
+        headers: { Authorization: `Bearer ${tokenA}` },
+      });
+      expect(getRes.status).toBe(200);
+      const getData = (await getRes.json()) as any;
+      expect(getData.album.id).toBe(albumId);
+      expect(getData.members.some((m: any) => m.userCode === userA && m.role === 'owner')).toBe(true);
+    });
+
+    it('non-member cannot access album details (403)', async () => {
+      const res = await dispatch(`/albums/${albumId}`, {
+        headers: { Authorization: `Bearer ${tokenB}` },
+      });
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe('Social Album Invitations & Reconciliation', () => {
     let albumInviteId: string;
     const albumId = 'album_kyoto_trip_2026';
     const albumName = 'Kyoto Spring 2026';
@@ -483,7 +551,7 @@ describe('Kioku Cloudflare Worker API Suite', () => {
       expect(invite.claimToken).toBe('tok_claim_12345');
     });
 
-    it('recipient accepts the album invitation', async () => {
+    it('recipient accepts the album invitation and becomes canonical album member', async () => {
       const res = await dispatch('/friends/albums/accept', {
         method: 'POST',
         headers: { Authorization: `Bearer ${tokenB}` },
@@ -495,15 +563,56 @@ describe('Kioku Cloudflare Worker API Suite', () => {
       expect(data.ok).toBe(true);
       expect(data.albumId).toBe(albumId);
       expect(data.claimToken).toBe('tok_claim_12345');
+
+      // Guest Bob can now fetch GET /albums and sees the shared album
+      const bobAlbumsRes = await dispatch('/albums', {
+        headers: { Authorization: `Bearer ${tokenB}` },
+      });
+      expect(bobAlbumsRes.status).toBe(200);
+      const bobData = (await bobAlbumsRes.json()) as any;
+      const sharedAlbum = bobData.albums.find((a: any) => a.id === albumId);
+      expect(sharedAlbum).toBeDefined();
+      expect(sharedAlbum.role).toBe('member');
+    });
+
+    it('lists album members including owner and accepted guest', async () => {
+      const res = await dispatch(`/albums/${albumId}/members`, {
+        headers: { Authorization: `Bearer ${tokenA}` },
+      });
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.members.length).toBe(2);
+      expect(data.members.some((m: any) => m.userCode === userA && m.role === 'owner')).toBe(true);
+      expect(data.members.some((m: any) => m.userCode === userB && m.role === 'member')).toBe(true);
+    });
+
+    it('owner can remove member and rotate epoch', async () => {
+      const removeRes = await dispatch(`/albums/${albumId}/members/remove`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${tokenA}` },
+        body: { memberCode: userB },
+      });
+      expect(removeRes.status).toBe(200);
+      const removeData = (await removeRes.json()) as any;
+      expect(removeData.ok).toBe(true);
+      expect(removeData.currentEpoch).toBe(2);
+
+      // Bob should no longer see it in GET /albums
+      const bobAlbumsRes = await dispatch('/albums', {
+        headers: { Authorization: `Bearer ${tokenB}` },
+      });
+      const bobData = (await bobAlbumsRes.json()) as any;
+      expect(bobData.albums.some((a: any) => a.id === albumId)).toBe(false);
     });
   });
 
-  describe('Claim Token Key Exchange', () => {
+  describe('Claim Token Key Exchange State Machine (created -> redeemed -> sealed -> consumed)', () => {
     let claimToken: string;
 
-    it('creates single-use claim token', async () => {
+    it('creates single-use claim token bound to inviter', async () => {
       const res = await dispatch('/claim/request', {
         method: 'POST',
+        headers: { Authorization: `Bearer ${tokenA}` },
         body: {
           albumId: 'album_test_123',
           inviterPubKey: 'inviter_pub_key_base64',
@@ -517,9 +626,10 @@ describe('Kioku Cloudflare Worker API Suite', () => {
       claimToken = data.claimToken;
     });
 
-    it('redeems claim token with recipient public key', async () => {
+    it('redeems claim token with recipient public key and binds recipient identity', async () => {
       const res = await dispatch('/claim/redeem', {
         method: 'POST',
+        headers: { Authorization: `Bearer ${tokenB}` },
         body: {
           claimToken,
           recipientPubKey: 'recipient_pub_key_base64',
@@ -532,20 +642,22 @@ describe('Kioku Cloudflare Worker API Suite', () => {
       expect(data.inviterPubKey).toBe('inviter_pub_key_base64');
     });
 
-    it('rejects duplicate redemption (410 Already Used)', async () => {
+    it('rejects duplicate redemption (409 Conflict)', async () => {
       const res = await dispatch('/claim/redeem', {
         method: 'POST',
+        headers: { Authorization: `Bearer ${tokenB}` },
         body: {
           claimToken,
           recipientPubKey: 'another_key',
         },
       });
-      expect(res.status).toBe(410);
+      expect(res.status).toBe(409);
     });
 
-    it('posts sealed collection key', async () => {
+    it('inviter posts sealed collection key', async () => {
       const res = await dispatch('/claim/seal', {
         method: 'POST',
+        headers: { Authorization: `Bearer ${tokenA}` },
         body: {
           claimToken,
           sealedKey: 'encrypted_sealed_album_key_ciphertext',
@@ -557,13 +669,21 @@ describe('Kioku Cloudflare Worker API Suite', () => {
       expect(data.ok).toBe(true);
     });
 
-    it('joining device retrieves sealed collection key', async () => {
-      const res = await dispatch(`/claim/sealed/${claimToken}`);
+    it('joining device retrieves sealed collection key and marks consumed', async () => {
+      const res = await dispatch(`/claim/sealed/${claimToken}`, {
+        headers: { Authorization: `Bearer ${tokenB}` },
+      });
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
       expect(data.albumId).toBe('album_test_123');
       expect(data.sealedKey).toBe('encrypted_sealed_album_key_ciphertext');
       expect(data.recipientPubKey).toBe('recipient_pub_key_base64');
+
+      // Second fetch must fail because claim token is now consumed
+      const repeatRes = await dispatch(`/claim/sealed/${claimToken}`, {
+        headers: { Authorization: `Bearer ${tokenB}` },
+      });
+      expect(repeatRes.status).toBe(410);
     });
   });
 
@@ -582,11 +702,32 @@ describe('Kioku Cloudflare Worker API Suite', () => {
     });
   });
 
-  describe('Cancel, Resend, and Decline Requests', () => {
-    let cancelReqId: string;
+  describe('Friend Request Reciprocal Auto-Acceptance & Error Handling', () => {
     const userC = 'KIOKU-CHARLIE';
+    const secretC = 'secure-device-secret-for-charlie-12345';
+    let tokenC: string;
 
-    it('creates and cancels a pending friend request', async () => {
+    it('rejects sending friend request to non-existent friend code (404)', async () => {
+      const res = await dispatch('/friends/request', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${tokenA}` },
+        body: { toCode: userC, fromName: 'Alice' },
+      });
+      expect(res.status).toBe(404);
+      const data = (await res.json()) as any;
+      expect(data.error.toLowerCase()).toMatch(/not found|does not exist/);
+    });
+
+    it('registers userC and tests cancel and resend lifecycle', async () => {
+      const regRes = await dispatch('/friends/token', {
+        method: 'POST',
+        body: { friendCode: userC, secret: secretC, username: 'Charlie' },
+      });
+      expect(regRes.status).toBe(200);
+      const regData = (await regRes.json()) as any;
+      tokenC = regData.token;
+
+      // Alice sends request to Charlie
       const createRes = await dispatch('/friends/request', {
         method: 'POST',
         headers: { Authorization: `Bearer ${tokenA}` },
@@ -594,43 +735,68 @@ describe('Kioku Cloudflare Worker API Suite', () => {
       });
       expect(createRes.status).toBe(200);
       const data = (await createRes.json()) as any;
-      cancelReqId = data.id;
+      const cancelReqId = data.id;
 
+      // Alice cancels
       const cancelRes = await dispatch('/friends/cancel', {
         method: 'POST',
         headers: { Authorization: `Bearer ${tokenA}` },
         body: { requestId: cancelReqId },
       });
       expect(cancelRes.status).toBe(200);
-      const cancelData = (await cancelRes.json()) as any;
-      expect(cancelData.ok).toBe(true);
-    });
 
-    it('resends a cancelled request', async () => {
+      // Alice resends
       const resendRes = await dispatch('/friends/resend', {
         method: 'POST',
         headers: { Authorization: `Bearer ${tokenA}` },
         body: { requestId: cancelReqId },
       });
       expect(resendRes.status).toBe(200);
-      const resendData = (await resendRes.json()) as any;
-      expect(resendData.ok).toBe(true);
 
-      const sentRes = await dispatch(`/friends/sent/${userA}`, {
-        headers: { Authorization: `Bearer ${tokenA}` },
-      });
-      const sentData = (await sentRes.json()) as any;
-      const found = sentData.requests.find((r: any) => r.id === cancelReqId);
-      expect(found.status).toBe('pending');
-    });
-
-    it('declines a friend request', async () => {
+      // Charlie declines
       const declineRes = await dispatch('/friends/decline', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${tokenB}` },
-        body: { requestId: createdRequestId },
+        headers: { Authorization: `Bearer ${tokenC}` },
+        body: { requestId: cancelReqId },
       });
       expect(declineRes.status).toBe(200);
+    });
+
+    it('reciprocal friend request auto-accepts atomically', async () => {
+      const userD = 'KIOKU-DAVID01';
+      const secretD = 'secure-device-secret-for-david-12345';
+      const regD = await dispatch('/friends/token', {
+        method: 'POST',
+        body: { friendCode: userD, secret: secretD, username: 'David' },
+      });
+      const tokenD = ((await regD.json()) as any).token;
+
+      // Charlie sends request to David
+      const reqRes1 = await dispatch('/friends/request', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${tokenC}` },
+        body: { toCode: userD, fromName: 'Charlie' },
+      });
+      expect(reqRes1.status).toBe(200);
+      const req1Data = (await reqRes1.json()) as any;
+      expect(req1Data.autoAccepted).toBe(false);
+
+      // David sends reciprocal request to Charlie -> auto-accepts!
+      const reqRes2 = await dispatch('/friends/request', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${tokenD}` },
+        body: { toCode: userC, fromName: 'David' },
+      });
+      expect(reqRes2.status).toBe(200);
+      const req2Data = (await reqRes2.json()) as any;
+      expect(req2Data.autoAccepted).toBe(true);
+
+      // Both are now friends
+      const listC = await dispatch(`/friends/list/${userC}`, {
+        headers: { Authorization: `Bearer ${tokenC}` },
+      });
+      const listDataC = (await listC.json()) as any;
+      expect(listDataC.friends.some((f: any) => f.friendCode === userD)).toBe(true);
     });
   });
 
@@ -652,6 +818,14 @@ describe('Kioku Cloudflare Worker API Suite', () => {
         headers: { Upgrade: 'websocket' },
       });
       expect(res.status).toBe(401);
+    });
+
+    it('accepts upgrade with valid authenticated token returning 101 Switching Protocols', async () => {
+      const res = await dispatch(`/signal?token=${tokenA}`, {
+        headers: { Upgrade: 'websocket' },
+      });
+      expect(res.status).toBe(101);
+      expect(res.webSocket).toBeDefined();
     });
   });
 

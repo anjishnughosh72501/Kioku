@@ -1,5 +1,5 @@
 -- Kioku Cloudflare D1 Database Schema
--- Matches backend/db.js SQLite schema with full index coverage
+-- Complete production schema including server-authoritative albums and membership
 
 -- GROUPS (Legacy & Flashbacks)
 CREATE TABLE IF NOT EXISTS groups (
@@ -41,16 +41,43 @@ CREATE TABLE IF NOT EXISTS flashbacks (
   UNIQUE(group_id, period, generated_for)
 );
 
+-- ALBUMS (Canonical Server-Authoritative Albums)
+CREATE TABLE IF NOT EXISTS albums (
+  id                TEXT PRIMARY KEY,
+  owner_user_id     TEXT NOT NULL,
+  title             TEXT NOT NULL,
+  storage_type      TEXT DEFAULT 'local',
+  storage_reference TEXT,
+  current_epoch     INTEGER DEFAULT 1,
+  created_at        INTEGER NOT NULL,
+  updated_at        INTEGER NOT NULL
+);
+
+-- ALBUM MEMBERS (Canonical Server-Side Membership)
+CREATE TABLE IF NOT EXISTS album_members (
+  album_id          TEXT NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+  user_id           TEXT NOT NULL,
+  role              TEXT NOT NULL CHECK(role IN ('owner', 'member')),
+  status            TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'pending', 'revoked')),
+  joined_at         INTEGER NOT NULL,
+  updated_at        INTEGER NOT NULL,
+  PRIMARY KEY (album_id, user_id)
+);
+
 -- CLAIM TOKENS (Zero-Knowledge Device Key Exchange)
 CREATE TABLE IF NOT EXISTS claim_tokens (
-  token           TEXT PRIMARY KEY,
-  album_id        TEXT NOT NULL,
-  inviter_pub_key TEXT NOT NULL,
-  recipient_pub_key TEXT,
-  sealed_key      TEXT,
-  expires_at      INTEGER NOT NULL,
-  used            INTEGER DEFAULT 0,
-  created_at      TEXT DEFAULT (datetime('now'))
+  token              TEXT PRIMARY KEY,
+  album_id           TEXT NOT NULL,
+  inviter_pub_key    TEXT NOT NULL,
+  inviter_identity   TEXT,
+  recipient_identity TEXT,
+  recipient_pub_key  TEXT,
+  sealed_key         TEXT,
+  claim_status       TEXT DEFAULT 'created' CHECK(claim_status IN ('created', 'redeemed', 'sealed', 'consumed', 'expired')),
+  expires_at         INTEGER NOT NULL,
+  used               INTEGER DEFAULT 0,
+  created_at         INTEGER NOT NULL,
+  updated_at         INTEGER
 );
 
 -- FRIEND REQUESTS
@@ -107,6 +134,9 @@ CREATE TABLE IF NOT EXISTS invites (
 );
 
 -- INDEXES
+CREATE INDEX IF NOT EXISTS idx_albums_owner ON albums(owner_user_id);
+CREATE INDEX IF NOT EXISTS idx_album_members_user ON album_members(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_album_members_album ON album_members(album_id, status);
 CREATE INDEX IF NOT EXISTS idx_media_group_date ON media(group_id, taken_at);
 CREATE INDEX IF NOT EXISTS idx_media_uploader ON media(group_id, uploader_id);
 CREATE INDEX IF NOT EXISTS idx_claim_token_exp ON claim_tokens(token, expires_at);
