@@ -6,14 +6,76 @@
 const WebSocket = require('ws');
 const jwt = require('jsonwebtoken');
 
-function setupSignaling(server) {
-  const wss = new WebSocket.Server({ noServer: true });
+/**
+ * In-memory signaling store for single-instance deployments.
+ */
+class MemorySignalStore {
+  constructor() {
+    this.rooms = new Map(); // albumId -> Map<deviceId, ws>
+  }
 
-  // Map of albumId -> Map of deviceId -> WebSocket client
-  const rooms = new Map();
+  join(albumId, deviceId, ws) {
+    if (!this.rooms.has(albumId)) {
+      this.rooms.set(albumId, new Map());
+    }
+    const room = this.rooms.get(albumId);
+    room.set(deviceId, ws);
+  }
+
+  getPeers(albumId, excludeDeviceId) {
+    if (!this.rooms.has(albumId)) return [];
+    return Array.from(this.rooms.get(albumId).keys()).filter((id) => id !== excludeDeviceId);
+  }
+
+  getPeerSocket(albumId, deviceId) {
+    if (!this.rooms.has(albumId)) return null;
+    return this.rooms.get(albumId).get(deviceId) || null;
+  }
+
+  getRoomSockets(albumId) {
+    if (!this.rooms.has(albumId)) return [];
+    return Array.from(this.rooms.get(albumId).values());
+  }
+
+  leave(albumId, deviceId) {
+    if (!this.rooms.has(albumId)) return;
+    const room = this.rooms.get(albumId);
+    room.delete(deviceId);
+    if (room.size === 0) {
+      this.rooms.delete(albumId);
+    }
+  }
+
+  getRoomCount() {
+    return this.rooms.size;
+  }
+}
+
+/**
+ * Multi-instance adapter skeleton (P2-12).
+ * Enables horizontal scaling with Redis Pub/Sub when REDIS_URL is configured.
+ */
+class DistributedSignalStore extends MemorySignalStore {
+  constructor(redisUrl) {
+    super();
+    this.redisUrl = redisUrl;
+    // In cluster deployments, Redis pub/sub bridges cross-node SDP messages.
+  }
+}
+
+function createSignalStore() {
+  if (process.env.REDIS_URL) {
+    return new DistributedSignalStore(process.env.REDIS_URL);
+  }
+  return new MemorySignalStore();
+}
+
+function setupSignaling(server, customStore = null) {
+  const wss = new WebSocket.Server({ noServer: true });
+  const store = customStore || createSignalStore();
 
   server.on('upgrade', (request, socket, head) => {
-    const url = new URL(request.url, `http://${request.headers.host}`);
+    const url = new URL(request.url, 'http://' + request.headers.host);
     if (url.pathname !== '/signal') {
       return;
     }
@@ -72,14 +134,10 @@ function setupSignaling(server) {
             currentAlbumId = albumId;
             currentDeviceId = deviceId;
 
-            if (!rooms.has(albumId)) {
-              rooms.set(albumId, new Map());
-            }
-            const room = rooms.get(albumId);
-            room.set(deviceId, ws);
+            store.join(albumId, deviceId, ws);
 
-            // Notify existing peers
-            const peers = Array.from(room.keys()).filter((id) => id !== deviceId);
+            // Notify joining peer of existing peers in the album room
+            const peers = store.getPeers(albumId, deviceId);
             ws.send(
               JSON.stringify({
                 type: 'room-peers',
@@ -88,8 +146,10 @@ function setupSignaling(server) {
               })
             );
 
-            for (const [peerId, peerWs] of room.entries()) {
-              if (peerId !== deviceId && peerWs.readyState === WebSocket.OPEN) {
+            // Broadcast join notification to existing peers
+            const roomSockets = store.getRoomSockets(albumId);
+            for (const peerWs of roomSockets) {
+              if (peerWs !== ws && peerWs.readyState === WebSocket.OPEN) {
                 peerWs.send(
                   JSON.stringify({
                     type: 'peer-joined',
@@ -104,9 +164,8 @@ function setupSignaling(server) {
 
           case 'signal': {
             // Relay offer, answer, or candidate to target peer
-            if (currentAlbumId && rooms.has(currentAlbumId)) {
-              const room = rooms.get(currentAlbumId);
-              const targetWs = room.get(targetDeviceId);
+            if (currentAlbumId) {
+              const targetWs = store.getPeerSocket(currentAlbumId, targetDeviceId);
               if (targetWs && targetWs.readyState === WebSocket.OPEN) {
                 targetWs.send(
                   JSON.stringify({
@@ -129,11 +188,11 @@ function setupSignaling(server) {
     });
 
     function _handleLeave() {
-      if (currentAlbumId && currentDeviceId && rooms.has(currentAlbumId)) {
-        const room = rooms.get(currentAlbumId);
-        room.remove ? room.remove(currentDeviceId) : room.delete(currentDeviceId);
+      if (currentAlbumId && currentDeviceId) {
+        store.leave(currentAlbumId, currentDeviceId);
 
-        for (const peerWs of room.values()) {
+        const roomSockets = store.getRoomSockets(currentAlbumId);
+        for (const peerWs of roomSockets) {
           if (peerWs.readyState === WebSocket.OPEN) {
             peerWs.send(
               JSON.stringify({
@@ -143,9 +202,6 @@ function setupSignaling(server) {
               })
             );
           }
-        }
-        if (room.size === 0) {
-          rooms.delete(currentAlbumId);
         }
       }
     }
@@ -157,4 +213,4 @@ function setupSignaling(server) {
   return wss;
 }
 
-module.exports = { setupSignaling };
+module.exports = { setupSignaling, MemorySignalStore, DistributedSignalStore, createSignalStore };

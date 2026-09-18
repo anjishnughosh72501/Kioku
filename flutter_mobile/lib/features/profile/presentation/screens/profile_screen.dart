@@ -18,6 +18,8 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_mobile/core/config.dart';
 import 'package:flutter_mobile/core/services/invite_service.dart';
 import 'package:flutter_mobile/core/services/user_profile_service.dart';
+import 'package:flutter_mobile/core/services/app_lock_service.dart';
+import 'package:flutter_mobile/core/services/error_reporter.dart';
 import 'package:flutter_mobile/features/profile/presentation/widgets/album_row.dart';
 import 'package:flutter_mobile/main.dart';
 import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
@@ -634,6 +636,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
               // Friends & Circle Section
               _buildFriendsCard(context, ref, colors, typography, albums),
+
+              const SizedBox(height: AppTheme.spacingLg),
+
+              // App Lock & Privacy Gate (P1-8 & P2-10)
+              _buildAppLockCard(context, colors, typography),
 
               const SizedBox(height: AppTheme.spacingLg),
 
@@ -1948,6 +1955,381 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildAppLockCard(
+    BuildContext context,
+    AppColors colors,
+    TextTheme typography,
+  ) {
+    final lockService = AppLockService.instance;
+    final isEnabled = lockService.isEnabled;
+
+    return ClayCard(
+      variant: ClayVariant.elevated,
+      padding: const EdgeInsets.all(AppTheme.spacingLg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.lock_outline, size: 20, color: colors.primary),
+              const SizedBox(width: 8),
+              Text(
+                'App Lock & Privacy Gate',
+                style: typography.bodyMedium?.copyWith(
+                  color: colors.ink,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isEnabled
+                      ? colors.primary.withValues(alpha: 0.12)
+                      : colors.divider.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                  border: Border.all(
+                    color: isEnabled ? colors.primary.withValues(alpha: 0.3) : colors.divider,
+                    width: 0.5,
+                  ),
+                ),
+                child: Text(
+                  isEnabled ? 'PROTECTED' : 'DISABLED',
+                  style: typography.bodySmall?.copyWith(
+                    color: isEnabled ? colors.primary : colors.inkMuted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppTheme.spacingMd),
+          Text(
+            'Re-locks the decrypted photo gallery and prompts for a PIN or recovery phrase whenever Kioku returns from the background.',
+            style: typography.bodySmall?.copyWith(
+              color: colors.inkMuted,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacingMd),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _toggleAppLock(context, colors, typography),
+                  icon: Icon(
+                    isEnabled ? Icons.lock_open : Icons.lock,
+                    size: 16,
+                    color: colors.ink,
+                  ),
+                  label: Text(
+                    isEnabled ? 'Manage App Lock' : 'Enable App Lock',
+                    style: typography.bodySmall?.copyWith(
+                      color: colors.ink,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: colors.divider),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+              if (isEnabled) ...[
+                const SizedBox(width: 8),
+                IconButton.outlined(
+                  onPressed: () {
+                    HapticFeedback.heavyImpact();
+                    lockService.lock();
+                  },
+                  tooltip: 'Lock immediately',
+                  icon: Icon(Icons.screen_lock_portrait_outlined, size: 18, color: colors.primary),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: colors.divider),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => _showErrorLogsModal(context, colors, typography),
+              icon: Icon(Icons.bug_report_outlined, size: 14, color: colors.inkMuted),
+              label: Text(
+                'View Privacy-Scrubbed Logs',
+                style: typography.bodySmall?.copyWith(
+                  color: colors.inkMuted,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(delay: 115.ms, duration: 300.ms);
+  }
+
+  void _toggleAppLock(BuildContext context, AppColors colors, TextTheme typography) {
+    final lockService = AppLockService.instance;
+    if (!lockService.isEnabled) {
+      _showSetPinDialog(context, colors, typography);
+    } else {
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Theme.of(ctx).scaffoldBackgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Manage App Lock',
+                style: typography.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Icon(Icons.key_outlined, color: colors.primary),
+                title: const Text('Change PIN'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showSetPinDialog(context, colors, typography);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.lock_open_outlined, color: Colors.redAccent),
+                title: const Text('Disable App Lock', style: TextStyle(color: Colors.redAccent)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showDisablePinDialog(context, colors, typography);
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+
+  void _showSetPinDialog(BuildContext context, AppColors colors, TextTheme typography) {
+    final pinController = TextEditingController();
+    final confirmController = TextEditingController();
+    String? error;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Set 4 to 6-digit PIN'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: pinController,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Enter PIN'),
+              ),
+              TextField(
+                controller: confirmController,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Confirm PIN'),
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 8),
+                Text(error!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final p1 = pinController.text.trim();
+                final p2 = confirmController.text.trim();
+                if (p1.length < 4) {
+                  setDialogState(() => error = 'PIN must be 4 to 6 digits');
+                  return;
+                }
+                if (p1 != p2) {
+                  setDialogState(() => error = 'PINs do not match');
+                  return;
+                }
+                await AppLockService.instance.setPin(p1);
+                if (mounted) setState(() {});
+                if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+              },
+              child: const Text('Save PIN'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDisablePinDialog(BuildContext context, AppColors colors, TextTheme typography) {
+    final pinController = TextEditingController();
+    String? error;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Confirm PIN to Disable'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: pinController,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Current PIN'),
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 8),
+                Text(error!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final ok = await AppLockService.instance.disableLock(pinController.text.trim());
+                if (ok) {
+                  if (mounted) setState(() {});
+                  if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+                } else {
+                  setDialogState(() => error = 'Incorrect PIN');
+                }
+              },
+              child: const Text('Disable'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showErrorLogsModal(BuildContext context, AppColors colors, TextTheme typography) {
+    final logs = ErrorReporter.instance.logs;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Container(
+        height: MediaQuery.of(sheetCtx).size.height * 0.7,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Theme.of(sheetCtx).scaffoldBackgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.shield_outlined, size: 20, color: colors.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'Privacy-Scrubbed Error Logs',
+                  style: typography.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(sheetCtx),
+                ),
+              ],
+            ),
+            Text(
+              'Zero analytics or tracking. All paths, keys, and identifiers are scrubbed locally.',
+              style: typography.bodySmall?.copyWith(color: colors.inkMuted),
+            ),
+            const Divider(height: 24),
+            Expanded(
+              child: logs.isEmpty
+                  ? const Center(child: Text('No errors recorded. Kioku is running cleanly!'))
+                  : ListView.builder(
+                      itemCount: logs.length,
+                      itemBuilder: (ctx, i) {
+                        final entry = logs[i];
+                        return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  entry.timestamp.toIso8601String().substring(11, 19),
+                                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                ),
+                                const SizedBox(height: 4),
+                                SelectableText(
+                                  entry.message,
+                                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: logs.isEmpty
+                        ? null
+                        : () {
+                            final allText = logs.map((l) => '${l.timestamp.toIso8601String()}: ${l.message}').join('\n');
+                            Clipboard.setData(ClipboardData(text: allText));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Scrubbed logs copied to clipboard')),
+                            );
+                          },
+                    icon: const Icon(Icons.copy, size: 16),
+                    label: const Text('Copy All'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton.outlined(
+                  onPressed: () {
+                    ErrorReporter.instance.clearLogs();
+                    Navigator.pop(sheetCtx);
+                  },
+                  tooltip: 'Clear logs',
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -13,6 +13,9 @@ import 'package:flutter_mobile/core/crypto/key_store.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/app_router.dart';
 import 'package:flutter_mobile/core/services/deep_link_service.dart';
+import 'package:flutter_mobile/core/services/app_lock_service.dart';
+import 'package:flutter_mobile/core/services/error_reporter.dart';
+import 'package:flutter_mobile/features/auth/presentation/screens/app_lock_screen.dart';
 import 'package:flutter_mobile/features/media_viewer/presentation/screens/video_player_screen.dart';
 
 void main() async {
@@ -21,16 +24,23 @@ void main() async {
 
     FlutterError.onError = (details) {
       FlutterError.presentError(details);
+      ErrorReporter.instance.recordError(
+        details.exceptionAsString(),
+        details.stack,
+        context: 'FlutterError',
+      );
       debugPrint('Kioku FlutterError: ${details.exceptionAsString()}');
     };
 
     PlatformDispatcher.instance.onError = (error, stack) {
+      ErrorReporter.instance.recordError(error, stack, context: 'PlatformDispatcher');
       debugPrint('Kioku PlatformDispatcher Unhandled Error: $error\n$stack');
       return true;
     };
 
     await VideoPlayerScreen.sweepStaleTempVideos();
     await UserProfileService.instance.init();
+    await AppLockService.instance.init();
     try {
       await KeyStore.instance.initialize();
     } catch (_) {
@@ -47,6 +57,7 @@ void main() async {
       ),
     );
   }, (error, stack) {
+    ErrorReporter.instance.recordError(error, stack, context: 'runZonedGuarded');
     debugPrint('Kioku runZonedGuarded Uncaught Zone Error: $error\n$stack');
   });
 }
@@ -89,14 +100,16 @@ class _KiokuAppState extends ConsumerState<KiokuApp> {
       routerConfig: router,
       builder: (context, child) {
         final mediaQuery = MediaQuery.of(context);
-        return MediaQuery(
-          data: mediaQuery.copyWith(
-            textScaler: mediaQuery.textScaler.clamp(
-              minScaleFactor: 0.85,
-              maxScaleFactor: 2.5,
+        return AppLockGate(
+          child: MediaQuery(
+            data: mediaQuery.copyWith(
+              textScaler: mediaQuery.textScaler.clamp(
+                minScaleFactor: 0.85,
+                maxScaleFactor: 2.5,
+              ),
             ),
+            child: child!,
           ),
-          child: child!,
         );
       },
     );

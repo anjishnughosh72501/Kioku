@@ -24,7 +24,32 @@ function saveNow() {
   _dirty = false;
   if (!_db) return;
   const data = _db.export();
-  fs.writeFileSync(DB_PATH, Buffer.from(data));
+  const tmpPath = `${DB_PATH}.tmp`;
+  try {
+    fs.writeFileSync(tmpPath, Buffer.from(data));
+    try {
+      fs.renameSync(tmpPath, DB_PATH);
+    } catch (renameErr) {
+      fs.copyFileSync(tmpPath, DB_PATH);
+      try { fs.unlinkSync(tmpPath); } catch (_) {}
+    }
+  } catch (err) {
+    fs.writeFileSync(DB_PATH, Buffer.from(data));
+  }
+}
+
+function transaction(fn) {
+  if (!_db) throw new Error('Database not initialized');
+  _db.exec('BEGIN TRANSACTION');
+  try {
+    const result = fn();
+    _db.exec('COMMIT');
+    scheduleSave();
+    return result;
+  } catch (error) {
+    _db.exec('ROLLBACK');
+    throw error;
+  }
 }
 
 function prepare(sql) {
@@ -153,4 +178,4 @@ async function initDB() {
   process.on('SIGTERM', () => { saveNow(); process.exit(); });
 }
 
-module.exports = { initDB, prepare };
+module.exports = { initDB, prepare, transaction, saveNow };
