@@ -1,0 +1,23 @@
+{
+	"name": "kioku-api",
+	"version": "0.0.0",
+	"private": true,
+	"scripts": {
+		"deploy": "wrangler deploy",
+		"dev": "wrangler dev",
+		"start": "wrangler dev",
+		"test": "vitest",
+		"cf-typegen": "wrangler types"
+	},
+	"devDependencies": {
+		"@cloudflare/vitest-plugin": "^1.0.0",
+		"@cloudflare/workers-types": "^5.20260918.1",
+		"@types/node": "^26.6.1",
+		"typescript": "^5.5.2",
+		"vitest": "~4.1.0",
+		"wrangler": "^4"
+	},
+	"dependencies": {
+		"hono": "^4.13.8"
+	}
+}

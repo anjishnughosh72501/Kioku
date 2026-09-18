@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kioku-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kioku-prod",
+      "database_id": "9f676303-c8fd-489a-a6ab-777cf0593301",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "JWT_SECRET": "default-dev-secret-change-in-production-please"
+  },
+  "triggers": {
+    "crons": ["0 6 * * *"]
+  }
+}
