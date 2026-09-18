@@ -7,7 +7,9 @@ import 'package:flutter_mobile/core/providers.dart';
 import 'package:flutter_mobile/core/services/invite_service.dart';
 import 'package:flutter_mobile/core/services/user_profile_service.dart';
 import 'package:flutter_mobile/core/storage/local_storage_service.dart';
+import 'package:flutter_mobile/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:flutter_mobile/features/friends/presentation/widgets/invite_accept_dialog.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DeepLinkService {
   DeepLinkService._();
@@ -19,6 +21,22 @@ class DeepLinkService {
 
   void setHandler(Future<void> Function(Uri uri) handler) {
     _linkHandler = handler;
+  }
+
+  /// Extracts 6-char short invite code from https://kioku.app/i/:code, https://kioku.app/invite/:code, or kioku://i/:code
+  static String? extractInviteCode(Uri uri) {
+    if (uri.pathSegments.isNotEmpty) {
+      if ((uri.pathSegments.first == 'i' || uri.pathSegments.first == 'invite') &&
+          uri.pathSegments.length > 1) {
+        return uri.pathSegments[1].trim().toUpperCase();
+      }
+    }
+    if (uri.host == 'i' || uri.host == 'invite') {
+      if (uri.pathSegments.isNotEmpty) {
+        return uri.pathSegments.first.trim().toUpperCase();
+      }
+    }
+    return null;
   }
 
   Future<void> init() async {
@@ -55,18 +73,17 @@ class DeepLinkService {
     required BuildContext context,
   }) async {
     // 1. Check for Universal Short Invite Links (/i/:code or /invite/:code or kioku://i/:code)
-    String? shortInviteCode;
-    if (uri.pathSegments.isNotEmpty) {
-      if (uri.pathSegments.first == 'i' && uri.pathSegments.length > 1) {
-        shortInviteCode = uri.pathSegments[1];
-      } else if (uri.pathSegments.first == 'invite' && uri.pathSegments.length > 1) {
-        shortInviteCode = uri.pathSegments[1];
+    final shortInviteCode = extractInviteCode(uri);
+
+    // If user is not yet authenticated, persist invite code & uri for post-auth resolution
+    final authState = ref.read(authControllerProvider);
+    if (!authState.isAuthenticated) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('pending_deep_link', uri.toString());
+      if (shortInviteCode != null && shortInviteCode.isNotEmpty) {
+        await prefs.setString('pending_invite_code', shortInviteCode);
       }
-    }
-    if (shortInviteCode == null && (uri.host == 'i' || uri.host == 'invite')) {
-      if (uri.pathSegments.isNotEmpty) {
-        shortInviteCode = uri.pathSegments.first;
-      }
+      return false;
     }
 
     if (shortInviteCode != null && shortInviteCode.trim().isNotEmpty) {

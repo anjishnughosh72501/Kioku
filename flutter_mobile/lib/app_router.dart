@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/crypto/key_store.dart';
 import 'core/models/memory.dart';
 import 'features/auth/presentation/screens/join_screen.dart';
+import 'features/auth/presentation/screens/recovery_key_screen.dart';
 import 'features/auth/presentation/screens/splash_screen.dart';
 import 'features/auth/presentation/screens/onboarding_screen.dart';
 import 'features/feed/presentation/screens/feed_screen.dart';
@@ -39,10 +41,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     debugLogDiagnostics: false,
     redirect: (context, state) {
       final isSplash = state.matchedLocation == '/splash';
+      final isRecovery = state.matchedLocation == '/recovery';
       final isOnboarding = state.matchedLocation == '/onboarding';
       final isAuth = authState.isAuthenticated;
       final isJoinScreen = state.matchedLocation == '/join';
       final isInvite = state.matchedLocation.startsWith('/invite');
+
+      if (KeyStore.instance.needsRecovery) {
+        if (!isRecovery) return '/recovery';
+        return null;
+      }
+      if (isRecovery) {
+        return '/';
+      }
 
       if (isSplash || isOnboarding) {
         return null;
@@ -52,8 +63,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       if (!isAuth && !isJoinScreen) {
         if (isInvite) {
+          final uri = state.uri;
+          String? code;
+          if (uri.pathSegments.length > 1 &&
+              (uri.pathSegments.first == 'i' || uri.pathSegments.first == 'invite')) {
+            code = uri.pathSegments[1].trim().toUpperCase();
+          } else if (uri.host == 'i' || uri.host == 'invite') {
+            if (uri.pathSegments.isNotEmpty) {
+              code = uri.pathSegments.first.trim().toUpperCase();
+            }
+          }
           SharedPreferences.getInstance().then((prefs) {
-            prefs.setString('pending_deep_link', state.uri.toString());
+            prefs.setString('pending_deep_link', uri.toString());
+            if (code != null && code.isNotEmpty) {
+              prefs.setString('pending_invite_code', code);
+            }
           });
         }
         return '/join';
@@ -66,6 +90,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
+      GoRoute(
+        path: '/recovery',
+        name: 'recovery',
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: RecoveryKeyScreen(),
+        ),
+      ),
       GoRoute(
         path: '/splash',
         name: 'splash',

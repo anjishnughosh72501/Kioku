@@ -1,4 +1,3 @@
-// ignore_for_file: prefer_interpolation_to_compose_strings
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -6,6 +5,7 @@ import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:flutter_mobile/core/crypto/key_store.dart';
 import 'package:flutter_mobile/core/models/memory.dart';
 
 class LocalStorageService {
@@ -20,7 +20,7 @@ class LocalStorageService {
   Future<Directory> get baseDirectory async {
     if (_baseDir != null) return _baseDir!;
     final appDocs = await getApplicationDocumentsDirectory();
-    final dir = Directory(appDocs.path + '/Kioku/Albums');
+    final dir = Directory('${appDocs.path}/Kioku/Albums');
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
@@ -31,7 +31,7 @@ class LocalStorageService {
   /// Get or create physical folder for an album.
   Future<Directory> getAlbumDirectory(String albumId) async {
     final base = await baseDirectory;
-    final albumDir = Directory(base.path + '/' + albumId);
+    final albumDir = Directory('${base.path}/$albumId');
     if (!await albumDir.exists()) {
       await albumDir.create(recursive: true);
     }
@@ -116,7 +116,7 @@ class LocalStorageService {
     final prefs = await SharedPreferences.getInstance();
     final albums = await _loadRawAlbums();
 
-    final albumId = 'local_' + DateTime.now().millisecondsSinceEpoch.toString();
+    final albumId = 'local_${DateTime.now().millisecondsSinceEpoch}';
     final newAlbum = Album(id: albumId, name: name.trim());
 
     // Create real folder on disk
@@ -232,6 +232,27 @@ class LocalStorageService {
     );
   }
 
+  /// Removes a member from an album and rotates the collection key (AEK)
+  Future<void> removeAlbumMember(String albumId, String friendCode) async {
+    final prefs = await SharedPreferences.getInstance();
+    final members = await getAlbumMembers(albumId);
+    final updated = members.where((m) => m.email != friendCode).toList();
+
+    await prefs.setString(
+      'album_members_$albumId',
+      jsonEncode(updated
+          .map((m) => {
+                'email': m.email,
+                'role': m.role,
+                'displayName': m.displayName,
+              })
+          .toList()),
+    );
+
+    // Rotate collection key (AEK) so removed member loses access
+    await KeyStore.instance.rotateCollectionKey(albumId);
+  }
+
   /// Deletes a local album and removes all its photos from disk.
   Future<void> deleteAlbum(String albumId) async {
     final prefs = await SharedPreferences.getInstance();
@@ -264,10 +285,10 @@ class LocalStorageService {
   }) async {
     final memories = await getMemories(albumId);
     final albumDir = await getAlbumDirectory(albumId);
-    final id = 'local_mem_' + DateTime.now().millisecondsSinceEpoch.toString();
+    final id = 'local_mem_${DateTime.now().millisecondsSinceEpoch}';
 
     final extension = file.path.contains('.') ? file.path.split('.').last : 'jpg';
-    final destFile = File(albumDir.path + '/' + id + '.' + extension);
+    final destFile = File('${albumDir.path}/$id.$extension');
 
     // Copy file to permanent local album folder
     await file.copy(destFile.path);
@@ -276,7 +297,7 @@ class LocalStorageService {
     final now = DateTime.now();
     final memory = KiokuMemory(
       id: id,
-      fileName: id + '.' + extension,
+      fileName: '$id.$extension',
       mimeType: mimeType,
       caption: caption,
       takenAtIso: takenAt ?? now.toIso8601String(),
@@ -377,11 +398,11 @@ class LocalStorageService {
   }
 
   /// Deletes a local memory file from disk and updates album index.
-  Future<void> deleteMemory(String memoryId) async {
-    final albums = await _loadRawAlbums();
-    for (final album in albums) {
-      final mems = await getMemories(album.id);
-      final matchIndex = mems.indexWhere((m) => m.id == memoryId);
+  Future<void> deleteMemory(String memoryId, {String? albumId}) async {
+    final albums = albumId != null ? [albumId] : (await _loadRawAlbums()).map((a) => a.id).toList();
+    for (final aId in albums) {
+      final mems = await getMemories(aId);
+      final matchIndex = mems.indexWhere((m) => m.id == memoryId || m.fileName.startsWith(memoryId));
       if (matchIndex != -1) {
         final match = mems[matchIndex];
         if (match.localPath != null) {
@@ -391,7 +412,7 @@ class LocalStorageService {
           }
         }
         final updated = List<KiokuMemory>.from(mems)..removeAt(matchIndex);
-        await _saveMemoriesList(album.id, updated);
+        await _saveMemoriesList(aId, updated);
         break;
       }
     }

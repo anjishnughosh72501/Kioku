@@ -47,7 +47,8 @@ void main() async {
       // If vault recovery is required, app launches and router/recovery flow can handle it
     }
 
-    // Proactively poll incoming friend requests & album invites in background on startup
+    // Proactively reconcile friends & poll incoming friend requests & album invites in background on startup
+    unawaited(UserProfileService.instance.reconcileFriends());
     unawaited(UserProfileService.instance.pollIncomingRequests());
     unawaited(UserProfileService.instance.pollIncomingAlbumInvites());
 

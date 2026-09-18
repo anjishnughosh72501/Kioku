@@ -32,6 +32,14 @@ class FriendsListNotifier extends StateNotifier<AsyncValue<List<FriendUser>>> {
     });
   }
 
+  void removeOptimistic(String friendCode) {
+    state.whenData((current) {
+      state = AsyncValue.data(
+        current.where((f) => f.friendCode != friendCode).toList(),
+      );
+    });
+  }
+
   Future<bool> removeFriend(String friendCode) async {
     final previous = state.valueOrNull;
     if (previous != null) {
@@ -97,15 +105,22 @@ class IncomingRequestsNotifier extends StateNotifier<AsyncValue<List<FriendReque
     // Optimistic removal from incoming
     state = AsyncValue.data(previous.where((r) => r.id != req.id).toList());
 
+    final now = DateTime.now().millisecondsSinceEpoch;
     // Optimistically add to friends list
     ref.read(friendsListProvider.notifier).addOptimistic(
-      FriendUser(friendCode: req.fromCode, username: req.fromName),
+      FriendUser(
+        friendCode: req.fromCode,
+        username: req.fromName,
+        createdAt: req.createdAt ?? now,
+        updatedAt: now,
+        status: 'accepted',
+      ),
     );
 
     final ok = await UserProfileService.instance.acceptRequest(req);
     if (!ok && mounted) {
       state = AsyncValue.data(previous);
-      ref.read(friendsListProvider.notifier).refresh();
+      ref.read(friendsListProvider.notifier).removeOptimistic(req.fromCode);
       return false;
     }
     ref.invalidate(connectedFriendsProvider);
@@ -167,11 +182,30 @@ class SentRequestsNotifier extends StateNotifier<AsyncValue<List<SentFriendReque
   }
 
   Future<bool> resend(String requestId) async {
+    final previous = state.valueOrNull ?? [];
+    final now = DateTime.now().millisecondsSinceEpoch;
+    // Optimistically update status to pending
+    state = AsyncValue.data(previous.map((r) {
+      if (r.id == requestId) {
+        return SentFriendRequest(
+          id: r.id,
+          fromCode: r.fromCode,
+          toCode: r.toCode,
+          toName: r.toName,
+          status: 'pending',
+          createdAt: r.createdAt,
+          updatedAt: now,
+        );
+      }
+      return r;
+    }).toList());
+
     final ok = await UserProfileService.instance.resendSentRequest(requestId);
-    if (ok) {
-      await refresh();
+    if (!ok && mounted) {
+      state = AsyncValue.data(previous);
+      return false;
     }
-    return ok;
+    return true;
   }
 }
 

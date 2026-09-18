@@ -5,6 +5,11 @@
 
 const WebSocket = require('ws');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+let Redis = null;
+try {
+  Redis = require('ioredis');
+} catch (_) {}
 
 /**
  * In-memory signaling store for single-instance deployments.
@@ -49,17 +54,177 @@ class MemorySignalStore {
   getRoomCount() {
     return this.rooms.size;
   }
+
+  publishSignal(albumId, fromDeviceId, targetDeviceId, payload) {}
+  publishPeerJoined(albumId, deviceId) {}
+  publishPeerLeft(albumId, deviceId) {}
+  async close() {}
 }
 
 /**
- * Multi-instance adapter skeleton (P2-12).
+ * Multi-instance adapter with Redis Pub/Sub (P2-12).
  * Enables horizontal scaling with Redis Pub/Sub when REDIS_URL is configured.
+ * Automatically falls back to MemorySignalStore if Redis is offline or fails.
  */
 class DistributedSignalStore extends MemorySignalStore {
   constructor(redisUrl) {
     super();
     this.redisUrl = redisUrl;
-    // In cluster deployments, Redis pub/sub bridges cross-node SDP messages.
+    this.instanceId = crypto.randomUUID ? crypto.randomUUID() : `inst_${Date.now()}_${Math.random()}`;
+    this.isReady = false;
+    this.channel = 'kioku:signal:events';
+
+    if (!Redis || !redisUrl) {
+      return;
+    }
+
+    try {
+      this.pub = new Redis(redisUrl, {
+        lazyConnect: true,
+        maxRetriesPerRequest: 1,
+        retryStrategy: (times) => (times > 3 ? null : 500),
+      });
+
+      this.sub = new Redis(redisUrl, {
+        lazyConnect: true,
+        maxRetriesPerRequest: 1,
+        retryStrategy: (times) => (times > 3 ? null : 500),
+      });
+
+      this.pub.on('error', () => {
+        this.isReady = false;
+      });
+
+      this.sub.on('error', () => {
+        this.isReady = false;
+      });
+
+      Promise.all([this.pub.connect(), this.sub.connect()])
+        .then(() => {
+          this.isReady = true;
+          this.sub.subscribe(this.channel, (err) => {
+            if (err) this.isReady = false;
+          });
+          this.sub.on('message', (chan, messageStr) => {
+            if (chan === this.channel) {
+              this._handleRedisMessage(messageStr);
+            }
+          });
+        })
+        .catch(() => {
+          this.isReady = false;
+        });
+    } catch (_) {
+      this.isReady = false;
+    }
+  }
+
+  _handleRedisMessage(messageStr) {
+    try {
+      const msg = JSON.parse(messageStr);
+      if (!msg || msg.originInstanceId === this.instanceId) return;
+
+      const { type, albumId, fromDeviceId, targetDeviceId, payload, deviceId } = msg;
+
+      if (type === 'signal') {
+        const targetWs = this.getPeerSocket(albumId, targetDeviceId);
+        if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+          targetWs.send(
+            JSON.stringify({
+              type: 'signal',
+              fromDeviceId,
+              payload,
+            })
+          );
+        }
+      } else if (type === 'peer-joined') {
+        const roomSockets = this.getRoomSockets(albumId);
+        for (const peerWs of roomSockets) {
+          if (peerWs.readyState === WebSocket.OPEN) {
+            peerWs.send(
+              JSON.stringify({
+                type: 'peer-joined',
+                albumId,
+                deviceId,
+              })
+            );
+          }
+        }
+      } else if (type === 'peer-left') {
+        const roomSockets = this.getRoomSockets(albumId);
+        for (const peerWs of roomSockets) {
+          if (peerWs.readyState === WebSocket.OPEN) {
+            peerWs.send(
+              JSON.stringify({
+                type: 'peer-left',
+                albumId,
+                deviceId,
+              })
+            );
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  publishSignal(albumId, fromDeviceId, targetDeviceId, payload) {
+    if (this.isReady && this.pub) {
+      try {
+        this.pub.publish(
+          this.channel,
+          JSON.stringify({
+            originInstanceId: this.instanceId,
+            type: 'signal',
+            albumId,
+            fromDeviceId,
+            targetDeviceId,
+            payload,
+          })
+        ).catch(() => {});
+      } catch (_) {}
+    }
+  }
+
+  publishPeerJoined(albumId, deviceId) {
+    if (this.isReady && this.pub) {
+      try {
+        this.pub.publish(
+          this.channel,
+          JSON.stringify({
+            originInstanceId: this.instanceId,
+            type: 'peer-joined',
+            albumId,
+            deviceId,
+          })
+        ).catch(() => {});
+      } catch (_) {}
+    }
+  }
+
+  publishPeerLeft(albumId, deviceId) {
+    if (this.isReady && this.pub) {
+      try {
+        this.pub.publish(
+          this.channel,
+          JSON.stringify({
+            originInstanceId: this.instanceId,
+            type: 'peer-left',
+            albumId,
+            deviceId,
+          })
+        ).catch(() => {});
+      } catch (_) {}
+    }
+  }
+
+  async close() {
+    this.isReady = false;
+    try {
+      if (this.pub) await this.pub.quit();
+    } catch (_) {}
+    try {
+      if (this.sub) await this.sub.quit();
+    } catch (_) {}
   }
 }
 
@@ -146,7 +311,7 @@ function setupSignaling(server, customStore = null) {
               })
             );
 
-            // Broadcast join notification to existing peers
+            // Broadcast join notification to existing local peers
             const roomSockets = store.getRoomSockets(albumId);
             for (const peerWs of roomSockets) {
               if (peerWs !== ws && peerWs.readyState === WebSocket.OPEN) {
@@ -159,6 +324,9 @@ function setupSignaling(server, customStore = null) {
                 );
               }
             }
+
+            // Broadcast across Redis cluster if distributed store
+            store.publishPeerJoined(albumId, deviceId);
             break;
           }
 
@@ -175,6 +343,8 @@ function setupSignaling(server, customStore = null) {
                   })
                 );
               }
+              // Also relay to remote cluster nodes
+              store.publishSignal(currentAlbumId, currentDeviceId, targetDeviceId, payload);
             }
             break;
           }
@@ -203,6 +373,9 @@ function setupSignaling(server, customStore = null) {
             );
           }
         }
+
+        // Broadcast leave event across Redis cluster
+        store.publishPeerLeft(currentAlbumId, currentDeviceId);
       }
     }
 

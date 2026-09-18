@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -39,6 +40,9 @@ class MockMemoryRepository implements IMemoryRepository {
     deletedIds.add(fileId);
     memories.removeWhere((m) => m.id == fileId);
   }
+
+  @override
+  Future<Uint8List?> getThumbnailBytes(String memoryId, {required String albumId}) async => null;
 }
 
 void main() {

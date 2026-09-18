@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_mobile/core/config.dart';
+import 'package:flutter_mobile/core/network/http_client_helper.dart';
 import 'package:flutter_mobile/core/services/invite_service.dart';
 import 'package:flutter_mobile/core/storage/local_storage_service.dart';
 
@@ -60,11 +61,15 @@ class FriendUser {
   final String friendCode;
   final String? username;
   final int? createdAt;
+  final int? updatedAt;
+  final String status;
 
   const FriendUser({
     required this.friendCode,
     this.username,
     this.createdAt,
+    this.updatedAt,
+    this.status = 'accepted',
   });
 
   String get displayName => (username != null && username!.isNotEmpty) ? username! : friendCode;
@@ -74,12 +79,16 @@ class FriendUser {
         'friendCode': friendCode,
         'username': username,
         'createdAt': createdAt,
+        'updatedAt': updatedAt,
+        'status': status,
       };
 
   factory FriendUser.fromJson(Map<String, dynamic> json) => FriendUser(
         friendCode: json['friendCode'] as String,
         username: json['username'] as String?,
         createdAt: (json['createdAt'] ?? json['connectedAt']) as int?,
+        updatedAt: (json['updatedAt'] ?? json['createdAt'] ?? json['connectedAt']) as int?,
+        status: (json['status'] as String?) ?? 'accepted',
       );
 }
 
@@ -239,7 +248,11 @@ class UserProfileService {
   static const String _keyIncomingRequests = 'kioku_cached_incoming_requests';
   static const String _keyIncomingAlbumInvites = 'kioku_cached_album_invites';
 
-  http.Client httpClient = http.Client();
+  HttpClientHelper clientHelper = HttpClientHelper.instance;
+  http.Client get httpClient => clientHelper.innerClient;
+  set httpClient(http.Client client) {
+    clientHelper = HttpClientHelper(client: client);
+  }
 
   UserProfile? _currentProfile;
   String? _cachedToken;
@@ -293,14 +306,14 @@ class UserProfileService {
 
     final myCode = friendCode.trim().toUpperCase();
     try {
-      final res = await httpClient.post(
+      final res = await clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/token'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'friendCode': myCode,
           'secret': secret,
         }),
-      ).timeout(const Duration(seconds: 4));
+      );
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -355,11 +368,11 @@ class UserProfileService {
 
     try {
       final headers = await _authHeaders();
-      httpClient.post(
+      await clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/profile'),
         headers: headers,
         body: jsonEncode({'username': trimmed}),
-      ).timeout(const Duration(seconds: 3));
+      );
     } catch (_) {}
 
     return profile;
@@ -407,11 +420,11 @@ class UserProfileService {
 
     try {
       final headers = await _authHeaders();
-      await httpClient.post(
+      await clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/remove'),
         headers: headers,
         body: jsonEncode({'friendCode': code}),
-      ).timeout(const Duration(seconds: 4));
+      );
     } catch (_) {}
 
     return removedLocally;
@@ -421,13 +434,13 @@ class UserProfileService {
   Future<InviteCreation?> createUniversalInvite({String? myName}) async {
     try {
       final headers = await _authHeaders();
-      final res = await httpClient.post(
+      final res = await clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/invite'),
         headers: headers,
         body: jsonEncode({
           'fromName': myName ?? username,
         }),
-      ).timeout(const Duration(seconds: 4));
+      );
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -441,10 +454,10 @@ class UserProfileService {
   Future<InviteResolution> resolveInvite(String code) async {
     final clean = code.trim().toUpperCase();
     try {
-      final res = await httpClient.get(
+      final res = await clientHelper.get(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/invite/$clean?format=json'),
         headers: {'Accept': 'application/json'},
-      ).timeout(const Duration(seconds: 4));
+      );
 
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       return InviteResolution.fromJson(data, code: clean);
@@ -453,26 +466,71 @@ class UserProfileService {
     }
   }
 
-  /// Fetch remote normalized friends list and update local cache
+  static const String _keyCachedFriendsJson = 'kioku_cached_friends_json';
+
+  /// Reconcile local friend state with remote server (server is source of truth).
+  /// Never overwrites newer server data with stale local data.
+  Future<List<FriendUser>> reconcileFriends() async {
+    return getRemoteFriends();
+  }
+
+  /// Fetch remote normalized friends list and update local cache with reconciliation
   Future<List<FriendUser>> getRemoteFriends() async {
     final myCode = friendCode.trim().toUpperCase();
+    final prefs = await SharedPreferences.getInstance();
+
+    // Load existing cached friends map
+    final cachedMap = <String, FriendUser>{};
+    final cachedRaw = prefs.getString(_keyCachedFriendsJson);
+    if (cachedRaw != null && cachedRaw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(cachedRaw) as List;
+        for (final item in decoded) {
+          final f = FriendUser.fromJson(item as Map<String, dynamic>);
+          cachedMap[f.friendCode] = f;
+        }
+      } catch (_) {}
+    }
+
     try {
       final headers = await _authHeaders();
-      final res = await httpClient.get(
+      final res = await clientHelper.get(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/list/$myCode'),
         headers: headers,
-      ).timeout(const Duration(seconds: 4));
+      );
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final list = (data['friends'] as List?)
+        final remoteList = (data['friends'] as List?)
                 ?.map((e) => FriendUser.fromJson(e as Map<String, dynamic>))
                 .toList() ??
             [];
 
-        final prefs = await SharedPreferences.getInstance();
+        // Reconcile: server is authority.
+        final reconciled = <String, FriendUser>{};
+        for (final r in remoteList) {
+          final local = cachedMap[r.friendCode];
+          if (local != null && (local.updatedAt ?? 0) > (r.updatedAt ?? 0)) {
+            // Preserve optimistic timestamp if local is strictly newer
+            reconciled[r.friendCode] = FriendUser(
+              friendCode: r.friendCode,
+              username: r.username ?? local.username,
+              createdAt: r.createdAt ?? local.createdAt,
+              updatedAt: r.updatedAt ?? local.updatedAt,
+              status: r.status,
+            );
+          } else {
+            reconciled[r.friendCode] = r;
+          }
+        }
+
+        final list = reconciled.values.toList();
         final codes = list.map((f) => f.friendCode).toList();
         await prefs.setStringList(_keyConnectedFriends, codes);
+        await prefs.setString(
+          _keyCachedFriendsJson,
+          jsonEncode(list.map((f) => f.toJson()).toList()),
+        );
         for (final f in list) {
           if (f.username != null && f.username!.isNotEmpty) {
             await prefs.setString('kioku_friend_name_${f.friendCode}', f.username!);
@@ -481,6 +539,11 @@ class UserProfileService {
         return list;
       }
     } catch (_) {}
+
+    // Offline fallback: use cached JSON records or local friend codes
+    if (cachedMap.isNotEmpty) {
+      return cachedMap.values.toList();
+    }
 
     final localCodes = await getConnectedFriends();
     final localFriends = <FriendUser>[];
@@ -496,10 +559,10 @@ class UserProfileService {
     final myCode = friendCode.trim().toUpperCase();
     try {
       final headers = await _authHeaders();
-      final res = await httpClient.get(
+      final res = await clientHelper.get(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/sent/$myCode'),
         headers: headers,
-      ).timeout(const Duration(seconds: 4));
+      );
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -516,11 +579,11 @@ class UserProfileService {
   Future<bool> cancelSentRequest(String requestId) async {
     try {
       final headers = await _authHeaders();
-      final res = await httpClient.post(
+      final res = await clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/cancel'),
         headers: headers,
         body: jsonEncode({'requestId': requestId}),
-      ).timeout(const Duration(seconds: 4));
+      );
       return res.statusCode == 200;
     } catch (_) {
       return false;
@@ -531,11 +594,11 @@ class UserProfileService {
   Future<bool> resendSentRequest(String requestId) async {
     try {
       final headers = await _authHeaders();
-      final res = await httpClient.post(
+      final res = await clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/resend'),
         headers: headers,
         body: jsonEncode({'requestId': requestId}),
-      ).timeout(const Duration(seconds: 4));
+      );
       return res.statusCode == 200;
     } catch (_) {
       return false;
@@ -567,14 +630,14 @@ class UserProfileService {
 
     try {
       final headers = await _authHeaders();
-      final res = await httpClient.post(
+      final res = await clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/request'),
         headers: headers,
         body: jsonEncode({
           'toCode': cleanTo,
           'fromName': myName ?? username,
         }),
-      ).timeout(const Duration(seconds: 4));
+      );
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -621,10 +684,10 @@ class UserProfileService {
 
     try {
       final headers = await _authHeaders();
-      final res = await httpClient.get(
+      final res = await clientHelper.get(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/requests/$myCode'),
         headers: headers,
-      ).timeout(const Duration(seconds: 4));
+      );
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -648,11 +711,11 @@ class UserProfileService {
               if (reqId != null) {
                 try {
                   final ackHeaders = await _authHeaders();
-                  await httpClient.post(
+                  await clientHelper.post(
                     Uri.parse('${AppConfig.backendBaseUrl}/friends/ack'),
                     headers: ackHeaders,
                     body: jsonEncode({'requestId': reqId}),
-                  ).timeout(const Duration(seconds: 4));
+                  );
                 } catch (_) {}
               }
             }
@@ -681,13 +744,13 @@ class UserProfileService {
   Future<bool> acceptRequest(FriendRequest req) async {
     try {
       final headers = await _authHeaders();
-      final res = await httpClient.post(
+      final res = await clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/accept'),
         headers: headers,
         body: jsonEncode({
           'requestId': req.id,
         }),
-      ).timeout(const Duration(seconds: 4));
+      );
 
       if (res.statusCode != 200) {
         return false;
@@ -720,13 +783,13 @@ class UserProfileService {
   Future<bool> declineRequest(FriendRequest req) async {
     try {
       final headers = await _authHeaders();
-      final res = await httpClient.post(
+      final res = await clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/decline'),
         headers: headers,
         body: jsonEncode({
           'requestId': req.id,
         }),
-      ).timeout(const Duration(seconds: 4));
+      );
 
       if (res.statusCode != 200) {
         return false;
@@ -773,7 +836,7 @@ class UserProfileService {
 
       // 2. Post album invite to backend
       final headers = await _authHeaders();
-      final res = await httpClient.post(
+      final res = await clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/albums/invite'),
         headers: headers,
         body: jsonEncode({
@@ -784,7 +847,7 @@ class UserProfileService {
           'claimToken': claimToken,
           'inviterPubKey': pubKey,
         }),
-      ).timeout(const Duration(seconds: 4));
+      );
 
       if (res.statusCode == 200) {
         // Track as invited member on local album
@@ -824,10 +887,10 @@ class UserProfileService {
 
     try {
       final headers = await _authHeaders();
-      final res = await httpClient.get(
+      final res = await clientHelper.get(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/albums/invites/$myCode'),
         headers: headers,
-      ).timeout(const Duration(seconds: 4));
+      );
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -853,13 +916,13 @@ class UserProfileService {
   Future<bool> acceptAlbumInvite(AlbumInvite invite) async {
     try {
       final headers = await _authHeaders();
-      final res = await httpClient.post(
+      final res = await clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/albums/accept'),
         headers: headers,
         body: jsonEncode({
           'inviteId': invite.id,
         }),
-      ).timeout(const Duration(seconds: 4));
+      );
 
       if (res.statusCode != 200) {
         return false;
@@ -914,13 +977,13 @@ class UserProfileService {
   Future<bool> declineAlbumInvite(AlbumInvite invite) async {
     try {
       final headers = await _authHeaders();
-      final res = await httpClient.post(
+      final res = await clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/albums/decline'),
         headers: headers,
         body: jsonEncode({
           'inviteId': invite.id,
         }),
-      ).timeout(const Duration(seconds: 4));
+      );
 
       if (res.statusCode != 200) {
         return false;
@@ -946,10 +1009,10 @@ class UserProfileService {
   Future<List<Map<String, dynamic>>> fetchServerAlbums() async {
     try {
       final headers = await _authHeaders();
-      final res = await httpClient.get(
+      final res = await clientHelper.get(
         Uri.parse('${AppConfig.backendBaseUrl}/albums'),
         headers: headers,
-      ).timeout(const Duration(seconds: 5));
+      );
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -969,7 +1032,7 @@ class UserProfileService {
   }) async {
     try {
       final headers = await _authHeaders();
-      final res = await httpClient.post(
+      final res = await clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/albums'),
         headers: headers,
         body: jsonEncode({
@@ -979,7 +1042,7 @@ class UserProfileService {
           'storageType': storageType ?? 'local',
           'storageReference': storageReference,
         }),
-      ).timeout(const Duration(seconds: 5));
+      );
 
       return res.statusCode == 200 || res.statusCode == 201;
     } catch (_) {

@@ -1,13 +1,15 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:http/http.dart' as http;
 import 'package:flutter_mobile/core/config.dart';
 import 'package:flutter_mobile/core/crypto/crypto_core.dart';
 import 'package:flutter_mobile/core/crypto/key_store.dart';
+import 'package:flutter_mobile/core/network/http_client_helper.dart';
 
 class InviteService {
   InviteService._();
   static final InviteService instance = InviteService._();
+
+  HttpClientHelper client = HttpClientHelper.instance;
 
   // Configurable signaling/relay server host
   String backendBaseUrl = AppConfig.backendBaseUrl;
@@ -20,14 +22,14 @@ class InviteService {
       final myPubKey = await KeyStore.instance.getDevicePublicKey();
       final myPubKeyB64 = base64UrlEncode(myPubKey);
 
-      final res = await http.post(
+      final res = await client.post(
         Uri.parse('$backendBaseUrl/claim/request'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'albumId': albumId,
           'inviterPubKey': myPubKeyB64,
         }),
-      ).timeout(const Duration(seconds: 4));
+      );
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -57,14 +59,14 @@ class InviteService {
   }) async {
     try {
       final myPubKey = await KeyStore.instance.getDevicePublicKey();
-      final res = await http.post(
+      final res = await client.post(
         Uri.parse('$backendBaseUrl/claim/redeem'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'claimToken': claimToken,
           'recipientPubKey': base64UrlEncode(myPubKey),
         }),
-      ).timeout(const Duration(seconds: 4));
+      );
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -88,14 +90,14 @@ class InviteService {
       final collectionKey = await KeyStore.instance.getOrCreateCollectionKey(albumId);
       final sealed = CryptoCore.instance.sealForPublicKey(collectionKey, recipientPubKey);
 
-      final res = await http.post(
+      final res = await client.post(
         Uri.parse('$backendBaseUrl/claim/seal'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'claimToken': claimToken,
           'sealedKey': base64UrlEncode(sealed),
         }),
-      ).timeout(const Duration(seconds: 4));
+      );
 
       return res.statusCode == 200;
     } catch (_) {
@@ -109,9 +111,9 @@ class InviteService {
     required String albumId,
   }) async {
     try {
-      final res = await http.get(
+      final res = await client.get(
         Uri.parse('$backendBaseUrl/claim/sealed/$claimToken'),
-      ).timeout(const Duration(seconds: 4));
+      );
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;

@@ -22,6 +22,7 @@ void main() {
 
   test('MigrationService converts plaintext photo into encrypted .enc envelope', () async {
     final keyStore = KeyStore(storage: InMemorySecureStorage());
+    keyStore.hasExistingDataOverride = () => false;
     await keyStore.initialize();
 
     final localStorage = LocalStorageService.instance;

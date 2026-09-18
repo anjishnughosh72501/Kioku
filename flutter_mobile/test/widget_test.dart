@@ -5,14 +5,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter_mobile/main.dart';
+import 'package:flutter_mobile/core/crypto/key_store.dart';
 import 'package:flutter_mobile/features/feed/presentation/screens/feed_screen.dart';
 
 void main() {
+  setUp(() {
+    KeyStore.instance = KeyStore(storage: InMemorySecureStorage());
+    KeyStore.instance.hasExistingDataOverride = () => false;
+  });
+
+  tearDown(() {
+    KeyStore.instance = KeyStore();
+  });
+
   testWidgets('App boots without crashing and shows onboarding for new users', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
 
     await tester.pumpWidget(const ProviderScope(child: KiokuApp()));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('Zero-Knowledge Privacy'), findsOneWidget);
     expect(find.text('Continue'), findsOneWidget);
@@ -22,7 +35,10 @@ void main() {
     SharedPreferences.setMockInitialValues({'kioku_onboarding_done': true});
 
     await tester.pumpWidget(const ProviderScope(child: KiokuApp()));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.textContaining('Kioku'), findsWidgets);
   });
@@ -38,7 +54,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 1200));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.byType(FeedScreen), findsOneWidget);
     expect(find.text('Sign in with Google'), findsNothing);

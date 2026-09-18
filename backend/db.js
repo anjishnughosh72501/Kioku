@@ -1,94 +1,80 @@
-const initSqlJs = require('sql.js');
+const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, 'retro.db');
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'retro.db');
 
 let _db = null;
-let _dirty = false;
-let _saveTimer = null;
 
-function scheduleSave() {
-  if (_dirty) return;
-  _dirty = true;
-  _saveTimer = setTimeout(() => {
-    _dirty = false;
-    if (!_db) return;
-    const data = _db.export();
-    fs.writeFileSync(DB_PATH, Buffer.from(data));
-  }, 500);
+function normalizeParams(params) {
+  if (params.length === 1 && Array.isArray(params[0])) {
+    return params[0];
+  }
+  return params;
 }
 
-function saveNow() {
-  if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
-  _dirty = false;
-  if (!_db) return;
-  const data = _db.export();
-  const tmpPath = `${DB_PATH}.tmp`;
-  try {
-    fs.writeFileSync(tmpPath, Buffer.from(data));
-    try {
-      fs.renameSync(tmpPath, DB_PATH);
-    } catch (renameErr) {
-      fs.copyFileSync(tmpPath, DB_PATH);
-      try { fs.unlinkSync(tmpPath); } catch (_) {}
-    }
-  } catch (err) {
-    fs.writeFileSync(DB_PATH, Buffer.from(data));
+function getDb() {
+  if (!_db) {
+    initDB();
   }
+  return _db;
 }
 
 function transaction(fn) {
-  if (!_db) throw new Error('Database not initialized');
-  _db.exec('BEGIN TRANSACTION');
-  try {
-    const result = fn();
-    _db.exec('COMMIT');
-    scheduleSave();
-    return result;
-  } catch (error) {
-    _db.exec('ROLLBACK');
-    throw error;
-  }
+  const db = getDb();
+  return db.transaction(fn)();
 }
 
 function prepare(sql) {
+  const db = getDb();
+  const stmt = db.prepare(sql);
   return {
     all(...params) {
-      const stmt = _db.prepare(sql);
-      if (params.length) stmt.bind(params);
-      const rows = [];
-      while (stmt.step()) rows.push(stmt.getAsObject());
-      stmt.free();
-      return rows;
+      const args = normalizeParams(params);
+      return args.length ? stmt.all(...args) : stmt.all();
     },
     get(...params) {
-      const stmt = _db.prepare(sql);
-      if (params.length) stmt.bind(params);
-      let row = null;
-      if (stmt.step()) row = stmt.getAsObject();
-      stmt.free();
-      return row || undefined;
+      const args = normalizeParams(params);
+      return args.length ? stmt.get(...args) : stmt.get();
     },
     run(...params) {
-      if (params.length) _db.run(sql, params);
-      else _db.exec(sql);
-      scheduleSave();
-      return { changes: _db.getRowsModified() };
+      const args = normalizeParams(params);
+      const res = args.length ? stmt.run(...args) : stmt.run();
+      return {
+        changes: res.changes,
+        lastInsertRowid: res.lastInsertRowid,
+      };
     },
   };
 }
 
-async function initDB() {
-  const SQL = await initSqlJs();
-  if (fs.existsSync(DB_PATH)) {
-    const buffer = fs.readFileSync(DB_PATH);
-    _db = new SQL.Database(buffer);
-  } else {
-    _db = new SQL.Database();
+function saveNow() {
+  if (_db) {
+    try {
+      _db.pragma('wal_checkpoint(PASSIVE)');
+    } catch (_) {}
   }
+}
 
-  prepare(`
+function closeDB() {
+  if (_db) {
+    try {
+      saveNow();
+      _db.close();
+    } catch (_) {}
+    _db = null;
+  }
+}
+
+function initDB() {
+  if (_db) return _db;
+
+  _db = new Database(DB_PATH);
+  _db.pragma('journal_mode = WAL');
+  _db.pragma('foreign_keys = ON');
+  _db.pragma('synchronous = NORMAL');
+
+  _db.exec(`
     CREATE TABLE IF NOT EXISTS groups (
       id            TEXT PRIMARY KEY,
       name          TEXT NOT NULL,
@@ -193,7 +179,7 @@ async function initDB() {
     CREATE INDEX IF NOT EXISTS idx_friends_a ON friends(user_a);
     CREATE INDEX IF NOT EXISTS idx_friends_b ON friends(user_b);
     CREATE INDEX IF NOT EXISTS idx_invites_code ON invites(invite_code);
-  `).run();
+  `);
 
   // Non-destructive schema migration for existing databases
   try {
@@ -202,9 +188,11 @@ async function initDB() {
     // Column already exists
   }
 
-  process.on('exit', saveNow);
-  process.on('SIGINT', () => { saveNow(); process.exit(); });
-  process.on('SIGTERM', () => { saveNow(); process.exit(); });
+  process.once('exit', closeDB);
+  process.once('SIGINT', () => { closeDB(); process.exit(); });
+  process.once('SIGTERM', () => { closeDB(); process.exit(); });
+
+  return _db;
 }
 
-module.exports = { initDB, prepare, transaction, saveNow };
+module.exports = { initDB, prepare, transaction, saveNow, closeDB, getDb };

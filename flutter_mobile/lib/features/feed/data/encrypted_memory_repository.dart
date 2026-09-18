@@ -187,7 +187,7 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
   @override
   Future<({List<KiokuMemory> items, String? nextPageToken})> getMemoriesPage(
     String albumId, {
-    int pageSize = 30,
+    int pageSize = 20,
     String? pageToken,
   }) async {
     await CryptoCore.instance.init();
@@ -221,15 +221,32 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
 
   @override
   Future<void> deleteMemory(String fileId, {String? albumId}) async {
+    // 1. Locate any locally stored files from metadata cache
+    final cachedMem = _metadataCache[fileId];
+    final localPath = cachedMem?.localPath;
+
+    // 2. Delete remote or local storage provider blob
     if (albumId != null) {
       final activeProvider = _resolveProviderForAlbum(albumId);
       try {
         await activeProvider.deleteBlob(fileId, containerId: albumId);
       } catch (_) {}
+    }
+
+    // 3. Delete from local storage index & disk storage
+    try {
+      await LocalStorageService.instance.deleteMemory(fileId, albumId: albumId);
+    } catch (_) {}
+
+    // 4. Clean up any disk file traces
+    if (localPath != null && localPath.isNotEmpty) {
       try {
-        await LocalStorageService.instance.deleteMemory(fileId);
+        final f = File(localPath);
+        if (await f.exists()) await f.delete();
       } catch (_) {}
     }
+
+    // 5. In-memory decrypted cache eviction (all 3 caches)
     _metadataCache.remove(fileId);
     _mediaCache.remove(fileId);
     _thumbCache.remove(fileId);
@@ -399,6 +416,7 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
     return plainBytes;
   }
 
+  @override
   Future<Uint8List?> getThumbnailBytes(String memoryId, {required String albumId}) async {
     final cached = _thumbCache.get(memoryId);
     if (cached != null) return cached;

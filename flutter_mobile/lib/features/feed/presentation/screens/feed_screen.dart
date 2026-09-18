@@ -11,6 +11,7 @@ import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/providers.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/features/auth/presentation/controllers/auth_controller.dart';
+import 'package:flutter_mobile/features/feed/presentation/controllers/feed_controller.dart';
 import 'package:flutter_mobile/features/feed/presentation/widgets/memory_card.dart';
 
 import 'package:flutter_mobile/features/feed/presentation/widgets/album_dropdown.dart';
@@ -18,6 +19,7 @@ import 'package:flutter_mobile/features/auth/presentation/widgets/username_dialo
 import 'package:flutter_mobile/features/feed/presentation/widgets/shimmer_skeleton_card.dart';
 import 'package:flutter_mobile/features/friends/presentation/controllers/friends_controller.dart';
 import 'package:flutter_mobile/features/friends/presentation/widgets/invite_accept_dialog.dart';
+import 'package:flutter_mobile/core/services/deep_link_service.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
 import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -54,6 +56,18 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
           }
         });
       }
+      final pendingLink = prefs.getString('pending_deep_link');
+      if (pendingLink != null && pendingLink.isNotEmpty) {
+        prefs.remove('pending_deep_link');
+        final uri = Uri.tryParse(pendingLink);
+        if (uri != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              DeepLinkService.handleIncomingUri(uri: uri, ref: ref, context: context);
+            }
+          });
+        }
+      }
       prefs.setBool('first_startup_completed', true);
     });
   }
@@ -62,7 +76,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     if (_scrollController.hasClients) {
       final max = _scrollController.position.maxScrollExtent;
       final current = _scrollController.offset;
-      if (current >= max - 400) {
+      if (FeedController.shouldPrefetch(offset: current, maxScrollExtent: max)) {
         ref.read(memoriesProvider.notifier).loadMore();
       }
     }

@@ -10,6 +10,14 @@
 -keep class com.goterl.lazysodium.** { *; }
 -keep class com.sun.jna.** { *; }
 -keepclassmembers class * extends com.sun.jna.** { *; }
+-keep class org.libsodium.** { *; }
+
+# Flutter Secure Storage
+-keep class com.it_nomads.fluttersecurestorage.** { *; }
+
+# SQLCipher / SQLite
+-keep class net.sqlcipher.** { *; }
+-keep class net.sqlcipher.database.** { *; }
 
 # Google Sign-In & Auth
 -keep class com.google.android.gms.auth.api.signin.** { *; }

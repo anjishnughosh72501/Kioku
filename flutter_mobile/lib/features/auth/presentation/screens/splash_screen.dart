@@ -8,6 +8,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:flutter_mobile/core/crypto/key_store.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/features/auth/presentation/controllers/auth_controller.dart';
 
@@ -32,6 +33,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     // Show splash animation for at least 1.0s for a polished launch experience
     await Future.delayed(const Duration(milliseconds: 1000));
     if (!mounted) return;
+
+    // Highest Priority: if existing vault detected without keys, force recovery!
+    final needsRecovery = await KeyStore.instance.checkNeedsRecovery();
+    if (needsRecovery) {
+      if (mounted) context.go('/recovery');
+      return;
+    }
 
     if (hasStartedBefore) {
       // Later startup: ALWAYS go directly to main feed!

@@ -103,4 +103,21 @@ describe('WebRTC Signaling Service', () => {
       }
     });
   });
+
+  test('DistributedSignalStore falls back gracefully when Redis is unavailable', async () => {
+    const { DistributedSignalStore } = require('../services/signalService');
+    // Using non-existent redis port
+    const store = new DistributedSignalStore('redis://127.0.0.1:59999');
+    expect(store).toBeDefined();
+    expect(store.isReady).toBe(false);
+
+    // Verifies in-memory fallback works without throwing
+    store.join('album_fallback', 'dev_1', { readyState: 1, send: () => {} });
+    expect(store.getPeers('album_fallback', 'dev_1')).toEqual([]);
+    store.publishSignal('album_fallback', 'dev_1', 'dev_2', { test: true });
+    store.leave('album_fallback', 'dev_1');
+    expect(store.getRoomCount()).toBe(0);
+    await store.close();
+  });
 });
+
