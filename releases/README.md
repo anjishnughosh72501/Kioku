@@ -6,8 +6,8 @@ This directory contains standalone release builds for Kioku.
 
 | File | Platform | Architecture | Size | SHA-256 Checksum |
 | :--- | :--- | :--- | :--- | :--- |
-| **[`kioku-v3.6-release.apk`](kioku-v3.6-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.4 MB | `3E6DB93E498EA8F34DCC868DA08CF57E3E601C9CEC6E10C4FCEE4B8B063F4937` |
-| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.4 MB | `3E6DB93E498EA8F34DCC868DA08CF57E3E601C9CEC6E10C4FCEE4B8B063F4937` |
+| **[`kioku-v3.6-release.apk`](kioku-v3.6-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.4 MB | `86CC17DDA51F8D7951F93E4F3D88417DB5FA6788A65BEA3258A737C41768CF12` |
+| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.4 MB | `86CC17DDA51F8D7951F93E4F3D88417DB5FA6788A65BEA3258A737C41768CF12` |
 
 ---
 
@@ -28,6 +28,11 @@ adb install -r releases/kioku-v3.6-release.apk
 ---
 
 ## 📋 Release Highlights (V3.6)
+
+### 🗂️ Per-Album Memory Isolation & Feed Filtering
+- **Strict Album Scoping**: Fixed the issue where all memories showed repeatedly across every album. Each album now strictly loads and renders only its own photos and videos across Local storage, Google Drive, and multi-cloud providers.
+- **Interactive Feed Album Filtering**: The main feed header features a sleek dropdown allowing users to filter memories by specific album or view all updates.
+- **Targeted Memory Uploads**: When uploading new memories, users can select the destination album directly, ensuring correct key assignment and cache invalidation.
 
 ### 🤝 Bidirectional Friend Requests & Cross-Account Synchronization
 - **Two-Way Friend Confirmation**: Sending friend requests now requires recipient acceptance with dual-polling and automated acknowledgment (`POST /friends/ack`), immediately connecting friends on both devices.
