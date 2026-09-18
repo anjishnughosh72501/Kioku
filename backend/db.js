@@ -163,6 +163,24 @@ async function initDB() {
     CREATE TABLE IF NOT EXISTS friend_accounts (
       friend_code     TEXT PRIMARY KEY,
       secret_hash     TEXT NOT NULL,
+      username        TEXT,
+      created_at      INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS friends (
+      user_a          TEXT NOT NULL,
+      user_b          TEXT NOT NULL,
+      created_at      INTEGER NOT NULL,
+      PRIMARY KEY (user_a, user_b)
+    );
+
+    CREATE TABLE IF NOT EXISTS invites (
+      id              TEXT PRIMARY KEY,
+      invite_code     TEXT UNIQUE NOT NULL,
+      created_by      TEXT NOT NULL,
+      from_name       TEXT,
+      expires_at      INTEGER NOT NULL,
+      status          TEXT DEFAULT 'valid',
       created_at      INTEGER NOT NULL
     );
 
@@ -170,8 +188,19 @@ async function initDB() {
     CREATE INDEX IF NOT EXISTS idx_media_uploader ON media(group_id, uploader_id);
     CREATE INDEX IF NOT EXISTS idx_claim_token_exp ON claim_tokens(token, expires_at);
     CREATE INDEX IF NOT EXISTS idx_fr_to_code ON friend_requests(to_code, status);
+    CREATE INDEX IF NOT EXISTS idx_fr_from_code ON friend_requests(from_code, status);
     CREATE INDEX IF NOT EXISTS idx_ai_to_code ON album_invites(to_code, status);
+    CREATE INDEX IF NOT EXISTS idx_friends_a ON friends(user_a);
+    CREATE INDEX IF NOT EXISTS idx_friends_b ON friends(user_b);
+    CREATE INDEX IF NOT EXISTS idx_invites_code ON invites(invite_code);
   `).run();
+
+  // Non-destructive schema migration for existing databases
+  try {
+    _db.exec(`ALTER TABLE friend_accounts ADD COLUMN username TEXT;`);
+  } catch (_) {
+    // Column already exists
+  }
 
   process.on('exit', saveNow);
   process.on('SIGINT', () => { saveNow(); process.exit(); });

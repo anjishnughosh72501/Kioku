@@ -133,7 +133,7 @@ describe('P2-9: Negative Authentication & Authorization Security Tests', () => {
     test('Fails on expired claim token', async () => {
       const token = 'expired_token_test_123';
       db.prepare(
-        'INSERT INTO claim_tokens (token, album_id, inviter_pub_key, expires_at, used) VALUES (?, ?, ?, ?, 0)'
+        'INSERT OR REPLACE INTO claim_tokens (token, album_id, inviter_pub_key, expires_at, used) VALUES (?, ?, ?, ?, 0)'
       ).run(token, 'album-1', 'inviter_pk', Date.now() - 10000);
 
       const res = await request(app)
@@ -146,7 +146,7 @@ describe('P2-9: Negative Authentication & Authorization Security Tests', () => {
     test('Fails on replayed/already used claim token', async () => {
       const token = 'used_token_test_123';
       db.prepare(
-        'INSERT INTO claim_tokens (token, album_id, inviter_pub_key, expires_at, used) VALUES (?, ?, ?, ?, 1)'
+        'INSERT OR REPLACE INTO claim_tokens (token, album_id, inviter_pub_key, expires_at, used) VALUES (?, ?, ?, ?, 1)'
       ).run(token, 'album-1', 'inviter_pk', Date.now() + 60000);
 
       const res = await request(app)

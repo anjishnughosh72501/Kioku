@@ -56,6 +56,129 @@ class FriendRequest {
       );
 }
 
+class FriendUser {
+  final String friendCode;
+  final String? username;
+  final int? createdAt;
+
+  const FriendUser({
+    required this.friendCode,
+    this.username,
+    this.createdAt,
+  });
+
+  String get displayName => (username != null && username!.isNotEmpty) ? username! : friendCode;
+  int? get connectedAt => createdAt;
+
+  Map<String, dynamic> toJson() => {
+        'friendCode': friendCode,
+        'username': username,
+        'createdAt': createdAt,
+      };
+
+  factory FriendUser.fromJson(Map<String, dynamic> json) => FriendUser(
+        friendCode: json['friendCode'] as String,
+        username: json['username'] as String?,
+        createdAt: (json['createdAt'] ?? json['connectedAt']) as int?,
+      );
+}
+
+class SentFriendRequest {
+  final String id;
+  final String fromCode;
+  final String toCode;
+  final String? toName;
+  final String status;
+  final int createdAt;
+  final int updatedAt;
+
+  const SentFriendRequest({
+    required this.id,
+    required this.fromCode,
+    required this.toCode,
+    this.toName,
+    required this.status,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  bool get isExpired => status == 'expired';
+  bool get isPending => status == 'pending';
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'fromCode': fromCode,
+        'toCode': toCode,
+        'toName': toName,
+        'status': status,
+        'createdAt': createdAt,
+        'updatedAt': updatedAt,
+      };
+
+  factory SentFriendRequest.fromJson(Map<String, dynamic> json) =>
+      SentFriendRequest(
+        id: json['id'] as String,
+        fromCode: (json['fromCode'] as String?) ?? '',
+        toCode: json['toCode'] as String,
+        toName: json['toName'] as String?,
+        status: (json['status'] as String?) ?? 'pending',
+        createdAt: (json['createdAt'] as int?) ?? 0,
+        updatedAt: (json['updatedAt'] as int?) ?? 0,
+      );
+}
+
+class InviteResolution {
+  final String status;
+  final String? username;
+  final String? friendCode;
+  final int? expiresAt;
+  final String? code;
+
+  const InviteResolution({
+    required this.status,
+    this.username,
+    this.friendCode,
+    this.expiresAt,
+    this.code,
+  });
+
+  factory InviteResolution.fromJson(Map<String, dynamic> json, {String? code}) =>
+      InviteResolution(
+        status: (json['status'] as String?) ?? 'invalid',
+        username: json['username'] as String?,
+        friendCode: json['friendCode'] as String?,
+        expiresAt: json['expiresAt'] as int?,
+        code: (json['code'] as String?) ?? code,
+      );
+
+  factory InviteResolution.invalid([String? code]) => InviteResolution(
+        status: 'invalid',
+        code: code,
+      );
+
+  bool get isValid => status == 'valid';
+  bool get isExpired => status == 'expired';
+  bool get isInvalid => status == 'invalid';
+}
+
+class InviteCreation {
+  final String code;
+  final String url;
+  final int? expiresAt;
+
+  const InviteCreation({
+    required this.code,
+    required this.url,
+    this.expiresAt,
+  });
+
+  factory InviteCreation.fromJson(Map<String, dynamic> json) => InviteCreation(
+        code: (json['code'] as String?) ?? '',
+        url: (json['url'] as String?) ?? '',
+        expiresAt: json['expiresAt'] as int?,
+      );
+}
+
 class AlbumInvite {
   final String id;
   final String albumId;
@@ -229,6 +352,16 @@ class UserProfileService {
     for (final listener in List.of(_listeners)) {
       listener(profile);
     }
+
+    try {
+      final headers = await _authHeaders();
+      httpClient.post(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/profile'),
+        headers: headers,
+        body: jsonEncode({'username': trimmed}),
+      ).timeout(const Duration(seconds: 3));
+    } catch (_) {}
+
     return profile;
   }
 
@@ -265,12 +398,148 @@ class UserProfileService {
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList(_keyConnectedFriends) ?? [];
     await prefs.remove('kioku_friend_name_$code');
+    bool removedLocally = false;
     if (list.remove(code)) {
       await prefs.setStringList(_keyConnectedFriends, list);
       _notifyFriendListeners();
-      return true;
+      removedLocally = true;
     }
-    return false;
+
+    try {
+      final headers = await _authHeaders();
+      await httpClient.post(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/remove'),
+        headers: headers,
+        body: jsonEncode({'friendCode': code}),
+      ).timeout(const Duration(seconds: 4));
+    } catch (_) {}
+
+    return removedLocally;
+  }
+
+  /// Create a short universal invite link (e.g. kioku.app/i/8F3KD2)
+  Future<InviteCreation?> createUniversalInvite({String? myName}) async {
+    try {
+      final headers = await _authHeaders();
+      final res = await httpClient.post(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/invite'),
+        headers: headers,
+        body: jsonEncode({
+          'fromName': myName ?? username,
+        }),
+      ).timeout(const Duration(seconds: 4));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return InviteCreation.fromJson(data);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Resolve a short invite code publicly
+  Future<InviteResolution> resolveInvite(String code) async {
+    final clean = code.trim().toUpperCase();
+    try {
+      final res = await httpClient.get(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/invite/$clean?format=json'),
+        headers: {'Accept': 'application/json'},
+      ).timeout(const Duration(seconds: 4));
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      return InviteResolution.fromJson(data, code: clean);
+    } catch (_) {
+      return InviteResolution.invalid(clean);
+    }
+  }
+
+  /// Fetch remote normalized friends list and update local cache
+  Future<List<FriendUser>> getRemoteFriends() async {
+    final myCode = friendCode.trim().toUpperCase();
+    try {
+      final headers = await _authHeaders();
+      final res = await httpClient.get(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/list/$myCode'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 4));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final list = (data['friends'] as List?)
+                ?.map((e) => FriendUser.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            [];
+
+        final prefs = await SharedPreferences.getInstance();
+        final codes = list.map((f) => f.friendCode).toList();
+        await prefs.setStringList(_keyConnectedFriends, codes);
+        for (final f in list) {
+          if (f.username != null && f.username!.isNotEmpty) {
+            await prefs.setString('kioku_friend_name_${f.friendCode}', f.username!);
+          }
+        }
+        return list;
+      }
+    } catch (_) {}
+
+    final localCodes = await getConnectedFriends();
+    final localFriends = <FriendUser>[];
+    for (final c in localCodes) {
+      final name = await getFriendName(c);
+      localFriends.add(FriendUser(friendCode: c, username: name));
+    }
+    return localFriends;
+  }
+
+  /// Fetch sent friend requests (both pending and expired)
+  Future<List<SentFriendRequest>> getSentFriendRequests() async {
+    final myCode = friendCode.trim().toUpperCase();
+    try {
+      final headers = await _authHeaders();
+      final res = await httpClient.get(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/sent/$myCode'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 4));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return (data['requests'] as List?)
+                ?.map((e) => SentFriendRequest.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            [];
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  /// Cancel a sent pending request
+  Future<bool> cancelSentRequest(String requestId) async {
+    try {
+      final headers = await _authHeaders();
+      final res = await httpClient.post(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/cancel'),
+        headers: headers,
+        body: jsonEncode({'requestId': requestId}),
+      ).timeout(const Duration(seconds: 4));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Resend an expired or cancelled friend request
+  Future<bool> resendSentRequest(String requestId) async {
+    try {
+      final headers = await _authHeaders();
+      final res = await httpClient.post(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/resend'),
+        headers: headers,
+        body: jsonEncode({'requestId': requestId}),
+      ).timeout(const Duration(seconds: 4));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<List<String>> getPendingSentRequests() async {

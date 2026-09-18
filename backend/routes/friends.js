@@ -31,6 +31,43 @@ function hashSecret(secret) {
   return crypto.createHash('sha256').update(String(secret).trim()).digest('hex');
 }
 
+function generateInviteCode() {
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const bytes = crypto.randomBytes(6);
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars[bytes[i] % chars.length];
+  }
+  return code;
+}
+
+function resolveInviteDetails(rawCode) {
+  if (!rawCode) return { status: 'invalid' };
+  const cleanCode = String(rawCode).trim().toUpperCase();
+  const invite = db.prepare(`SELECT * FROM invites WHERE invite_code = ?`).get(cleanCode);
+  if (!invite) {
+    return { status: 'invalid' };
+  }
+
+  const now = Date.now();
+  if (invite.status === 'valid' && now > invite.expires_at) {
+    db.prepare(`UPDATE invites SET status = 'expired' WHERE id = ?`).run(invite.id);
+    return { status: 'expired' };
+  }
+
+  if (invite.status !== 'valid') {
+    return { status: invite.status };
+  }
+
+  const account = db.prepare(`SELECT username FROM friend_accounts WHERE friend_code = ?`).get(invite.created_by);
+  return {
+    username: (account && account.username) || invite.from_name || 'Friend',
+    friendCode: invite.created_by,
+    status: 'valid',
+    expiresAt: invite.expires_at,
+  };
+}
+
 // Middleware: verifies that the caller owns the friend code claimed in the request
 function requireFriendAuth(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -54,7 +91,7 @@ function requireFriendAuth(req, res, next) {
 // 0. Issue / refresh authorization token for a friend code using device secret
 router.post('/token', TOKEN_LIMITER, (req, res, next) => {
   try {
-    const { friendCode, secret } = req.body;
+    const { friendCode, secret, username } = req.body;
     if (!friendCode || !secret) {
       throw new HttpError(400, 'friendCode and secret are required');
     }
@@ -74,10 +111,15 @@ router.post('/token', TOKEN_LIMITER, (req, res, next) => {
 
     if (!existing) {
       db.prepare(
-        `INSERT INTO friend_accounts (friend_code, secret_hash, created_at) VALUES (?, ?, ?)`
-      ).run(cleanCode, secretHash, Date.now());
-    } else if (existing.secret_hash !== secretHash) {
-      throw new HttpError(401, 'Invalid device credentials for this friend code');
+        `INSERT INTO friend_accounts (friend_code, secret_hash, username, created_at) VALUES (?, ?, ?, ?)`
+      ).run(cleanCode, secretHash, username ? String(username).trim() : null, Date.now());
+    } else {
+      if (existing.secret_hash !== secretHash) {
+        throw new HttpError(401, 'Invalid device credentials for this friend code');
+      }
+      if (username) {
+        db.prepare(`UPDATE friend_accounts SET username = ? WHERE friend_code = ?`).run(String(username).trim(), cleanCode);
+      }
     }
 
     const token = jwt.sign(
@@ -213,6 +255,11 @@ router.post('/accept', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
       `UPDATE friend_requests SET status = 'accepted', updated_at = ? WHERE id = ?`
     ).run(now, requestId);
 
+    // Normalized bidirectional friendship insertion
+    const u1 = cleanCode < request.from_code ? cleanCode : request.from_code;
+    const u2 = cleanCode < request.from_code ? request.from_code : cleanCode;
+    db.prepare(`INSERT OR IGNORE INTO friends (user_a, user_b, created_at) VALUES (?, ?, ?)`).run(u1, u2, now);
+
     res.json({
       ok: true,
       fromCode: request.from_code,
@@ -248,6 +295,212 @@ router.post('/decline', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => 
     ).run(now, requestId);
 
     res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 5a. Cancel a sent friend request (caller must be sender)
+router.post('/cancel', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
+  try {
+    const { requestId } = req.body;
+    if (!requestId) {
+      throw new HttpError(400, 'requestId is required');
+    }
+
+    const cleanCode = req.friend.friendCode;
+    const request = db.prepare(`SELECT * FROM friend_requests WHERE id = ?`).get(requestId);
+
+    if (!request) {
+      throw new HttpError(404, 'Friend request not found');
+    }
+
+    if (request.from_code !== cleanCode) {
+      throw new HttpError(403, 'Unauthorized to cancel this request');
+    }
+
+    const now = Date.now();
+    db.prepare(
+      `UPDATE friend_requests SET status = 'cancelled', updated_at = ? WHERE id = ?`
+    ).run(now, requestId);
+
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 5b. Resend an expired or cancelled friend request
+router.post('/resend', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
+  try {
+    const { requestId } = req.body;
+    if (!requestId) {
+      throw new HttpError(400, 'requestId is required');
+    }
+
+    const cleanCode = req.friend.friendCode;
+    const request = db.prepare(`SELECT * FROM friend_requests WHERE id = ?`).get(requestId);
+
+    if (!request) {
+      throw new HttpError(404, 'Friend request not found');
+    }
+
+    if (request.from_code !== cleanCode) {
+      throw new HttpError(403, 'Unauthorized to resend this request');
+    }
+
+    const now = Date.now();
+    db.prepare(
+      `UPDATE friend_requests SET status = 'pending', created_at = ?, updated_at = ? WHERE id = ?`
+    ).run(now, now, requestId);
+
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 5c. Remove a friend relationship
+router.post('/remove', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
+  try {
+    const { friendCode } = req.body;
+    if (!friendCode) {
+      throw new HttpError(400, 'friendCode is required');
+    }
+
+    const cleanCode = req.friend.friendCode;
+    const otherCode = String(friendCode).trim().toUpperCase();
+    const u1 = cleanCode < otherCode ? cleanCode : otherCode;
+    const u2 = cleanCode < otherCode ? otherCode : cleanCode;
+
+    db.prepare(`DELETE FROM friends WHERE user_a = ? AND user_b = ?`).run(u1, u2);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 5d. Get accepted friends list
+router.get('/list/:myCode', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
+  try {
+    const { myCode } = req.params;
+    const cleanCode = String(myCode).trim().toUpperCase();
+    if (req.friend.friendCode !== cleanCode) {
+      throw new HttpError(403, 'Forbidden: cannot access friend list for another code');
+    }
+
+    const rows = db.prepare(`
+      SELECT CASE WHEN user_a = ? THEN user_b ELSE user_a END AS friendCode, created_at AS createdAt
+      FROM friends
+      WHERE user_a = ? OR user_b = ?
+      ORDER BY created_at DESC
+    `).all(cleanCode, cleanCode, cleanCode);
+
+    const enriched = rows.map((r) => {
+      const acc = db.prepare(`SELECT username FROM friend_accounts WHERE friend_code = ?`).get(r.friendCode);
+      return {
+        friendCode: r.friendCode,
+        username: (acc && acc.username) || null,
+        createdAt: r.createdAt,
+      };
+    });
+
+    res.json({ friends: enriched });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 5e. Get sent friend requests (pending and expired)
+router.get('/sent/:myCode', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
+  try {
+    const { myCode } = req.params;
+    const cleanCode = String(myCode).trim().toUpperCase();
+    if (req.friend.friendCode !== cleanCode) {
+      throw new HttpError(403, 'Forbidden: cannot access sent requests for another code');
+    }
+
+    const rows = db.prepare(`
+      SELECT id, from_code AS fromCode, to_code AS toCode, from_name AS fromName, status, created_at AS createdAt, updated_at AS updatedAt
+      FROM friend_requests
+      WHERE from_code = ?
+      ORDER BY updated_at DESC
+    `).all(cleanCode);
+
+    const now = Date.now();
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    const enriched = rows.map((r) => {
+      let currentStatus = r.status;
+      if (currentStatus === 'pending' && (now - r.createdAt > thirtyDaysMs)) {
+        currentStatus = 'expired';
+        db.prepare(`UPDATE friend_requests SET status = 'expired' WHERE id = ?`).run(r.id);
+      }
+      const targetAcc = db.prepare(`SELECT username FROM friend_accounts WHERE friend_code = ?`).get(r.toCode);
+      return {
+        ...r,
+        status: currentStatus,
+        toName: (targetAcc && targetAcc.username) || null,
+      };
+    });
+
+    res.json({ requests: enriched });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 5f. Create short universal invite link
+router.post('/invite', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
+  try {
+    const cleanCode = req.friend.friendCode;
+    const { fromName } = req.body;
+    const now = Date.now();
+    const id = nanoid(16);
+    const inviteCode = generateInviteCode();
+    const expiresAt = now + (30 * 24 * 60 * 60 * 1000); // 30 days TTL
+
+    const account = db.prepare(`SELECT username FROM friend_accounts WHERE friend_code = ?`).get(cleanCode);
+    const effectiveName = fromName ? String(fromName).trim() : (account && account.username ? account.username : null);
+
+    db.prepare(
+      `INSERT INTO invites (id, invite_code, created_by, from_name, expires_at, status, created_at)
+       VALUES (?, ?, ?, ?, ?, 'valid', ?)`
+    ).run(id, inviteCode, cleanCode, effectiveName, expiresAt, now);
+
+    res.json({
+      code: inviteCode,
+      url: `https://kioku.app/i/${inviteCode}`,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 5g. Resolve public invite code
+router.get('/invite/:code', FRIENDS_LIMITER, (req, res, next) => {
+  try {
+    const { code } = req.params;
+    const result = resolveInviteDetails(code);
+    if (result.status === 'invalid') {
+      return res.status(404).json(result);
+    }
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 5h. Update profile username
+router.post('/profile', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
+  try {
+    const { username } = req.body;
+    if (!username) {
+      throw new HttpError(400, 'username is required');
+    }
+    const cleanCode = req.friend.friendCode;
+    const cleanName = String(username).trim();
+    db.prepare(`UPDATE friend_accounts SET username = ? WHERE friend_code = ?`).run(cleanName, cleanCode);
+    res.json({ ok: true, username: cleanName });
   } catch (err) {
     next(err);
   }
@@ -393,3 +646,4 @@ router.post('/albums/decline', FRIENDS_LIMITER, requireFriendAuth, (req, res, ne
 });
 
 module.exports = router;
+module.exports.resolveInviteDetails = resolveInviteDetails;

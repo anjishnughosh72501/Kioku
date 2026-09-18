@@ -16,6 +16,8 @@ import 'package:flutter_mobile/features/feed/presentation/widgets/memory_card.da
 import 'package:flutter_mobile/features/feed/presentation/widgets/album_dropdown.dart';
 import 'package:flutter_mobile/features/auth/presentation/widgets/username_dialog.dart';
 import 'package:flutter_mobile/features/feed/presentation/widgets/shimmer_skeleton_card.dart';
+import 'package:flutter_mobile/features/friends/presentation/controllers/friends_controller.dart';
+import 'package:flutter_mobile/features/friends/presentation/widgets/invite_accept_dialog.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
 import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -40,6 +42,15 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             UsernameDialog.showIfNeeded(context);
+          }
+        });
+      }
+      final pendingInvite = prefs.getString('pending_invite_code');
+      if (pendingInvite != null && pendingInvite.isNotEmpty) {
+        prefs.remove('pending_invite_code');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            InviteAcceptDialog.show(context, pendingInvite);
           }
         });
       }
@@ -177,6 +188,30 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                 ),
               ],
             ),
+          ),
+          Consumer(
+            builder: (context, ref, _) {
+              final unread = ref.watch(friendsUnreadBadgeProvider);
+              return IconButton(
+                tooltip: 'Friends & Connections',
+                icon: Badge(
+                  isLabelVisible: unread > 0,
+                  label: Text('$unread', style: const TextStyle(fontSize: 10)),
+                  backgroundColor: colors.primary,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: colors.surfaceContainer,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: colors.divider),
+                    ),
+                    child: Icon(Icons.people_alt_outlined, size: 20, color: colors.ink),
+                  ),
+                ),
+                onPressed: () => context.push('/friends'),
+              );
+            },
           ),
         ],
       ),

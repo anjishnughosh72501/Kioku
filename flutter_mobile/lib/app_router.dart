@@ -21,17 +21,23 @@ import 'features/auth/presentation/screens/migration_screen.dart';
 import 'features/profile/presentation/screens/storage_setup_screen.dart';
 import 'features/albums/presentation/screens/albums_screen.dart';
 import 'features/albums/presentation/screens/album_detail_screen.dart';
+import 'features/friends/presentation/screens/friends_screen.dart';
+import 'features/friends/presentation/widgets/invite_accept_dialog.dart';
 
 import 'core/services/user_profile_service.dart';
 import 'core/storage/local_storage_service.dart';
 import 'core/providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Global root navigator key for deep links, dialogs, and notifications
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
 /// GoRouter provider with auth state listener
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authControllerProvider);
 
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/splash',
     debugLogDiagnostics: false,
     redirect: (context, state) {
@@ -203,6 +209,53 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           }
 
           return '/';
+        },
+      ),
+      GoRoute(
+        path: '/friends',
+        name: 'friends',
+        pageBuilder: (context, state) {
+          final tab = state.uri.queryParameters['tab'];
+          final initialTab = tab != null ? int.tryParse(tab) ?? 0 : 0;
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: FriendsScreen(initialTabIndex: initialTab),
+            transitionDuration: const Duration(milliseconds: 280),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              return FadeTransition(
+                opacity: CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                child: child,
+              );
+            },
+          );
+        },
+      ),
+      GoRoute(
+        path: '/i/:code',
+        name: 'short-invite',
+        redirect: (context, state) {
+          final code = state.pathParameters['code'];
+          if (code != null && code.isNotEmpty) {
+            if (!authState.isAuthenticated) {
+              SharedPreferences.getInstance().then((prefs) {
+                prefs.setString('pending_invite_code', code);
+              });
+              return '/join';
+            }
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              final navContext = rootNavigatorKey.currentContext ?? context;
+              InviteAcceptDialog.show(navContext, code);
+            });
+          }
+          return '/';
+        },
+      ),
+      GoRoute(
+        path: '/invite/:code',
+        name: 'invite-alias',
+        redirect: (context, state) {
+          final code = state.pathParameters['code']!;
+          return '/i/$code';
         },
       ),
       GoRoute(

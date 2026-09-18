@@ -1,7 +1,7 @@
 name: flutter_mobile
 description: "Kioku - A warm memory album shared with close friends"
 publish_to: 'none'
-version: 3.7.0+7
+version: 3.8.0+8
 
 environment:
   sdk: ^3.11.3
@@ -57,6 +57,7 @@ dependencies:
   # Path & File handling
   path: ^1.9.0
   mime: ^1.0.5
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:

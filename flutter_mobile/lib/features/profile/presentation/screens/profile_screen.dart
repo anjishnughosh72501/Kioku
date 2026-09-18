@@ -21,6 +21,8 @@ import 'package:flutter_mobile/core/services/user_profile_service.dart';
 import 'package:flutter_mobile/core/services/app_lock_service.dart';
 import 'package:flutter_mobile/core/services/error_reporter.dart';
 import 'package:flutter_mobile/features/profile/presentation/widgets/album_row.dart';
+import 'package:flutter_mobile/features/friends/presentation/controllers/friends_controller.dart';
+import 'package:flutter_mobile/features/friends/presentation/widgets/invite_share_sheet.dart';
 import 'package:flutter_mobile/main.dart';
 import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
 
@@ -609,15 +611,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                   const SizedBox(width: 8),
                                   InkWell(
                                     onTap: () {
-                                      final link = 'https://kioku.app/invite?friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}';
-                                      final appUri = 'kioku://invite?friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}';
-                                      Share.share(
-                                        'Add me on Kioku!\n'
-                                        'Friend code: ${userProfile.friendCode}\n\n'
-                                        'Tap to connect:\n$link\n\n'
-                                        'Or app link: $appUri',
-                                        subject: 'Kioku Friend Invite',
-                                      );
+                                      InviteShareSheet.show(context);
                                     },
                                     child: Icon(Icons.share_rounded, size: 16, color: colors.primary),
                                   ),
@@ -1370,6 +1364,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final incomingRequests = incomingRequestsAsync.value ?? [];
     final incomingAlbumInvitesAsync = ref.watch(incomingAlbumInvitesProvider);
     final incomingAlbumInvites = incomingAlbumInvitesAsync.value ?? [];
+    final unreadSocial = ref.watch(friendsUnreadBadgeProvider);
 
     return ClayCard(
       variant: ClayVariant.elevated,
@@ -1391,23 +1386,49 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               const Spacer(),
               Semantics(
                 button: true,
-                label: 'Add Friend by code',
+                label: 'Invite Friends',
                 child: OutlinedButton.icon(
-                  onPressed: () => _promptAddFriendCode(context, ref, colors, typography),
-                  icon: Icon(Icons.person_add_outlined, size: 15, color: colors.primary),
+                  onPressed: () => InviteShareSheet.show(context),
+                  icon: Icon(Icons.qr_code_rounded, size: 14, color: colors.primary),
                   label: Text(
-                    'Add Friend',
+                    'Invite',
                     style: typography.bodySmall?.copyWith(
                       color: colors.primary,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(AppTheme.radiusPill),
                     ),
                     side: BorderSide(color: colors.primary.withValues(alpha: 0.5)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Semantics(
+                button: true,
+                label: 'Open Social Hub',
+                child: FilledButton.tonalIcon(
+                  onPressed: () => context.push('/friends'),
+                  icon: Badge(
+                    isLabelVisible: unreadSocial > 0,
+                    label: Text('$unreadSocial'),
+                    child: Icon(Icons.people_alt_outlined, size: 14, color: colors.primary),
+                  ),
+                  label: Text(
+                    'Manage',
+                    style: typography.bodySmall?.copyWith(
+                      color: colors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                    ),
                   ),
                 ),
               ),
@@ -1782,106 +1803,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     ).animate().fadeIn(delay: 110.ms, duration: 300.ms);
   }
 
-  Future<void> _promptAddFriendCode(
-    BuildContext context,
-    WidgetRef ref,
-    AppColors colors,
-    TextTheme typography,
-  ) async {
-    final controller = TextEditingController();
-    String? inlineError;
-    bool isSending = false;
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: colors.surfaceContainer,
-              title: Text(
-                'Send Friend Request',
-                style: typography.headlineSmall?.copyWith(color: colors.ink, fontSize: 18),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Enter your friend\'s Kioku code (e.g. KIOKU-XXXX). They will receive your request and can accept it.',
-                    style: typography.bodySmall?.copyWith(color: colors.inkMuted),
-                  ),
-                  const SizedBox(height: AppTheme.spacingMd),
-                  TextField(
-                    controller: controller,
-                    textCapitalization: TextCapitalization.characters,
-                    decoration: InputDecoration(
-                      hintText: 'KIOKU-XXXX',
-                      errorText: inlineError,
-                      prefixIcon: Icon(Icons.tag_rounded, color: colors.primary),
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isSending ? null : () => Navigator.of(dialogContext).pop(),
-                  child: Text('Cancel', style: typography.bodyMedium?.copyWith(color: colors.inkMuted)),
-                ),
-                ClayButton(
-                  label: isSending ? 'Sending…' : 'Send Request',
-                  size: ClayButtonSize.small,
-                  onPressed: isSending
-                      ? null
-                      : () async {
-                          final code = controller.text.trim().toUpperCase();
-                          if (code.isEmpty) {
-                            setDialogState(() => inlineError = 'Please enter a code');
-                            return;
-                          }
-                          if (code == ref.read(userProfileProvider).friendCode) {
-                            setDialogState(() => inlineError = 'That is your own code');
-                            return;
-                          }
-                          setDialogState(() => isSending = true);
-                          final result = await ref
-                              .read(connectedFriendsProvider.notifier)
-                              .sendFriendRequest(code);
-                          setDialogState(() => isSending = false);
-
-                          switch (result) {
-                            case FriendRequestResult.sent:
-                              if (context.mounted) {
-                                Navigator.of(dialogContext).pop();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Friend request sent to $code!'),
-                                  ),
-                                );
-                              }
-                              break;
-                            case FriendRequestResult.alreadySent:
-                              setDialogState(() => inlineError = 'Request already sent to this code');
-                              break;
-                            case FriendRequestResult.alreadyFriends:
-                              setDialogState(() => inlineError = 'You are already friends');
-                              break;
-                            case FriendRequestResult.sameUser:
-                              setDialogState(() => inlineError = 'That is your own code');
-                              break;
-                            case FriendRequestResult.error:
-                              setDialogState(() => inlineError = 'Could not send request. Please try again.');
-                              break;
-                          }
-                        },
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
 
   Future<void> _promptInviteFriendToAlbum(
     BuildContext context,

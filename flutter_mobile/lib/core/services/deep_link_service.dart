@@ -7,6 +7,7 @@ import 'package:flutter_mobile/core/providers.dart';
 import 'package:flutter_mobile/core/services/invite_service.dart';
 import 'package:flutter_mobile/core/services/user_profile_service.dart';
 import 'package:flutter_mobile/core/storage/local_storage_service.dart';
+import 'package:flutter_mobile/features/friends/presentation/widgets/invite_accept_dialog.dart';
 
 class DeepLinkService {
   DeepLinkService._();
@@ -53,6 +54,29 @@ class DeepLinkService {
     required WidgetRef ref,
     required BuildContext context,
   }) async {
+    // 1. Check for Universal Short Invite Links (/i/:code or /invite/:code or kioku://i/:code)
+    String? shortInviteCode;
+    if (uri.pathSegments.isNotEmpty) {
+      if (uri.pathSegments.first == 'i' && uri.pathSegments.length > 1) {
+        shortInviteCode = uri.pathSegments[1];
+      } else if (uri.pathSegments.first == 'invite' && uri.pathSegments.length > 1) {
+        shortInviteCode = uri.pathSegments[1];
+      }
+    }
+    if (shortInviteCode == null && (uri.host == 'i' || uri.host == 'invite')) {
+      if (uri.pathSegments.isNotEmpty) {
+        shortInviteCode = uri.pathSegments.first;
+      }
+    }
+
+    if (shortInviteCode != null && shortInviteCode.trim().isNotEmpty) {
+      final code = shortInviteCode.trim().toUpperCase();
+      if (context.mounted) {
+        InviteAcceptDialog.show(context, code);
+      }
+      return true;
+    }
+
     String? albumId = uri.queryParameters['albumId'];
     final albumName = uri.queryParameters['albumName'] ?? 'Shared Album';
     final friendCode = uri.queryParameters['friendCode'];

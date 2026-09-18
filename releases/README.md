@@ -2,19 +2,19 @@
 
 Official standalone release builds for Kioku are distributed via [GitHub Releases](https://github.com/anjishnughosh72501/Kioku/releases) and packaged in the `releases/` directory.
 
-### Current Release: V3.7
+### Current Release: V3.8
 
 | File | Platform | Architecture | Size | SHA-256 Checksum | GitHub Release |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`kioku-v3.7-release.apk`** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.6 MB | `24D4B34D20E20414165323476253DFA700D55BF711FB94F56715E71D816A9FFD` | [Download v3.7](https://github.com/anjishnughosh72501/Kioku/releases/tag/v3.7) |
-| **`kioku-release.apk`** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.6 MB | `24D4B34D20E20414165323476253DFA700D55BF711FB94F56715E71D816A9FFD` | [Latest Release](https://github.com/anjishnughosh72501/Kioku/releases/latest) |
+| **`kioku-v3.8-release.apk`** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 63.5 MB | `FB395EAD63023C324FA2DDBBFA5E469F8334423663B19EFB171467F7081885C9` | [Download v3.8](https://github.com/anjishnughosh72501/Kioku/releases/tag/v3.8) |
+| **`kioku-release.apk`** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 63.5 MB | `FB395EAD63023C324FA2DDBBFA5E469F8334423663B19EFB171467F7081885C9` | [Latest Release](https://github.com/anjishnughosh72501/Kioku/releases/latest) |
 
 ---
 
 ## 📲 Installation Instructions
 
 ### Option 1: Direct Device Install (Phone)
-1. Download `kioku-v3.7-release.apk` (or `kioku-release.apk`) directly to your Android device.
+1. Download `kioku-v3.8-release.apk` (or `kioku-release.apk`) directly to your Android device.
 2. Open the downloaded file from your browser's downloads or file manager.
 3. If prompted, enable **"Install unknown apps"** for your browser or file manager in Android Settings.
 4. Tap **Install** and launch Kioku.
@@ -22,34 +22,41 @@ Official standalone release builds for Kioku are distributed via [GitHub Release
 ### Option 2: Via ADB (Command Line)
 Connect your Android device with USB debugging enabled (or start an emulator) and run:
 ```bash
-adb install -r releases/kioku-v3.7-release.apk
+adb install -r releases/kioku-v3.8-release.apk
 ```
 
 ---
 
-## 📋 Release Highlights (V3.7)
+## 📋 Release Highlights (V3.8)
 
-### 👤 First-Setup Profile & Username Prompt
-- **First-Setup Identity Gate**: Asks the user for their username/nickname immediately after selecting Local Storage or completing Google Sign-In during initial setup.
-- **Persistent & Non-Repeating**: Securely stores the profile identity and never prompts on subsequent app startups, booting directly to the feed.
+### 🔗 Universal Short Invite Links (`kioku.app/i/:code`)
+- **6-Character Cryptographic Invite Codes**: Unambiguous 32-character codes with 30-day TTL stored in an indexed backend database.
+- **Content-Negotiated Resolution**: Web browsers get a styled warm-coffee landing page with dynamic inviter card and `"Open Kioku App"` button; API and apps receive instant JSON resolution.
+- **Deep Linking & Cold Starts**: Android & iOS app links (`kioku://i/:code` and `https://kioku.app/i/:code`) route directly to confirmation. Unauthenticated cold starts persist the invite code and prompt seamlessly upon sign-in/onboarding.
 
-### 🔒 App Lock & Privacy Gate (P1-8)
-- **Automatic Resume Lock**: Re-locks the decrypted photo gallery and album view whenever Kioku returns from the background.
-- **PIN Keypad Overlay**: Tactile numeric PIN lock screen with custom dot indicators and instant verification.
-- **BIP-39 Recovery Fallback**: "Forgot PIN?" flow allows resetting credentials seamlessly using the user's 24-word backup recovery mnemonic phrase.
-- **User Preference Management**: Enable/disable App Lock and manage PINs directly from the Profile screen.
+### 👥 4-Tab Dedicated Social Hub
+- **Friends Tab**: View friends, manage album sharing, and remove connections with optimistic cache updates.
+- **Incoming Tab**: Relative timestamps, inviter name & code, with optimistic 1-tap **Accept** and **Decline**.
+- **Sent Tab**: Track outgoing requests with status badges (`Pending` vs `Expired`) and 1-tap **Cancel** or **Resend**.
+- **Add Tab**: Method A (Friend Code input with inline validation) and Method B (Paste short link or code to open confirmation dialog).
+- **Live Unread Badges**: Real-time incoming badge counter on top app bar and tab bar.
 
-### 🛡️ Complete Security Audit Roadmap Implementation (Phases 1–4)
-- **Hardened Friends & Invites Authorization (P0-1)**: Device-secret authenticated token minting (`POST /friends/token`) with SHA-256 hashed storage and signed JWT authorization preventing all IDOR vectors.
-- **Atomic Datastore Persistence (P1-5)**: Atomic SQLite buffer swapping (`retro.db.tmp` -> `retro.db`), process termination exit flush hooks, and transactional wrapper (`db.transaction()`).
-- **Comprehensive Negative Security Test Suites (P2-9)**: Expanded automated test suites covering expired tokens, tampered JWT signatures, malformed headers, claim token replay defense, and full streaming envelope encrypt/decrypt round-trip verification.
-- **Privacy-Preserving PII-Scrubbed Error Telemetry (P2-10)**: Local ring buffer error reporter scrubbing file paths, emails, JWTs, and recovery seeds; in-app scrubbed log viewer and export tool.
-- **Horizontal Scaling Signaling Architecture (P2-12)**: Pluggable WebRTC mesh signaling store supporting single-node in-memory mode and multi-node distributed Redis pub/sub.
-- **Threat Model & Release Signing (P0-2, P2-11)**: Production-grade release signing guards in `build.gradle.kts` and formal zero-knowledge threat model documentation (`THREAT_MODEL.md`).
+### 📱 Redesigned Sharing Sheet & QR Codes
+- Modern share sheet with 1-tap friend code copy, 1-tap short link copy, and native system share sheet (`share_plus`).
+- Pure Dart CustomPainter QR code generator (`qr_flutter`) encoding strictly `https://kioku.app/i/:code`.
 
 ---
 
 ## 📜 Previous Releases
+
+<details>
+<summary><b>v3.7.0</b> (2026-09-18)</summary>
+
+- **First-Setup Username Selection**: Mandatory non-repeating username prompt after Local Storage or Google Auth.
+- **App Lock & Privacy Gate**: Auto-resume biometric/PIN lock, PIN keypad, and BIP-39 recovery fallback.
+- **Security Audit Phases 1–4**: Hardened JWT token minting, atomic SQLite buffer swapping, PII-scrubbed telemetry, and horizontal scaling mesh signaling.
+- **SHA-256**: `24D4B34D20E20414165323476253DFA700D55BF711FB94F56715E71D816A9FFD`
+</details>
 
 <details>
 <summary><b>v3.6.0</b> (2026-09-18)</summary>
