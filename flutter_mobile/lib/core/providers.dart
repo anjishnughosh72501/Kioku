@@ -192,10 +192,17 @@ class ConnectedFriendsNotifier extends StateNotifier<List<String>> {
     return success;
   }
 
-  Future<bool> removeFriend(String friendCode) async {
+  Future<FriendRequestResult> sendFriendRequest(String friendCode, {String? displayName}) async {
+    return await UserProfileService.instance.sendFriendRequest(friendCode, myName: displayName);
+  }
+
+  Future<bool> removeFriend(String friendCode, {String? albumId}) async {
     final success = await UserProfileService.instance.removeFriend(friendCode);
     if (success) {
       await _load();
+      if (albumId != null) {
+        await KeyStore.instance.rotateCollectionKey(albumId);
+      }
     }
     return success;
   }
@@ -210,6 +217,115 @@ class ConnectedFriendsNotifier extends StateNotifier<List<String>> {
 final connectedFriendsProvider =
     StateNotifierProvider<ConnectedFriendsNotifier, List<String>>((ref) {
   return ConnectedFriendsNotifier();
+});
+
+class IncomingFriendRequestsNotifier
+    extends StateNotifier<AsyncValue<List<FriendRequest>>> {
+  IncomingFriendRequestsNotifier() : super(const AsyncValue.loading()) {
+    _load();
+    _listener = () => _load();
+    UserProfileService.instance.addFriendListener(_listener);
+  }
+
+  late final void Function() _listener;
+
+  Future<void> _load() async {
+    try {
+      final cached =
+          await UserProfileService.instance.getCachedIncomingRequests();
+      if (mounted && cached.isNotEmpty && state.value == null) {
+        state = AsyncValue.data(cached);
+      }
+      final fresh = await UserProfileService.instance.pollIncomingRequests();
+      if (mounted) {
+        state = AsyncValue.data(fresh);
+      }
+    } catch (e, st) {
+      if (mounted) {
+        state = AsyncValue.error(e, st);
+      }
+    }
+  }
+
+  Future<void> refresh() => _load();
+
+  Future<bool> accept(FriendRequest req) async {
+    final ok = await UserProfileService.instance.acceptRequest(req);
+    await _load();
+    return ok;
+  }
+
+  Future<bool> decline(FriendRequest req) async {
+    final ok = await UserProfileService.instance.declineRequest(req);
+    await _load();
+    return ok;
+  }
+
+  @override
+  void dispose() {
+    UserProfileService.instance.removeFriendListener(_listener);
+    super.dispose();
+  }
+}
+
+final incomingFriendRequestsProvider = StateNotifierProvider<
+    IncomingFriendRequestsNotifier, AsyncValue<List<FriendRequest>>>((ref) {
+  return IncomingFriendRequestsNotifier();
+});
+
+class IncomingAlbumInvitesNotifier
+    extends StateNotifier<AsyncValue<List<AlbumInvite>>> {
+  IncomingAlbumInvitesNotifier() : super(const AsyncValue.loading()) {
+    _load();
+    _listener = () => _load();
+    UserProfileService.instance.addFriendListener(_listener);
+  }
+
+  late final void Function() _listener;
+
+  Future<void> _load() async {
+    try {
+      final cached =
+          await UserProfileService.instance.getCachedIncomingAlbumInvites();
+      if (mounted && cached.isNotEmpty && state.value == null) {
+        state = AsyncValue.data(cached);
+      }
+      final fresh =
+          await UserProfileService.instance.pollIncomingAlbumInvites();
+      if (mounted) {
+        state = AsyncValue.data(fresh);
+      }
+    } catch (e, st) {
+      if (mounted) {
+        state = AsyncValue.error(e, st);
+      }
+    }
+  }
+
+  Future<void> refresh() => _load();
+
+  Future<bool> accept(AlbumInvite invite) async {
+    final ok = await UserProfileService.instance.acceptAlbumInvite(invite);
+    await _load();
+    return ok;
+  }
+
+  Future<bool> decline(AlbumInvite invite) async {
+    final ok = await UserProfileService.instance.declineAlbumInvite(invite);
+    await _load();
+    return ok;
+  }
+
+  @override
+  void dispose() {
+    UserProfileService.instance.removeFriendListener(_listener);
+    super.dispose();
+  }
+}
+
+final incomingAlbumInvitesProvider = StateNotifierProvider<
+    IncomingAlbumInvitesNotifier, AsyncValue<List<AlbumInvite>>>((ref) {
+  return IncomingAlbumInvitesNotifier();
 });
 
 final getMemoriesUseCaseProvider = Provider<GetMemoriesUseCase>(
@@ -380,6 +496,14 @@ class Albums extends AsyncNotifier<List<Album>> {
     );
     await refresh();
     return album;
+  }
+
+  /// Real member removal: removes friend and rotates the collection key so the removed member
+  /// cannot decrypt future uploads to this album.
+  Future<void> removeMember(String albumId, String friendCode) async {
+    await UserProfileService.instance.removeFriend(friendCode);
+    await KeyStore.instance.rotateCollectionKey(albumId);
+    await refresh();
   }
 
   Future<void> share(String albumId, String email) async {

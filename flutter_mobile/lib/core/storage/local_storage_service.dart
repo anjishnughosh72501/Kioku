@@ -164,6 +164,74 @@ class LocalStorageService {
     return newAlbum;
   }
 
+  /// Get stored members for an album (owners, joined friends)
+  Future<List<AlbumMember>> getAlbumMembers(String albumId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('album_members_$albumId');
+    if (raw == null || raw.isEmpty) {
+      return [
+        const AlbumMember(
+          email: 'local@device',
+          role: 'owner',
+          displayName: 'You (Owner)',
+        ),
+      ];
+    }
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list.map((item) {
+        final map = item as Map<String, dynamic>;
+        return AlbumMember(
+          email: map['email'] as String? ?? 'member',
+          role: map['role'] as String? ?? 'member',
+          displayName: map['displayName'] as String?,
+        );
+      }).toList();
+    } catch (_) {
+      return [
+        const AlbumMember(
+          email: 'local@device',
+          role: 'owner',
+          displayName: 'You (Owner)',
+        ),
+      ];
+    }
+  }
+
+  /// Add a member to an album
+  Future<void> addAlbumMember(
+    String albumId,
+    String friendCode, {
+    String? displayName,
+    String role = 'member',
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final members = await getAlbumMembers(albumId);
+    if (members.any((m) => m.email == friendCode || m.displayName == displayName)) {
+      return;
+    }
+
+    final updated = [
+      ...members,
+      AlbumMember(
+        email: friendCode,
+        role: role,
+        displayName: displayName ?? friendCode,
+      ),
+    ];
+
+    await prefs.setString(
+      'album_members_$albumId',
+      jsonEncode(updated
+          .map((m) => {
+                'email': m.email,
+                'role': m.role,
+                'displayName': m.displayName,
+              })
+          .toList()),
+    );
+  }
+
   /// Deletes a local album and removes all its photos from disk.
   Future<void> deleteAlbum(String albumId) async {
     final prefs = await SharedPreferences.getInstance();

@@ -1,5 +1,10 @@
+import 'dart:convert';
 import 'dart:math';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_mobile/core/config.dart';
+import 'package:flutter_mobile/core/services/invite_service.dart';
+import 'package:flutter_mobile/core/storage/local_storage_service.dart';
 
 class UserProfile {
   final String username;
@@ -11,6 +16,94 @@ class UserProfile {
   });
 }
 
+enum FriendRequestResult {
+  sent,
+  alreadySent,
+  alreadyFriends,
+  sameUser,
+  error,
+}
+
+class FriendRequest {
+  final String id;
+  final String fromCode;
+  final String toCode;
+  final String? fromName;
+  final int? createdAt;
+
+  const FriendRequest({
+    required this.id,
+    required this.fromCode,
+    required this.toCode,
+    this.fromName,
+    this.createdAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'fromCode': fromCode,
+        'toCode': toCode,
+        'fromName': fromName,
+        'createdAt': createdAt,
+      };
+
+  factory FriendRequest.fromJson(Map<String, dynamic> json) => FriendRequest(
+        id: json['id'] as String,
+        fromCode: json['fromCode'] as String,
+        toCode: (json['toCode'] as String?) ?? '',
+        fromName: json['fromName'] as String?,
+        createdAt: json['createdAt'] as int?,
+      );
+}
+
+class AlbumInvite {
+  final String id;
+  final String albumId;
+  final String albumName;
+  final String fromCode;
+  final String toCode;
+  final String? fromName;
+  final String? claimToken;
+  final String? inviterPubKey;
+  final int? createdAt;
+
+  const AlbumInvite({
+    required this.id,
+    required this.albumId,
+    required this.albumName,
+    required this.fromCode,
+    required this.toCode,
+    this.fromName,
+    this.claimToken,
+    this.inviterPubKey,
+    this.createdAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'albumId': albumId,
+        'albumName': albumName,
+        'fromCode': fromCode,
+        'toCode': toCode,
+        'fromName': fromName,
+        'claimToken': claimToken,
+        'inviterPubKey': inviterPubKey,
+        'createdAt': createdAt,
+      };
+
+  factory AlbumInvite.fromJson(Map<String, dynamic> json) => AlbumInvite(
+        id: json['id'] as String,
+        albumId: json['albumId'] as String,
+        albumName: (json['albumName'] as String?) ?? 'Shared Album',
+        fromCode: json['fromCode'] as String,
+        toCode: (json['toCode'] as String?) ?? '',
+        fromName: json['fromName'] as String?,
+        claimToken: json['claimToken'] as String?,
+        inviterPubKey: json['inviterPubKey'] as String?,
+        createdAt: json['createdAt'] as int?,
+      );
+}
+
 class UserProfileService {
   UserProfileService._();
   static final UserProfileService instance = UserProfileService._();
@@ -18,6 +111,11 @@ class UserProfileService {
   static const String _keyUsername = 'kioku_username';
   static const String _keyFriendCode = 'kioku_friend_code';
   static const String _keyConnectedFriends = 'kioku_connected_friends';
+  static const String _keyPendingSent = 'kioku_pending_sent_requests';
+  static const String _keyIncomingRequests = 'kioku_cached_incoming_requests';
+  static const String _keyIncomingAlbumInvites = 'kioku_cached_album_invites';
+
+  http.Client httpClient = http.Client();
 
   UserProfile? _currentProfile;
   final List<void Function(UserProfile)> _listeners = [];
@@ -119,6 +217,385 @@ class UserProfileService {
       return true;
     }
     return false;
+  }
+
+  Future<List<String>> getPendingSentRequests() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_keyPendingSent) ?? [];
+  }
+
+  Future<FriendRequestResult> sendFriendRequest(String toCode, {String? myName}) async {
+    final cleanTo = toCode.trim().toUpperCase();
+    final myCode = friendCode.trim().toUpperCase();
+
+    if (cleanTo.isEmpty || cleanTo == myCode) {
+      return FriendRequestResult.sameUser;
+    }
+
+    final friends = await getConnectedFriends();
+    if (friends.contains(cleanTo)) {
+      return FriendRequestResult.alreadyFriends;
+    }
+
+    final pending = await getPendingSentRequests();
+    if (pending.contains(cleanTo)) {
+      return FriendRequestResult.alreadySent;
+    }
+
+    try {
+      final res = await httpClient.post(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/request'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'fromCode': myCode,
+          'toCode': cleanTo,
+          'fromName': myName ?? username,
+        }),
+      ).timeout(const Duration(seconds: 4));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final prefs = await SharedPreferences.getInstance();
+        final list = prefs.getStringList(_keyPendingSent) ?? [];
+        if (!list.contains(cleanTo)) {
+          list.add(cleanTo);
+          await prefs.setStringList(_keyPendingSent, list);
+        }
+        if (data['alreadySent'] == true) {
+          return FriendRequestResult.alreadySent;
+        }
+        _notifyFriendListeners();
+        return FriendRequestResult.sent;
+      }
+    } catch (_) {
+      // Fallback for offline or direct mode: still track pending locally
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList(_keyPendingSent) ?? [];
+      if (!list.contains(cleanTo)) {
+        list.add(cleanTo);
+        await prefs.setStringList(_keyPendingSent, list);
+        _notifyFriendListeners();
+        return FriendRequestResult.sent;
+      }
+    }
+    return FriendRequestResult.error;
+  }
+
+  Future<List<FriendRequest>> getCachedIncomingRequests() async {
+    final prefs = await SharedPreferences.getInstance();
+    final rawList = prefs.getStringList(_keyIncomingRequests) ?? [];
+    return rawList
+        .map((str) {
+          try {
+            return FriendRequest.fromJson(jsonDecode(str) as Map<String, dynamic>);
+          } catch (_) {
+            return null;
+          }
+        })
+        .whereType<FriendRequest>()
+        .toList();
+  }
+
+  Future<List<FriendRequest>> pollIncomingRequests() async {
+    final myCode = friendCode.trim().toUpperCase();
+    if (myCode.isEmpty) return getCachedIncomingRequests();
+
+    try {
+      final res = await httpClient.get(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/requests/$myCode'),
+      ).timeout(const Duration(seconds: 4));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final list = (data['requests'] as List? ?? []);
+        final acceptedList = (data['accepted'] as List? ?? []);
+        final friends = await getConnectedFriends();
+
+        // 1. Process accepted requests (User A learning User B accepted)
+        for (final item in acceptedList) {
+          if (item is Map<String, dynamic>) {
+            final toCode = (item['toCode'] as String?)?.trim().toUpperCase();
+            final toName = item['fromName'] as String?;
+            final reqId = item['id'] as String?;
+            if (toCode != null && toCode.isNotEmpty) {
+              await addFriend(toCode, displayName: toName);
+              final prefs = await SharedPreferences.getInstance();
+              final pending = prefs.getStringList(_keyPendingSent) ?? [];
+              if (pending.remove(toCode)) {
+                await prefs.setStringList(_keyPendingSent, pending);
+              }
+              if (reqId != null) {
+                try {
+                  await httpClient.post(
+                    Uri.parse('${AppConfig.backendBaseUrl}/friends/ack'),
+                    headers: {'Content-Type': 'application/json'},
+                    body: jsonEncode({'requestId': reqId, 'myCode': myCode}),
+                  ).timeout(const Duration(seconds: 4));
+                } catch (_) {}
+              }
+            }
+          }
+        }
+
+        // 2. Process incoming pending requests
+        final parsed = list
+            .map((item) => FriendRequest.fromJson(item as Map<String, dynamic>))
+            .where((req) => !friends.contains(req.fromCode.trim().toUpperCase()))
+            .toList();
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList(
+          _keyIncomingRequests,
+          parsed.map((r) => jsonEncode(r.toJson())).toList(),
+        );
+        _notifyFriendListeners();
+        return parsed;
+      }
+    } catch (_) {}
+
+    return getCachedIncomingRequests();
+  }
+
+  Future<bool> acceptRequest(FriendRequest req) async {
+    final myCode = friendCode.trim().toUpperCase();
+    try {
+      await httpClient.post(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/accept'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'requestId': req.id,
+          'myCode': myCode,
+        }),
+      ).timeout(const Duration(seconds: 4));
+    } catch (_) {}
+
+    final added = await addFriend(req.fromCode, displayName: req.fromName);
+
+    // Remove from cached incoming requests
+    final prefs = await SharedPreferences.getInstance();
+    final cached = await getCachedIncomingRequests();
+    final updated = cached.where((r) => r.id != req.id).toList();
+    await prefs.setStringList(
+      _keyIncomingRequests,
+      updated.map((r) => jsonEncode(r.toJson())).toList(),
+    );
+
+    // Also remove from pending sent if mutual
+    final pending = prefs.getStringList(_keyPendingSent) ?? [];
+    if (pending.remove(req.fromCode.trim().toUpperCase())) {
+      await prefs.setStringList(_keyPendingSent, pending);
+    }
+
+    _notifyFriendListeners();
+    return added;
+  }
+
+  Future<bool> declineRequest(FriendRequest req) async {
+    final myCode = friendCode.trim().toUpperCase();
+    try {
+      await httpClient.post(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/decline'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'requestId': req.id,
+          'myCode': myCode,
+        }),
+      ).timeout(const Duration(seconds: 4));
+    } catch (_) {}
+
+    // Remove from cached incoming requests
+    final prefs = await SharedPreferences.getInstance();
+    final cached = await getCachedIncomingRequests();
+    final updated = cached.where((r) => r.id != req.id).toList();
+    await prefs.setStringList(
+      _keyIncomingRequests,
+      updated.map((r) => jsonEncode(r.toJson())).toList(),
+    );
+
+    _notifyFriendListeners();
+    return true;
+  }
+
+  // --- SOCIAL ALBUM INVITATIONS & SYNC ---
+
+  Future<bool> sendAlbumInvite({
+    required String albumId,
+    required String albumName,
+    required String toFriendCode,
+  }) async {
+    final cleanTo = toFriendCode.trim().toUpperCase();
+    final myCode = friendCode.trim().toUpperCase();
+    if (cleanTo.isEmpty || cleanTo == myCode) return false;
+
+    try {
+      // 1. Create claim token for ZK key exchange
+      String? claimToken;
+      String? pubKey;
+      try {
+        final claim = await InviteService.instance.createInviteClaim(albumId: albumId);
+        if (claim != null) {
+          claimToken = claim.claimToken;
+          pubKey = claim.inviterPubKey;
+        }
+      } catch (_) {}
+
+      // 2. Post album invite to backend
+      final res = await httpClient.post(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/albums/invite'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'albumId': albumId,
+          'albumName': albumName,
+          'fromCode': myCode,
+          'toCode': cleanTo,
+          'fromName': username,
+          'claimToken': claimToken,
+          'inviterPubKey': pubKey,
+        }),
+      ).timeout(const Duration(seconds: 4));
+
+      if (res.statusCode == 200) {
+        // Track as invited member on local album
+        final friendName = await getFriendName(cleanTo);
+        await LocalStorageService.instance.addAlbumMember(
+          albumId,
+          cleanTo,
+          displayName: friendName ?? cleanTo,
+          role: 'invited',
+        );
+        _notifyFriendListeners();
+        return true;
+      }
+    } catch (_) {}
+
+    return false;
+  }
+
+  Future<List<AlbumInvite>> getCachedIncomingAlbumInvites() async {
+    final prefs = await SharedPreferences.getInstance();
+    final rawList = prefs.getStringList(_keyIncomingAlbumInvites) ?? [];
+    return rawList
+        .map((str) {
+          try {
+            return AlbumInvite.fromJson(jsonDecode(str) as Map<String, dynamic>);
+          } catch (_) {
+            return null;
+          }
+        })
+        .whereType<AlbumInvite>()
+        .toList();
+  }
+
+  Future<List<AlbumInvite>> pollIncomingAlbumInvites() async {
+    final myCode = friendCode.trim().toUpperCase();
+    if (myCode.isEmpty) return getCachedIncomingAlbumInvites();
+
+    try {
+      final res = await httpClient.get(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/albums/invites/$myCode'),
+      ).timeout(const Duration(seconds: 4));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final list = (data['invites'] as List? ?? []);
+
+        final parsed = list
+            .map((item) => AlbumInvite.fromJson(item as Map<String, dynamic>))
+            .toList();
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList(
+          _keyIncomingAlbumInvites,
+          parsed.map((r) => jsonEncode(r.toJson())).toList(),
+        );
+        _notifyFriendListeners();
+        return parsed;
+      }
+    } catch (_) {}
+
+    return getCachedIncomingAlbumInvites();
+  }
+
+  Future<bool> acceptAlbumInvite(AlbumInvite invite) async {
+    final myCode = friendCode.trim().toUpperCase();
+    try {
+      await httpClient.post(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/albums/accept'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'inviteId': invite.id,
+          'myCode': myCode,
+        }),
+      ).timeout(const Duration(seconds: 4));
+    } catch (_) {}
+
+    // Ensure album exists in local store
+    await LocalStorageService.instance.ensureAlbum(
+      id: invite.albumId,
+      name: invite.albumName,
+    );
+
+    // Track inviter as owner/member and myself as member
+    await LocalStorageService.instance.addAlbumMember(
+      invite.albumId,
+      invite.fromCode,
+      displayName: invite.fromName ?? invite.fromCode,
+      role: 'owner',
+    );
+    await LocalStorageService.instance.addAlbumMember(
+      invite.albumId,
+      myCode,
+      displayName: username,
+      role: 'member',
+    );
+
+    // If claim token is present, unseal the collection key
+    if (invite.claimToken != null && invite.claimToken!.isNotEmpty) {
+      try {
+        await InviteService.instance.fetchAndUnsealCollectionKey(
+          claimToken: invite.claimToken!,
+          albumId: invite.albumId,
+        );
+      } catch (_) {}
+    }
+
+    // Remove from cached incoming album invites
+    final prefs = await SharedPreferences.getInstance();
+    final cached = await getCachedIncomingAlbumInvites();
+    final updated = cached.where((i) => i.id != invite.id).toList();
+    await prefs.setStringList(
+      _keyIncomingAlbumInvites,
+      updated.map((i) => jsonEncode(i.toJson())).toList(),
+    );
+
+    _notifyFriendListeners();
+    return true;
+  }
+
+  Future<bool> declineAlbumInvite(AlbumInvite invite) async {
+    final myCode = friendCode.trim().toUpperCase();
+    try {
+      await httpClient.post(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/albums/decline'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'inviteId': invite.id,
+          'myCode': myCode,
+        }),
+      ).timeout(const Duration(seconds: 4));
+    } catch (_) {}
+
+    // Remove from cached incoming album invites
+    final prefs = await SharedPreferences.getInstance();
+    final cached = await getCachedIncomingAlbumInvites();
+    final updated = cached.where((i) => i.id != invite.id).toList();
+    await prefs.setStringList(
+      _keyIncomingAlbumInvites,
+      updated.map((i) => jsonEncode(i.toJson())).toList(),
+    );
+
+    _notifyFriendListeners();
+    return true;
   }
 
   final List<void Function()> _friendListeners = [];

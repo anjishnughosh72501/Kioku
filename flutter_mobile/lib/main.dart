@@ -2,6 +2,8 @@
 /// Initializes services, sets up providers, and runs the app
 library;
 
+import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,23 +12,43 @@ import 'package:flutter_mobile/core/services/user_profile_service.dart';
 import 'package:flutter_mobile/core/crypto/key_store.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/app_router.dart';
-
 import 'package:flutter_mobile/core/services/deep_link_service.dart';
+import 'package:flutter_mobile/features/media_viewer/presentation/screens/video_player_screen.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await UserProfileService.instance.init();
-  try {
-    await KeyStore.instance.initialize();
-  } catch (_) {
-    // If vault recovery is required, app launches and router/recovery flow can handle it
-  }
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
-  runApp(
-    const ProviderScope(
-      child: KiokuApp(),
-    ),
-  );
+    FlutterError.onError = (details) {
+      FlutterError.presentError(details);
+      debugPrint('Kioku FlutterError: ${details.exceptionAsString()}');
+    };
+
+    PlatformDispatcher.instance.onError = (error, stack) {
+      debugPrint('Kioku PlatformDispatcher Unhandled Error: $error\n$stack');
+      return true;
+    };
+
+    await VideoPlayerScreen.sweepStaleTempVideos();
+    await UserProfileService.instance.init();
+    try {
+      await KeyStore.instance.initialize();
+    } catch (_) {
+      // If vault recovery is required, app launches and router/recovery flow can handle it
+    }
+
+    // Proactively poll incoming friend requests & album invites in background on startup
+    unawaited(UserProfileService.instance.pollIncomingRequests());
+    unawaited(UserProfileService.instance.pollIncomingAlbumInvites());
+
+    runApp(
+      const ProviderScope(
+        child: KiokuApp(),
+      ),
+    );
+  }, (error, stack) {
+    debugPrint('Kioku runZonedGuarded Uncaught Zone Error: $error\n$stack');
+  });
 }
 
 /// Main app widget with theming and routing

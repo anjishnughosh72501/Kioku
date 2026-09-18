@@ -4,6 +4,7 @@ import 'package:flutter_mobile/core/crypto/crypto_core.dart';
 import 'package:flutter_mobile/core/crypto/encrypted_envelope.dart';
 import 'package:flutter_mobile/core/crypto/key_store.dart';
 import 'package:flutter_mobile/core/storage/local_storage_service.dart';
+import 'package:flutter_mobile/core/utils/secure_delete.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class MigrationProgress {
@@ -152,9 +153,9 @@ class MigrationService {
         final encFile = File('${albumDir.path}/${item.id}.enc');
         await encFile.writeAsBytes(blobBytes, flush: true);
 
-        // 6. Safely delete old plaintext file
+        // 6. Safely delete old plaintext file with overwrite before unlink
         if (item.file.path != encFile.path && item.file.existsSync()) {
-          await item.file.delete();
+          await SecureDelete.secureDeleteFile(item.file);
         }
       } catch (e) {
         // Skip on individual file error so migration doesn't stall completely

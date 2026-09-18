@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'crypto_core.dart';
 import 'recovery_service.dart';
 
@@ -27,7 +26,11 @@ class FlutterSecureStorageWrapper implements ISecureStorageProvider {
   final FlutterSecureStorage _storage;
 
   const FlutterSecureStorageWrapper([FlutterSecureStorage? storage])
-      : _storage = storage ?? const FlutterSecureStorage();
+      : _storage = storage ??
+            const FlutterSecureStorage(
+              aOptions: AndroidOptions(encryptedSharedPreferences: true),
+              iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+            );
 
   @override
   Future<String?> read({required String key}) => _storage.read(key: key);
@@ -76,14 +79,11 @@ class KeyStore {
   final ISecureStorageProvider _storage;
 
   static const _kMasterKey = 'kioku_sec_master_key';
-  static const _kMasterKeyBackup = 'kioku_sec_master_key_durable_backup';
   static const _kDevicePubKey = 'kioku_sec_dev_pub_key';
   static const _kDeviceSecKey = 'kioku_sec_dev_sec_key';
   static const _kDeviceSecKeyNonce = 'kioku_sec_dev_sec_key_nonce';
   static const _kRecoveryBlob = 'kioku_sec_recovery_blob';
   static const _kRecoveryNonce = 'kioku_sec_recovery_nonce';
-  static const _kRecoveryBlobBackup = 'kioku_sec_recovery_blob_backup';
-  static const _kRecoveryNonceBackup = 'kioku_sec_recovery_nonce_backup';
   static const _kRecoveryPhraseEncrypted = 'kioku_sec_rec_phrase_enc';
   static const _kRecoveryPhraseNonce = 'kioku_sec_rec_phrase_nonce';
   static const _kCollectionKeyPrefix = 'kioku_sec_coll_key_';
@@ -97,12 +97,7 @@ class KeyStore {
   /// Check if master key exists
   Future<bool> hasMasterKey() async {
     if (_cachedMasterKey != null) return true;
-    if (await _storage.containsKey(key: _kMasterKey)) return true;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.containsKey(_kMasterKeyBackup);
-    } catch (_) {}
-    return false;
+    return await _storage.containsKey(key: _kMasterKey);
   }
 
   /// Check whether prior encrypted vault data exists on device
@@ -120,13 +115,6 @@ class KeyStore {
     final masterKey = CryptoCore.instance.generateRandomKey();
     await _storage.write(key: _kMasterKey, value: base64Encode(masterKey));
     _cachedMasterKey = masterKey;
-
-    // Defense-in-depth: Save secondary copy in SharedPreferences so masterKey can be recovered
-    // even if secure storage is wiped by the OS or during updates.
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_kMasterKeyBackup, base64Encode(masterKey));
-    } catch (_) {}
 
     // Generate device X25519 identity keypair
     final keyPair = CryptoCore.instance.generateKeyPair();
@@ -149,15 +137,6 @@ class KeyStore {
   Future<Uint8List> getMasterKey() async {
     if (_cachedMasterKey != null) return _cachedMasterKey!;
     var raw = await _storage.read(key: _kMasterKey);
-    if (raw == null || raw.isEmpty) {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        raw = prefs.getString(_kMasterKeyBackup);
-        if (raw != null && raw.isNotEmpty) {
-          await _storage.write(key: _kMasterKey, value: raw);
-        }
-      } catch (_) {}
-    }
 
     if (raw == null || raw.isEmpty) {
       await initialize();
@@ -202,15 +181,8 @@ class KeyStore {
 
   /// Gets or generates the Album Encryption Key (AEK) / collectionKey for an album
   Future<Uint8List> getOrCreateCollectionKey(String albumId) async {
-    var enc = await _storage.read(key: _kCollectionKeyPrefix + albumId);
-    var nonce = await _storage.read(key: _kCollectionNoncePrefix + albumId);
-    if (enc == null || nonce == null) {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        enc = prefs.getString(_kCollectionKeyPrefix + albumId);
-        nonce = prefs.getString(_kCollectionNoncePrefix + albumId);
-      } catch (_) {}
-    }
+    final enc = await _storage.read(key: _kCollectionKeyPrefix + albumId);
+    final nonce = await _storage.read(key: _kCollectionNoncePrefix + albumId);
 
     final masterKey = await getMasterKey();
 
@@ -242,24 +214,19 @@ class KeyStore {
       key: _kCollectionNoncePrefix + albumId,
       value: base64Encode(wrapped.nonce),
     );
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_kCollectionKeyPrefix + albumId, base64Encode(wrapped.cipherText));
-      await prefs.setString(_kCollectionNoncePrefix + albumId, base64Encode(wrapped.nonce));
-    } catch (_) {}
   }
 
-  /// Gets the stored recovery blob (encryptedMasterKey, nonce), checking secure storage and backup
+  /// Rotates the collection key for an album (e.g. after removing a member)
+  Future<Uint8List> rotateCollectionKey(String albumId) async {
+    final newCollectionKey = CryptoCore.instance.generateRandomKey();
+    await saveCollectionKey(albumId, newCollectionKey);
+    return newCollectionKey;
+  }
+
+  /// Gets the stored recovery blob (encryptedMasterKey, nonce)
   Future<RecoveryBlob?> getRecoveryBlob() async {
-    var enc = await _storage.read(key: _kRecoveryBlob);
-    var nonce = await _storage.read(key: _kRecoveryNonce);
-    if (enc == null || nonce == null) {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        enc = prefs.getString(_kRecoveryBlobBackup);
-        nonce = prefs.getString(_kRecoveryNonceBackup);
-      } catch (_) {}
-    }
+    final enc = await _storage.read(key: _kRecoveryBlob);
+    final nonce = await _storage.read(key: _kRecoveryNonce);
     if (enc == null || nonce == null) return null;
     return RecoveryBlob(
       encryptedMasterKey: base64Decode(enc),
@@ -306,12 +273,6 @@ class KeyStore {
     final encPhrase = CryptoCore.instance.encryptMetadata({'phrase': phrase}, recoveredMasterKey);
     await _storage.write(key: _kRecoveryPhraseEncrypted, value: base64Encode(encPhrase.cipherText));
     await _storage.write(key: _kRecoveryPhraseNonce, value: base64Encode(encPhrase.nonce));
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_kRecoveryBlobBackup, base64Encode(blob.encryptedMasterKey));
-      await prefs.setString(_kRecoveryNonceBackup, base64Encode(blob.nonce));
-    } catch (_) {}
   }
 
   /// Clears in-memory key cache (e.g. on sign out)

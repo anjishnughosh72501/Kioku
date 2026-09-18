@@ -263,6 +263,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                 );
               } else if (entry is _FeedMemoryEntry) {
                 final card = Padding(
+                  key: ValueKey(entry.memory.id),
                   padding: const EdgeInsets.fromLTRB(
                     AppTheme.spacingMd,
                     0,

@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/models/memory.dart';
 import 'features/auth/presentation/screens/join_screen.dart';
+import 'features/auth/presentation/screens/splash_screen.dart';
+import 'features/auth/presentation/screens/onboarding_screen.dart';
 import 'features/feed/presentation/screens/feed_screen.dart';
 import 'package:flutter_mobile/shared/widgets/kioku_shell.dart';
 import 'features/flashbacks/presentation/screens/flashbacks_screen.dart';
@@ -30,12 +32,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authControllerProvider);
 
   return GoRouter(
-    initialLocation: '/join',
+    initialLocation: '/splash',
     debugLogDiagnostics: false,
     redirect: (context, state) {
+      final isSplash = state.matchedLocation == '/splash';
+      final isOnboarding = state.matchedLocation == '/onboarding';
       final isAuth = authState.isAuthenticated;
       final isJoinScreen = state.matchedLocation == '/join';
       final isInvite = state.matchedLocation.startsWith('/invite');
+
+      if (isSplash || isOnboarding) {
+        return null;
+      }
 
       if (authState.isLoading) return null;
 
@@ -55,6 +63,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
+      GoRoute(
+        path: '/splash',
+        name: 'splash',
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: SplashScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/onboarding',
+        name: 'onboarding',
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: OnboardingScreen(),
+        ),
+      ),
       GoRoute(
         path: '/join',
         name: 'join',
@@ -163,7 +185,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final storage = uri.queryParameters['storage'] ?? 'local';
 
           if (friendCode != null && friendCode.trim().isNotEmpty) {
-            await UserProfileService.instance.addFriend(friendCode.trim(), displayName: from);
+            await UserProfileService.instance.sendFriendRequest(friendCode.trim(), myName: from);
             ref.invalidate(connectedFriendsProvider);
           }
 

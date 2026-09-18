@@ -171,30 +171,24 @@ void main() {
       expect(await ks.hasMasterKey(), isTrue);
       expect(ks.needsRecovery, isFalse);
 
-      // Verify backup master key was written to SharedPreferences
+      // Verify master key is NOT written to SharedPreferences (zero key leakage)
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.containsKey('kioku_sec_master_key_durable_backup'), isTrue);
+      expect(prefs.containsKey('kioku_sec_master_key_durable_backup'), isFalse);
     });
 
-    test('secure storage wiped restores masterKey seamlessly from SharedPreferences backup', () async {
+    test('secure storage wiped correctly reflects no masterKey and does not use SharedPreferences', () async {
       SharedPreferences.setMockInitialValues({});
       final storage = InMemorySecureStorage();
       final ks = KeyStore(storage: storage);
       await ks.initialize();
-      final originalMasterKey = await ks.getMasterKey();
 
       // Simulate OS clearing secure storage
       storage.clear();
 
       // Now create a new KeyStore instance representing app restart
       final newKs = KeyStore(storage: storage);
-      // hasMasterKey returns true because it finds the durable backup in SharedPreferences
-      expect(await newKs.hasMasterKey(), isTrue);
-      expect(newKs.needsRecovery, isFalse);
-
-      // getMasterKey restores key seamlessly without throwing VaultRecoveryRequiredException
-      final recoveredMasterKey = await newKs.getMasterKey();
-      expect(recoveredMasterKey, equals(originalMasterKey));
+      // hasMasterKey returns false because SharedPreferences plaintext backup has been eliminated
+      expect(await newKs.hasMasterKey(), isFalse);
     });
 
     test('complete wipe self-heals with fresh master key without throwing lockout exception', () async {

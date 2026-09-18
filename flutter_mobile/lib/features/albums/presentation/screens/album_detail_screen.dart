@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,10 +6,10 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 
-import 'package:flutter_mobile/core/crypto/key_store.dart';
 import 'package:flutter_mobile/core/drive/app_drive.dart';
 import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/providers.dart';
+import 'package:flutter_mobile/core/services/invite_service.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
 import 'package:flutter_mobile/shared/widgets/drive_thumb.dart';
@@ -40,13 +39,20 @@ class _AlbumDetailScreenState extends ConsumerState<AlbumDetailScreen> {
 
   Future<String> _buildInviteUrl(String title) async {
     final userProfile = ref.read(userProfileProvider);
-    String keyParam = '';
+    String claimParams = '';
     try {
-      final key = await KeyStore.instance.getOrCreateCollectionKey(widget.albumId);
-      keyParam = '&key=${base64UrlEncode(key)}';
+      final claim = await InviteService.instance.createInviteClaim(albumId: widget.albumId);
+      if (claim != null) {
+        if (claim.claimToken.isNotEmpty) {
+          claimParams += '&claim=${Uri.encodeComponent(claim.claimToken)}';
+        }
+        if (claim.inviterPubKey.isNotEmpty) {
+          claimParams += '&pubKey=${Uri.encodeComponent(claim.inviterPubKey)}';
+        }
+      }
     } catch (_) {}
 
-    return 'https://kioku.app/invite?albumId=${widget.albumId}&albumName=${Uri.encodeComponent(title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}$keyParam';
+    return 'https://kioku.app/invite?albumId=${widget.albumId}&albumName=${Uri.encodeComponent(title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}$claimParams';
   }
 
   Future<void> _shareInviteLink(String title) async {
@@ -540,63 +546,64 @@ class _AlbumDetailScreenState extends ConsumerState<AlbumDetailScreen> {
  const SizedBox(height: 6),
  Text('Capture photos to add them to this album.',
  style: typography.bodySmall?.copyWith(color: colors.inkMuted)),
- const SizedBox(height: 18),
- ClayButton(
- label: 'Add Photo',
- icon: const Icon(Icons.camera_alt_outlined, size: 16),
- onPressed: () => context.push('/upload'),
- ),
- ],
- ),
- ),
- )
- else
- SliverPadding(
- padding: const EdgeInsets.all(AppTheme.spacingSm),
- sliver: SliverGrid(
- gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
- crossAxisCount: 2,
- crossAxisSpacing: 3,
- mainAxisSpacing: 3,
- childAspectRatio: 1.0,
- ),
- delegate: SliverChildBuilderDelegate(
- (context, index) {
- final memory = memories[index];
- return RepaintBoundary(
- child: GestureDetector(
- onTap: () => context.push('/media/${memory.id}', extra: memory),
- child: ClipRRect(
- borderRadius: BorderRadius.circular(AppTheme.radiusPhoto),
- child: Stack(
- fit: StackFit.expand,
- children: [
- DriveThumb(memory: memory),
- if (memory.isVideo)
- Align(
- alignment: Alignment.center,
- child: Container(
- padding: const EdgeInsets.all(8),
- decoration: BoxDecoration(
- color: Colors.black.withValues(alpha: 0.5),
- shape: BoxShape.circle,
- ),
- child: const Icon(Icons.play_arrow, color: Colors.white, size: 24),
- ),
- ),
- ],
- ),
- ),
- ),
- );
- },
- childCount: memories.length,
- ),
- ),
- ),
- ],
- ),
- ),
- );
- }
+                  const SizedBox(height: 18),
+                  ClayButton(
+                    label: 'Add Photo',
+                    icon: const Icon(Icons.camera_alt_outlined, size: 16),
+                    onPressed: () => context.push('/upload'),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.all(AppTheme.spacingSm),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 3,
+                mainAxisSpacing: 3,
+                childAspectRatio: 1.0,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final memory = memories[index];
+                  return RepaintBoundary(
+                    key: ValueKey(memory.id),
+                    child: GestureDetector(
+                      onTap: () => context.push('/media/${memory.id}', extra: memory),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusPhoto),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            DriveThumb(memory: memory),
+                            if (memory.isVideo)
+                              Align(
+                                alignment: Alignment.center,
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.5),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.play_arrow, color: Colors.white, size: 24),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                childCount: memories.length,
+              ),
+            ),
+          ),
+      ],
+    ),
+  ),
+);
+}
 }

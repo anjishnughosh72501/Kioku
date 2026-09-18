@@ -2,13 +2,11 @@
 /// members), and sign out. Storage is the user's own Google Drive.
 library;
 
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import 'package:flutter/services.dart';
-import 'package:flutter_mobile/core/crypto/key_store.dart';
 import 'package:flutter_mobile/features/auth/presentation/widgets/username_dialog.dart';
 import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/providers.dart';
@@ -17,6 +15,9 @@ import 'package:flutter_mobile/shared/widgets/clay_card.dart';
 import 'package:flutter_mobile/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_mobile/core/config.dart';
+import 'package:flutter_mobile/core/services/invite_service.dart';
+import 'package:flutter_mobile/core/services/user_profile_service.dart';
 import 'package:flutter_mobile/features/profile/presentation/widgets/album_row.dart';
 import 'package:flutter_mobile/main.dart';
 import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
@@ -848,6 +849,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
               const SizedBox(height: AppTheme.spacingLg),
 
+              // Legal & Privacy Policy
+              _buildLegalCard(context, colors, typography),
+
+              const SizedBox(height: AppTheme.spacingLg),
+
               Center(
                 child: Column(
                   children: [
@@ -900,15 +906,215 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
 
 
+  Widget _buildLegalCard(
+    BuildContext context,
+    AppColors colors,
+    TextTheme typography,
+  ) {
+    return ClayCard(
+      variant: ClayVariant.elevated,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.spacingMd,
+        vertical: AppTheme.spacingSm,
+      ),
+      child: Column(
+        children: [
+          Semantics(
+            button: true,
+            label: 'View Privacy Policy',
+            child: ListTile(
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              leading: Icon(Icons.privacy_tip_outlined, size: 20, color: colors.primary),
+              title: Text(
+                'Privacy Policy',
+                style: typography.bodyMedium?.copyWith(
+                  color: colors.ink,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              subtitle: Text(
+                'Zero-knowledge, client-side encryption policy',
+                style: typography.bodySmall?.copyWith(color: colors.inkMuted, fontSize: 11),
+              ),
+              trailing: Icon(Icons.arrow_forward_ios_rounded, size: 14, color: colors.inkMuted),
+              onTap: () => _showPrivacyPolicyModal(context, colors, typography),
+            ),
+          ),
+          Divider(color: colors.divider, height: 1),
+          Semantics(
+            button: true,
+            label: 'View Terms of Service',
+            child: ListTile(
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              leading: Icon(Icons.gavel_outlined, size: 20, color: colors.primary),
+              title: Text(
+                'Terms of Service',
+                style: typography.bodyMedium?.copyWith(
+                  color: colors.ink,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              subtitle: Text(
+                'Personal data ownership & service conditions',
+                style: typography.bodySmall?.copyWith(color: colors.inkMuted, fontSize: 11),
+              ),
+              trailing: Icon(Icons.arrow_forward_ios_rounded, size: 14, color: colors.inkMuted),
+              onTap: () => _showTermsModal(context, colors, typography),
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(delay: 350.ms, duration: 300.ms);
+  }
+
+  void _showPrivacyPolicyModal(
+    BuildContext context,
+    AppColors colors,
+    TextTheme typography,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: colors.surfaceContainer,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusModal)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.75,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (_, scrollController) => Padding(
+          padding: const EdgeInsets.all(AppTheme.spacingLg),
+          child: ListView(
+            controller: scrollController,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Privacy Policy',
+                    style: typography.headlineSmall?.copyWith(color: colors.ink),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppTheme.spacingMd),
+              Text(
+                'Kioku Privacy & Zero-Knowledge Guarantee\n\n'
+                '1. Data Ownership\n'
+                'All your photos, videos, and memories are stored exclusively in your own Google Drive storage (or local device storage). Kioku does not maintain a central media server, cloud database of your photos, or data-mining pipeline.\n\n'
+                '2. End-to-End Encryption\n'
+                'All media content is encrypted on your device using libsodium XChaCha20-Poly1305 before upload. Your master key and recovery phrases never leave your hardware secure storage.\n\n'
+                '3. No Tracking or Third-Party Ads\n'
+                'Kioku does not sell your personal data, track your location, or include advertising SDKs.\n\n'
+                'For online reference, visit:\n${AppConfig.appPrivacyUrl}',
+                style: typography.bodyMedium?.copyWith(color: colors.ink, height: 1.5),
+              ),
+              const SizedBox(height: AppTheme.spacingLg),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.copy_rounded, size: 16),
+                label: const Text('Copy Policy URL'),
+                onPressed: () {
+                  Clipboard.setData(const ClipboardData(text: AppConfig.appPrivacyUrl));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Privacy Policy URL copied')),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showTermsModal(
+    BuildContext context,
+    AppColors colors,
+    TextTheme typography,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: colors.surfaceContainer,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusModal)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.75,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (_, scrollController) => Padding(
+          padding: const EdgeInsets.all(AppTheme.spacingLg),
+          child: ListView(
+            controller: scrollController,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Terms of Service',
+                    style: typography.headlineSmall?.copyWith(color: colors.ink),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppTheme.spacingMd),
+              Text(
+                'Kioku Terms of Service\n\n'
+                '1. Acceptance\n'
+                'By using Kioku, you agree to these terms governing peer-to-peer and personal-drive memory sharing.\n\n'
+                '2. User Responsibility & Key Custody\n'
+                'Because Kioku utilizes zero-knowledge encryption, you are the sole custodian of your cryptographic keys and recovery phrase. If you lose your recovery phrase and device access, Kioku cannot recover your encrypted memories.\n\n'
+                '3. Acceptable Use\n'
+                'You agree not to use Kioku to distribute harmful, infringing, or unlawful material.\n\n'
+                'For online reference, visit:\n${AppConfig.appTermsUrl}',
+                style: typography.bodyMedium?.copyWith(color: colors.ink, height: 1.5),
+              ),
+              const SizedBox(height: AppTheme.spacingLg),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.copy_rounded, size: 16),
+                label: const Text('Copy Terms URL'),
+                onPressed: () {
+                  Clipboard.setData(const ClipboardData(text: AppConfig.appTermsUrl));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Terms of Service URL copied')),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<String> _buildInviteUrl(Album album) async {
     final userProfile = ref.read(userProfileProvider);
-    String keyParam = '';
+    String claimParams = '';
     try {
-      final key = await KeyStore.instance.getOrCreateCollectionKey(album.id);
-      keyParam = '&key=${base64UrlEncode(key)}';
+      final claim = await InviteService.instance.createInviteClaim(albumId: album.id);
+      if (claim != null) {
+        if (claim.claimToken.isNotEmpty) {
+          claimParams += '&claim=${Uri.encodeComponent(claim.claimToken)}';
+        }
+        if (claim.inviterPubKey.isNotEmpty) {
+          claimParams += '&pubKey=${Uri.encodeComponent(claim.inviterPubKey)}';
+        }
+      }
     } catch (_) {}
 
-    return 'https://kioku.app/invite?albumId=${album.id}&albumName=${Uri.encodeComponent(album.title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}$keyParam';
+    return 'https://kioku.app/invite?albumId=${album.id}&albumName=${Uri.encodeComponent(album.title)}&friendCode=${Uri.encodeComponent(userProfile.friendCode)}&from=${Uri.encodeComponent(userProfile.username)}$claimParams';
   }
 
   Future<void> _shareInviteLink(Album album) async {
@@ -1014,14 +1220,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           trailing: Icon(Icons.send_rounded, size: 15, color: colors.accentDark),
                           onTap: () async {
                             Navigator.of(dialogContext).pop();
-                            final link = await _buildInviteUrl(album);
-                            final appUri = link.replaceFirst('https://kioku.app/', 'kioku://');
-                            Share.share(
-                              'Hey $code! Join my memory album "${album.title}" on Kioku!\n\n'
-                              'Tap to open and join:\n$link\n\n'
-                              'Or app link: $appUri',
-                              subject: 'Kioku Memory Album: ${album.title}',
+                            final sent = await UserProfileService.instance.sendAlbumInvite(
+                              albumId: album.id,
+                              albumName: album.title,
+                              toFriendCode: code,
                             );
+                            if (context.mounted) {
+                              if (sent) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Album invite sent directly to $code!')),
+                                );
+                              } else {
+                                final link = await _buildInviteUrl(album);
+                                final appUri = link.replaceFirst('https://kioku.app/', 'kioku://');
+                                Share.share(
+                                  'Hey $code! Join my memory album "${album.title}" on Kioku!\n\n'
+                                  'Tap to open and join:\n$link\n\n'
+                                  'Or app link: $appUri',
+                                  subject: 'Kioku Memory Album: ${album.title}',
+                                );
+                              }
+                            }
                           },
                         );
                       },
@@ -1140,6 +1359,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     List<Album> albums,
   ) {
     final connectedFriends = ref.watch(connectedFriendsProvider);
+    final incomingRequestsAsync = ref.watch(incomingFriendRequestsProvider);
+    final incomingRequests = incomingRequestsAsync.value ?? [];
+    final incomingAlbumInvitesAsync = ref.watch(incomingAlbumInvitesProvider);
+    final incomingAlbumInvites = incomingAlbumInvitesAsync.value ?? [];
 
     return ClayCard(
       variant: ClayVariant.elevated,
@@ -1159,35 +1382,284 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               ),
               const Spacer(),
-              OutlinedButton.icon(
-                onPressed: () => _promptAddFriendCode(context, ref, colors, typography),
-                icon: Icon(Icons.person_add_outlined, size: 15, color: colors.primary),
-                label: Text(
-                  'Add Friend',
-                  style: typography.bodySmall?.copyWith(
-                    color: colors.primary,
-                    fontWeight: FontWeight.w600,
+              Semantics(
+                button: true,
+                label: 'Add Friend by code',
+                child: OutlinedButton.icon(
+                  onPressed: () => _promptAddFriendCode(context, ref, colors, typography),
+                  icon: Icon(Icons.person_add_outlined, size: 15, color: colors.primary),
+                  label: Text(
+                    'Add Friend',
+                    style: typography.bodySmall?.copyWith(
+                      color: colors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                    ),
+                    side: BorderSide(color: colors.primary.withValues(alpha: 0.5)),
                   ),
-                  side: BorderSide(color: colors.primary.withValues(alpha: 0.5)),
                 ),
               ),
             ],
           ),
           const SizedBox(height: AppTheme.spacingSm),
           Text(
-            'Add friends with their Kioku code to keep them in your circle and invite them to albums.',
+            'Connect with friends via their Kioku code to share memories and collaborate on albums.',
             style: typography.bodySmall?.copyWith(
               fontSize: 11,
               color: colors.inkMuted,
             ),
           ),
           const SizedBox(height: AppTheme.spacingMd),
+
+          // Incoming requests section
+          if (incomingRequests.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(AppTheme.spacingMd),
+              decoration: BoxDecoration(
+                color: colors.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: colors.primary.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.mark_email_unread_outlined, size: 18, color: colors.primary),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Incoming Friend Requests (${incomingRequests.length})',
+                        style: typography.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: colors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: incomingRequests.length,
+                    separatorBuilder: (_, _) => Divider(color: colors.divider, height: 12),
+                    itemBuilder: (context, index) {
+                      final req = incomingRequests[index];
+                      return Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 14,
+                            backgroundColor: colors.primary.withValues(alpha: 0.15),
+                            child: Icon(Icons.person, size: 16, color: colors.primary),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  req.fromName?.isNotEmpty == true
+                                      ? req.fromName!
+                                      : req.fromCode,
+                                  style: typography.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: colors.ink,
+                                  ),
+                                ),
+                                if (req.fromName?.isNotEmpty == true)
+                                  Text(
+                                    req.fromCode,
+                                    style: typography.bodySmall?.copyWith(
+                                      fontSize: 10,
+                                      color: colors.inkMuted,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            onPressed: () async {
+                              await ref
+                                  .read(incomingFriendRequestsProvider.notifier)
+                                  .decline(req);
+                            },
+                            child: Text(
+                              'Decline',
+                              style: typography.bodySmall?.copyWith(color: colors.inkMuted),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: colors.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                              ),
+                            ),
+                            onPressed: () async {
+                              final success = await ref
+                                  .read(incomingFriendRequestsProvider.notifier)
+                                  .accept(req);
+                              if (context.mounted && success) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Connected with ${req.fromCode}')),
+                                );
+                              }
+                            },
+                            child: Text(
+                              'Accept',
+                              style: typography.bodySmall?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppTheme.spacingMd),
+          ],
+
+          // Incoming album invites section
+          if (incomingAlbumInvites.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(AppTheme.spacingMd),
+              decoration: BoxDecoration(
+                color: colors.accent.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: colors.accent.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.folder_shared_outlined, size: 18, color: colors.accentDark),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Album Invites (${incomingAlbumInvites.length})',
+                        style: typography.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: colors.accentDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: incomingAlbumInvites.length,
+                    separatorBuilder: (_, _) => Divider(color: colors.divider, height: 12),
+                    itemBuilder: (context, index) {
+                      final invite = incomingAlbumInvites[index];
+                      return Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 14,
+                            backgroundColor: colors.accent.withValues(alpha: 0.15),
+                            child: Icon(Icons.photo_album_rounded, size: 16, color: colors.accentDark),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  invite.albumName,
+                                  style: typography.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: colors.ink,
+                                  ),
+                                ),
+                                Text(
+                                  'From ${invite.fromName ?? invite.fromCode}',
+                                  style: typography.bodySmall?.copyWith(
+                                    fontSize: 10,
+                                    color: colors.inkMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            onPressed: () async {
+                              await ref
+                                  .read(incomingAlbumInvitesProvider.notifier)
+                                  .decline(invite);
+                            },
+                            child: Text(
+                              'Decline',
+                              style: typography.bodySmall?.copyWith(color: colors.inkMuted),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: colors.accentDark,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                              ),
+                            ),
+                            onPressed: () async {
+                              final success = await ref
+                                  .read(incomingAlbumInvitesProvider.notifier)
+                                  .accept(invite);
+                              if (success) {
+                                await ref.read(albumsProvider.notifier).refresh();
+                                await ref.read(activeAlbumProvider.notifier).set(invite.albumId);
+                                await ref.read(memoriesProvider.notifier).refresh();
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Joined "${invite.albumName}"!')),
+                                  );
+                                }
+                              }
+                            },
+                            child: Text(
+                              'Join',
+                              style: typography.bodySmall?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppTheme.spacingMd),
+          ],
+
           if (connectedFriends.isEmpty)
             Container(
               padding: const EdgeInsets.symmetric(vertical: AppTheme.spacingMd, horizontal: AppTheme.spacingSm),
@@ -1210,7 +1682,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Tap "Add Friend" above to enter a friend\'s code (e.g. KIOKU-XXXX).',
+                      'Tap "Add Friend" above to send a request with your friend\'s code.',
                       textAlign: TextAlign.center,
                       style: typography.bodySmall?.copyWith(
                         fontSize: 10,
@@ -1268,22 +1740,30 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           ],
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Invite to Album',
-                        icon: Icon(Icons.folder_shared_outlined, size: 18, color: colors.accentDark),
-                        onPressed: () => _promptInviteFriendToAlbum(context, ref, colors, typography, code, albums),
+                      Semantics(
+                        button: true,
+                        label: 'Invite $code to Album',
+                        child: IconButton(
+                          tooltip: 'Invite to Album',
+                          icon: Icon(Icons.folder_shared_outlined, size: 18, color: colors.accentDark),
+                          onPressed: () => _promptInviteFriendToAlbum(context, ref, colors, typography, code, albums),
+                        ),
                       ),
-                      IconButton(
-                        tooltip: 'Remove Friend',
-                        icon: Icon(Icons.close_rounded, size: 16, color: colors.inkMuted),
-                        onPressed: () async {
-                          await ref.read(connectedFriendsProvider.notifier).removeFriend(code);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Removed $code from friends')),
-                            );
-                          }
-                        },
+                      Semantics(
+                        button: true,
+                        label: 'Remove $code from friends',
+                        child: IconButton(
+                          tooltip: 'Remove Friend',
+                          icon: Icon(Icons.close_rounded, size: 16, color: colors.inkMuted),
+                          onPressed: () async {
+                            await ref.read(connectedFriendsProvider.notifier).removeFriend(code);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Removed $code from friends')),
+                              );
+                            }
+                          },
+                        ),
                       ),
                     ],
                   ),
@@ -1303,6 +1783,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   ) async {
     final controller = TextEditingController();
     String? inlineError;
+    bool isSending = false;
 
     await showDialog<void>(
       context: context,
@@ -1312,7 +1793,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             return AlertDialog(
               backgroundColor: colors.surfaceContainer,
               title: Text(
-                'Add Friend by Code',
+                'Send Friend Request',
                 style: typography.headlineSmall?.copyWith(color: colors.ink, fontSize: 18),
               ),
               content: Column(
@@ -1320,7 +1801,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Enter your friend\'s Kioku code (e.g. KIOKU-XXXX).',
+                    'Enter your friend\'s Kioku code (e.g. KIOKU-XXXX). They will receive your request and can accept it.',
                     style: typography.bodySmall?.copyWith(color: colors.inkMuted),
                   ),
                   const SizedBox(height: AppTheme.spacingMd),
@@ -1337,34 +1818,55 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  onPressed: isSending ? null : () => Navigator.of(dialogContext).pop(),
                   child: Text('Cancel', style: typography.bodyMedium?.copyWith(color: colors.inkMuted)),
                 ),
                 ClayButton(
-                  label: 'Add Friend',
+                  label: isSending ? 'Sending…' : 'Send Request',
                   size: ClayButtonSize.small,
-                  onPressed: () async {
-                    final code = controller.text.trim().toUpperCase();
-                    if (code.isEmpty) {
-                      setDialogState(() => inlineError = 'Please enter a code');
-                      return;
-                    }
-                    if (code == ref.read(userProfileProvider).friendCode) {
-                      setDialogState(() => inlineError = 'That is your own code');
-                      return;
-                    }
-                    final success = await ref.read(connectedFriendsProvider.notifier).addFriend(code);
-                    if (!success) {
-                      setDialogState(() => inlineError = 'Friend already added');
-                      return;
-                    }
-                    if (context.mounted) {
-                      Navigator.of(dialogContext).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Added friend: $code')),
-                      );
-                    }
-                  },
+                  onPressed: isSending
+                      ? null
+                      : () async {
+                          final code = controller.text.trim().toUpperCase();
+                          if (code.isEmpty) {
+                            setDialogState(() => inlineError = 'Please enter a code');
+                            return;
+                          }
+                          if (code == ref.read(userProfileProvider).friendCode) {
+                            setDialogState(() => inlineError = 'That is your own code');
+                            return;
+                          }
+                          setDialogState(() => isSending = true);
+                          final result = await ref
+                              .read(connectedFriendsProvider.notifier)
+                              .sendFriendRequest(code);
+                          setDialogState(() => isSending = false);
+
+                          switch (result) {
+                            case FriendRequestResult.sent:
+                              if (context.mounted) {
+                                Navigator.of(dialogContext).pop();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Friend request sent to $code!'),
+                                  ),
+                                );
+                              }
+                              break;
+                            case FriendRequestResult.alreadySent:
+                              setDialogState(() => inlineError = 'Request already sent to this code');
+                              break;
+                            case FriendRequestResult.alreadyFriends:
+                              setDialogState(() => inlineError = 'You are already friends');
+                              break;
+                            case FriendRequestResult.sameUser:
+                              setDialogState(() => inlineError = 'That is your own code');
+                              break;
+                            case FriendRequestResult.error:
+                              setDialogState(() => inlineError = 'Could not send request. Please try again.');
+                              break;
+                          }
+                        },
                 ),
               ],
             );

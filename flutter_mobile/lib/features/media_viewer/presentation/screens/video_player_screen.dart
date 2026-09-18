@@ -11,10 +11,15 @@ import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 
+import 'package:flutter_mobile/core/crypto/crypto_core.dart';
+import 'package:flutter_mobile/core/crypto/encrypted_envelope.dart';
+import 'package:flutter_mobile/core/crypto/key_store.dart';
 import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/providers.dart';
 import 'package:flutter_mobile/core/storage/local_storage_service.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
+import 'package:flutter_mobile/core/utils/secure_delete.dart';
+import 'package:flutter_mobile/features/feed/data/encrypted_memory_repository.dart';
 import 'package:path_provider/path_provider.dart';
 
 class VideoPlayerScreen extends ConsumerStatefulWidget {
@@ -31,7 +36,7 @@ class VideoPlayerScreen extends ConsumerStatefulWidget {
       for (final entity in entities) {
         if (entity is File && entity.path.contains('dec_') && entity.path.endsWith('.mp4')) {
           try {
-            entity.deleteSync();
+            SecureDelete.secureDeleteFileSync(entity);
           } catch (_) {}
         }
       }
@@ -59,10 +64,44 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
   void _cleanupTempFile() {
     try {
       if (_decryptedTempFile != null && _decryptedTempFile!.existsSync()) {
-        _decryptedTempFile!.deleteSync();
+        SecureDelete.secureDeleteFileSync(_decryptedTempFile!);
       }
     } catch (_) {}
     _decryptedTempFile = null;
+  }
+
+  Future<File> _streamDecryptToTempFile(
+    EncryptedMemoryRepository repo,
+    String mediaId,
+    String albumId,
+  ) async {
+    final tempDir = await getTemporaryDirectory();
+    final tempFile = File(
+      '${tempDir.path}/dec_${mediaId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.mp4',
+    );
+
+    await CryptoCore.instance.init();
+    final blob = await repo.provider.getBlob(mediaId, containerId: albumId);
+    final envelope = EncryptedEnvelope.fromBlob(blob, objectId: mediaId);
+
+    final collectionKey = await KeyStore.instance.getOrCreateCollectionKey(albumId);
+    final fileKey = CryptoCore.instance.unwrapKey(
+      envelope.wrappedFileKey,
+      envelope.fileKeyNonce,
+      collectionKey,
+    );
+
+    final decStream = CryptoCore.instance.decryptStream(
+      Stream.fromIterable(envelope.cipherChunks),
+      fileKey,
+    );
+
+    final sink = tempFile.openWrite();
+    await sink.addStream(decStream);
+    await sink.flush();
+    await sink.close();
+
+    return tempFile;
   }
 
   Future<void> _initializePlayer() async {
@@ -77,10 +116,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
 
       if (isEncrypted && activeAlbum.isNotEmpty) {
         final repo = ref.read(encryptedMemoryRepositoryProvider);
-        final bytes = await repo.getPhotoBytes(widget.mediaId, albumId: activeAlbum);
-        final tempDir = await getTemporaryDirectory();
-        final tempFile = File('${tempDir.path}/dec_${widget.mediaId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.mp4');
-        await tempFile.writeAsBytes(bytes);
+        final tempFile = await _streamDecryptToTempFile(repo, widget.mediaId, activeAlbum);
         _decryptedTempFile = tempFile;
         controller = VideoPlayerController.file(tempFile);
       } else if (mem != null && mem.localPath != null && mem.localPath!.isNotEmpty) {
@@ -90,10 +126,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
         if (path != null && File(path).existsSync()) {
           if (path.endsWith('.enc') && activeAlbum.isNotEmpty) {
             final repo = ref.read(encryptedMemoryRepositoryProvider);
-            final bytes = await repo.getPhotoBytes(widget.mediaId, albumId: activeAlbum);
-            final tempDir = await getTemporaryDirectory();
-            final tempFile = File('${tempDir.path}/dec_${widget.mediaId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.mp4');
-            await tempFile.writeAsBytes(bytes);
+            final tempFile = await _streamDecryptToTempFile(repo, widget.mediaId, activeAlbum);
             _decryptedTempFile = tempFile;
             controller = VideoPlayerController.file(tempFile);
           } else {

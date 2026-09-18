@@ -95,13 +95,7 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
         !albumId.startsWith('local_')) {
       return AppDrive.instance.albumMembers(albumId);
     }
-    return [
-      const AlbumMember(
-        email: 'local@device',
-        role: 'owner',
-        displayName: 'You (Device Storage)',
-      ),
-    ];
+    return LocalStorageService.instance.getAlbumMembers(albumId);
   }
 
   Future<KiokuMemory?> _fetchAndDecryptMemory(
