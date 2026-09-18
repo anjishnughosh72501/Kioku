@@ -1,13 +1,14 @@
 # Kioku Releases
 
-This directory contains standalone release builds for Kioku.
+Official standalone release builds for Kioku are distributed via [GitHub Releases](https://github.com/anjishnughosh72501/Kioku/releases).
+Binary artifacts (`.apk`) are managed outside the Git tree to keep repository clone size minimal while providing cryptographic verification hashes below.
 
 ### Current Release: V3.6
 
-| File | Platform | Architecture | Size | SHA-256 Checksum |
-| :--- | :--- | :--- | :--- | :--- |
-| **[`kioku-v3.6-release.apk`](kioku-v3.6-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.4 MB | `A432781EDC5E8729261BB0013FC6DC7D2D0762EF9FF57AEBE735A5C3EDE6E857` |
-| **[`kioku-release.apk`](kioku-release.apk)** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.4 MB | `A432781EDC5E8729261BB0013FC6DC7D2D0762EF9FF57AEBE735A5C3EDE6E857` |
+| File | Platform | Architecture | Size | SHA-256 Checksum | GitHub Release |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **`kioku-v3.6-release.apk`** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.4 MB | `A432781EDC5E8729261BB0013FC6DC7D2D0762EF9FF57AEBE735A5C3EDE6E857` | [Download v3.6](https://github.com/anjishnughosh72501/Kioku/releases/tag/v3.6) |
+| **`kioku-release.apk`** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 62.4 MB | `A432781EDC5E8729261BB0013FC6DC7D2D0762EF9FF57AEBE735A5C3EDE6E857` | [Latest Release](https://github.com/anjishnughosh72501/Kioku/releases/latest) |
 
 ---
 

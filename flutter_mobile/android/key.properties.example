@@ -1,12 +1,8 @@
-# Android Release Keystore Configuration
-# Copy this file to `android/key.properties` (which is git-ignored) and fill in your values.
-#
-# To generate a production release keystore:
-# keytool -genkey -v -keystore kioku-release.keystore -keyalg RSA -keysize 2048 -validity 10000 -alias kioku
-#
-# Place the generated keystore file in `android/app/` or specify its absolute/relative path below.
+# Example key.properties for production Android release signing
+# Copy to flutter_mobile/android/key.properties and fill with your production keystore credentials.
+# NEVER commit key.properties or .jks/.keystore files to Git!
 
-storePassword=YOUR_STORE_PASSWORD
-keyPassword=YOUR_KEY_PASSWORD
-keyAlias=kioku
-storeFile=kioku-release.keystore
+storePassword=your_keystore_password
+keyPassword=your_key_alias_password
+keyAlias=kioku_release_key
+storeFile=../upload-keystore.jks

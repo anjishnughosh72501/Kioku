@@ -135,6 +135,12 @@ async function initDB() {
       updated_at      INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS friend_accounts (
+      friend_code     TEXT PRIMARY KEY,
+      secret_hash     TEXT NOT NULL,
+      created_at      INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_media_group_date ON media(group_id, taken_at);
     CREATE INDEX IF NOT EXISTS idx_media_uploader ON media(group_id, uploader_id);
     CREATE INDEX IF NOT EXISTS idx_claim_token_exp ON claim_tokens(token, expires_at);

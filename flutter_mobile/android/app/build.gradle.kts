@@ -39,6 +39,9 @@ android {
         keystoreProperties.load(FileInputStream(keystorePropertiesFile))
     }
 
+    val isCi = System.getenv("CI") != null || System.getenv("GITHUB_ACTIONS") != null
+    val requireSigned = project.hasProperty("requireReleaseSigning") || isCi
+
     signingConfigs {
         create("release") {
             if (keystorePropertiesFile.exists()) {
@@ -46,8 +49,15 @@ android {
                 keyPassword = keystoreProperties.getProperty("keyPassword")
                 storeFile = keystoreProperties.getProperty("storeFile")?.let { path -> file(path) }
                 storePassword = keystoreProperties.getProperty("storePassword")
+            } else if (System.getenv("KIOKU_KEY_ALIAS") != null) {
+                keyAlias = System.getenv("KIOKU_KEY_ALIAS")
+                keyPassword = System.getenv("KIOKU_KEY_PASSWORD")
+                storeFile = System.getenv("KIOKU_KEYSTORE_FILE")?.let { path -> file(path) }
+                storePassword = System.getenv("KIOKU_STORE_PASSWORD")
+            } else if (requireSigned) {
+                throw GradleException("FATAL: Release signing config missing: key.properties not found and CI/production signing secrets are required.")
             } else {
-                // Fall back to debug keys when key.properties is not present (local dev)
+                logger.warn("WARNING: key.properties not found. Using local dev signing config. Configure android/key.properties before store publishing.")
                 val debugConfig = signingConfigs.getByName("debug")
                 keyAlias = debugConfig.keyAlias
                 keyPassword = debugConfig.keyPassword

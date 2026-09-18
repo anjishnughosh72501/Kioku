@@ -15,6 +15,13 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     UserProfileService.instance.httpClient = MockClient((request) async {
       final path = request.url.path;
+      if (path == '/friends/token') {
+        return http.Response(
+          jsonEncode({'token': 'mock_test_token_123', 'friendCode': 'KIOKU-TEST'}),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
       if (path == '/friends/request') {
         return http.Response(
           jsonEncode({'id': 'req_123', 'status': 'pending', 'alreadySent': false}),

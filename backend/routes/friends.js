@@ -1,7 +1,9 @@
 // routes/friends.js
-// Two-way friend request flow and album invitations with rate limiting and persistence.
+// Authenticated two-way friend request flow and album invitations with rate limiting and persistence.
 
 const express = require('express');
+const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const { nanoid } = require('nanoid');
 const db = require('../db');
@@ -17,15 +19,89 @@ const FRIENDS_LIMITER = rateLimit({
   message: { error: 'Too many friend requests, please try again later' },
 });
 
-// 1. Send friend request
-router.post('/request', FRIENDS_LIMITER, (req, res, next) => {
+const TOKEN_LIMITER = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many authentication attempts, please try again later' },
+});
+
+function hashSecret(secret) {
+  return crypto.createHash('sha256').update(String(secret).trim()).digest('hex');
+}
+
+// Middleware: verifies that the caller owns the friend code claimed in the request
+function requireFriendAuth(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing or malformed Authorization header' });
+  }
+
+  const token = authHeader.split(' ')[1];
   try {
-    const { fromCode, toCode, fromName } = req.body;
-    if (!fromCode || !toCode) {
-      throw new HttpError(400, 'fromCode and toCode are required');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
+    if (!decoded || !decoded.friendCode) {
+      return res.status(401).json({ error: 'Invalid token payload' });
+    }
+    req.friend = { friendCode: decoded.friendCode };
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid or expired authorization token' });
+  }
+}
+
+// 0. Issue / refresh authorization token for a friend code using device secret
+router.post('/token', TOKEN_LIMITER, (req, res, next) => {
+  try {
+    const { friendCode, secret } = req.body;
+    if (!friendCode || !secret) {
+      throw new HttpError(400, 'friendCode and secret are required');
     }
 
-    const cleanFrom = String(fromCode).trim().toUpperCase();
+    const cleanCode = String(friendCode).trim().toUpperCase();
+    if (cleanCode.length < 3 || cleanCode.length > 32) {
+      throw new HttpError(400, 'friendCode must be between 3 and 32 characters');
+    }
+
+    const cleanSecret = String(secret).trim();
+    if (cleanSecret.length < 16) {
+      throw new HttpError(400, 'secret must be at least 16 characters');
+    }
+
+    const secretHash = hashSecret(cleanSecret);
+    const existing = db.prepare(`SELECT * FROM friend_accounts WHERE friend_code = ?`).get(cleanCode);
+
+    if (!existing) {
+      db.prepare(
+        `INSERT INTO friend_accounts (friend_code, secret_hash, created_at) VALUES (?, ?, ?)`
+      ).run(cleanCode, secretHash, Date.now());
+    } else if (existing.secret_hash !== secretHash) {
+      throw new HttpError(401, 'Invalid device credentials for this friend code');
+    }
+
+    const token = jwt.sign(
+      { friendCode: cleanCode },
+      process.env.JWT_SECRET,
+      { expiresIn: '90d' }
+    );
+
+    res.json({ token, friendCode: cleanCode });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 1. Send friend request
+router.post('/request', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
+  try {
+    const { toCode, fromName } = req.body;
+    const fromCode = req.friend.friendCode;
+    if (!toCode) {
+      throw new HttpError(400, 'toCode is required');
+    }
+
+    const cleanFrom = fromCode;
     const cleanTo = String(toCode).trim().toUpperCase();
 
     if (cleanFrom === cleanTo) {
@@ -56,7 +132,7 @@ router.post('/request', FRIENDS_LIMITER, (req, res, next) => {
 });
 
 // 2. Poll incoming pending requests AND accepted requests for a user (bidirectional sync)
-router.get('/requests/:myCode', FRIENDS_LIMITER, (req, res, next) => {
+router.get('/requests/:myCode', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
   try {
     const { myCode } = req.params;
     if (!myCode) {
@@ -64,6 +140,9 @@ router.get('/requests/:myCode', FRIENDS_LIMITER, (req, res, next) => {
     }
 
     const cleanCode = String(myCode).trim().toUpperCase();
+    if (req.friend.friendCode !== cleanCode) {
+      throw new HttpError(403, 'Forbidden: cannot access friend requests for another code');
+    }
 
     // Requests addressed TO me that are pending
     const incomingRows = db.prepare(
@@ -91,14 +170,14 @@ router.get('/requests/:myCode', FRIENDS_LIMITER, (req, res, next) => {
 });
 
 // 3. Acknowledge an accepted request (mark synced)
-router.post('/ack', FRIENDS_LIMITER, (req, res, next) => {
+router.post('/ack', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
   try {
-    const { requestId, myCode } = req.body;
-    if (!requestId || !myCode) {
-      throw new HttpError(400, 'requestId and myCode are required');
+    const { requestId } = req.body;
+    if (!requestId) {
+      throw new HttpError(400, 'requestId is required');
     }
 
-    const cleanCode = String(myCode).trim().toUpperCase();
+    const cleanCode = req.friend.friendCode;
     const now = Date.now();
     db.prepare(
       `UPDATE friend_requests SET status = 'synced', updated_at = ? WHERE id = ? AND from_code = ?`
@@ -111,14 +190,14 @@ router.post('/ack', FRIENDS_LIMITER, (req, res, next) => {
 });
 
 // 4. Accept a friend request
-router.post('/accept', FRIENDS_LIMITER, (req, res, next) => {
+router.post('/accept', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
   try {
-    const { requestId, myCode } = req.body;
-    if (!requestId || !myCode) {
-      throw new HttpError(400, 'requestId and myCode are required');
+    const { requestId } = req.body;
+    if (!requestId) {
+      throw new HttpError(400, 'requestId is required');
     }
 
-    const cleanCode = String(myCode).trim().toUpperCase();
+    const cleanCode = req.friend.friendCode;
     const request = db.prepare(`SELECT * FROM friend_requests WHERE id = ?`).get(requestId);
 
     if (!request) {
@@ -145,14 +224,14 @@ router.post('/accept', FRIENDS_LIMITER, (req, res, next) => {
 });
 
 // 5. Decline a friend request
-router.post('/decline', FRIENDS_LIMITER, (req, res, next) => {
+router.post('/decline', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
   try {
-    const { requestId, myCode } = req.body;
-    if (!requestId || !myCode) {
-      throw new HttpError(400, 'requestId and myCode are required');
+    const { requestId } = req.body;
+    if (!requestId) {
+      throw new HttpError(400, 'requestId is required');
     }
 
-    const cleanCode = String(myCode).trim().toUpperCase();
+    const cleanCode = req.friend.friendCode;
     const request = db.prepare(`SELECT * FROM friend_requests WHERE id = ?`).get(requestId);
 
     if (!request) {
@@ -177,14 +256,15 @@ router.post('/decline', FRIENDS_LIMITER, (req, res, next) => {
 // --- ALBUM INVITATIONS & CROSS-ACCOUNT SYNC ---
 
 // 6. Send in-app album invite to a friend
-router.post('/albums/invite', FRIENDS_LIMITER, (req, res, next) => {
+router.post('/albums/invite', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
   try {
-    const { albumId, albumName, fromCode, toCode, fromName, claimToken, inviterPubKey } = req.body;
-    if (!albumId || !fromCode || !toCode) {
-      throw new HttpError(400, 'albumId, fromCode, and toCode are required');
+    const { albumId, albumName, toCode, fromName, claimToken, inviterPubKey } = req.body;
+    const fromCode = req.friend.friendCode;
+    if (!albumId || !toCode) {
+      throw new HttpError(400, 'albumId and toCode are required');
     }
 
-    const cleanFrom = String(fromCode).trim().toUpperCase();
+    const cleanFrom = fromCode;
     const cleanTo = String(toCode).trim().toUpperCase();
 
     if (cleanFrom === cleanTo) {
@@ -217,7 +297,7 @@ router.post('/albums/invite', FRIENDS_LIMITER, (req, res, next) => {
 });
 
 // 7. Poll incoming album invites for a user
-router.get('/albums/invites/:myCode', FRIENDS_LIMITER, (req, res, next) => {
+router.get('/albums/invites/:myCode', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
   try {
     const { myCode } = req.params;
     if (!myCode) {
@@ -225,6 +305,10 @@ router.get('/albums/invites/:myCode', FRIENDS_LIMITER, (req, res, next) => {
     }
 
     const cleanCode = String(myCode).trim().toUpperCase();
+    if (req.friend.friendCode !== cleanCode) {
+      throw new HttpError(403, 'Forbidden: cannot access album invites for another code');
+    }
+
     const rows = db.prepare(
       `SELECT id, album_id AS albumId, album_name AS albumName, from_code AS fromCode,
               to_code AS toCode, from_name AS fromName, claim_token AS claimToken,
@@ -241,14 +325,14 @@ router.get('/albums/invites/:myCode', FRIENDS_LIMITER, (req, res, next) => {
 });
 
 // 8. Accept an album invite
-router.post('/albums/accept', FRIENDS_LIMITER, (req, res, next) => {
+router.post('/albums/accept', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
   try {
-    const { inviteId, myCode } = req.body;
-    if (!inviteId || !myCode) {
-      throw new HttpError(400, 'inviteId and myCode are required');
+    const { inviteId } = req.body;
+    if (!inviteId) {
+      throw new HttpError(400, 'inviteId is required');
     }
 
-    const cleanCode = String(myCode).trim().toUpperCase();
+    const cleanCode = req.friend.friendCode;
     const invite = db.prepare(`SELECT * FROM album_invites WHERE id = ?`).get(inviteId);
 
     if (!invite) {
@@ -279,14 +363,14 @@ router.post('/albums/accept', FRIENDS_LIMITER, (req, res, next) => {
 });
 
 // 9. Decline an album invite
-router.post('/albums/decline', FRIENDS_LIMITER, (req, res, next) => {
+router.post('/albums/decline', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
   try {
-    const { inviteId, myCode } = req.body;
-    if (!inviteId || !myCode) {
-      throw new HttpError(400, 'inviteId and myCode are required');
+    const { inviteId } = req.body;
+    if (!inviteId) {
+      throw new HttpError(400, 'inviteId is required');
     }
 
-    const cleanCode = String(myCode).trim().toUpperCase();
+    const cleanCode = req.friend.friendCode;
     const invite = db.prepare(`SELECT * FROM album_invites WHERE id = ?`).get(inviteId);
 
     if (!invite) {

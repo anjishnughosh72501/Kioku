@@ -110,6 +110,7 @@ class UserProfileService {
 
   static const String _keyUsername = 'kioku_username';
   static const String _keyFriendCode = 'kioku_friend_code';
+  static const String _keyFriendSecret = 'kioku_friend_device_secret';
   static const String _keyConnectedFriends = 'kioku_connected_friends';
   static const String _keyPendingSent = 'kioku_pending_sent_requests';
   static const String _keyIncomingRequests = 'kioku_cached_incoming_requests';
@@ -118,6 +119,7 @@ class UserProfileService {
   http.Client httpClient = http.Client();
 
   UserProfile? _currentProfile;
+  String? _cachedToken;
   final List<void Function(UserProfile)> _listeners = [];
 
   void addListener(void Function(UserProfile) listener) => _listeners.add(listener);
@@ -129,10 +131,18 @@ class UserProfileService {
     final prefs = await SharedPreferences.getInstance();
     final username = prefs.getString(_keyUsername);
     var friendCode = prefs.getString(_keyFriendCode);
+    var deviceSecret = prefs.getString(_keyFriendSecret);
 
     if (friendCode == null || friendCode.isEmpty) {
       friendCode = _generateFriendCode();
       await prefs.setString(_keyFriendCode, friendCode);
+    }
+
+    if (deviceSecret == null || deviceSecret.isEmpty) {
+      final random = Random.secure();
+      final values = List<int>.generate(32, (i) => random.nextInt(256));
+      deviceSecret = base64UrlEncode(values);
+      await prefs.setString(_keyFriendSecret, deviceSecret);
     }
 
     if (username != null && username.isNotEmpty) {
@@ -141,6 +151,50 @@ class UserProfileService {
         friendCode: friendCode,
       );
     }
+  }
+
+  /// Request or retrieve a cached signed JWT authorization token for this device's friend code
+  Future<String?> getAuthToken({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedToken != null) {
+      return _cachedToken;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    var secret = prefs.getString(_keyFriendSecret);
+    if (secret == null || secret.isEmpty) {
+      final random = Random.secure();
+      final values = List<int>.generate(32, (i) => random.nextInt(256));
+      secret = base64UrlEncode(values);
+      await prefs.setString(_keyFriendSecret, secret);
+    }
+
+    final myCode = friendCode.trim().toUpperCase();
+    try {
+      final res = await httpClient.post(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/token'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'friendCode': myCode,
+          'secret': secret,
+        }),
+      ).timeout(const Duration(seconds: 4));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        _cachedToken = data['token'] as String?;
+        return _cachedToken;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<Map<String, String>> _authHeaders() async {
+    final token = await getAuthToken();
+    final headers = {'Content-Type': 'application/json'};
+    if (token != null) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    return headers;
   }
 
   bool get hasUsername =>
@@ -243,11 +297,11 @@ class UserProfileService {
     }
 
     try {
+      final headers = await _authHeaders();
       final res = await httpClient.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/request'),
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
         body: jsonEncode({
-          'fromCode': myCode,
           'toCode': cleanTo,
           'fromName': myName ?? username,
         }),
@@ -301,8 +355,10 @@ class UserProfileService {
     if (myCode.isEmpty) return getCachedIncomingRequests();
 
     try {
+      final headers = await _authHeaders();
       final res = await httpClient.get(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/requests/$myCode'),
+        headers: headers,
       ).timeout(const Duration(seconds: 4));
 
       if (res.statusCode == 200) {
@@ -326,10 +382,11 @@ class UserProfileService {
               }
               if (reqId != null) {
                 try {
+                  final ackHeaders = await _authHeaders();
                   await httpClient.post(
                     Uri.parse('${AppConfig.backendBaseUrl}/friends/ack'),
-                    headers: {'Content-Type': 'application/json'},
-                    body: jsonEncode({'requestId': reqId, 'myCode': myCode}),
+                    headers: ackHeaders,
+                    body: jsonEncode({'requestId': reqId}),
                   ).timeout(const Duration(seconds: 4));
                 } catch (_) {}
               }
@@ -357,14 +414,13 @@ class UserProfileService {
   }
 
   Future<bool> acceptRequest(FriendRequest req) async {
-    final myCode = friendCode.trim().toUpperCase();
     try {
+      final headers = await _authHeaders();
       await httpClient.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/accept'),
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
         body: jsonEncode({
           'requestId': req.id,
-          'myCode': myCode,
         }),
       ).timeout(const Duration(seconds: 4));
     } catch (_) {}
@@ -391,14 +447,13 @@ class UserProfileService {
   }
 
   Future<bool> declineRequest(FriendRequest req) async {
-    final myCode = friendCode.trim().toUpperCase();
     try {
+      final headers = await _authHeaders();
       await httpClient.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/decline'),
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
         body: jsonEncode({
           'requestId': req.id,
-          'myCode': myCode,
         }),
       ).timeout(const Duration(seconds: 4));
     } catch (_) {}
@@ -440,13 +495,13 @@ class UserProfileService {
       } catch (_) {}
 
       // 2. Post album invite to backend
+      final headers = await _authHeaders();
       final res = await httpClient.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/albums/invite'),
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
         body: jsonEncode({
           'albumId': albumId,
           'albumName': albumName,
-          'fromCode': myCode,
           'toCode': cleanTo,
           'fromName': username,
           'claimToken': claimToken,
@@ -491,8 +546,10 @@ class UserProfileService {
     if (myCode.isEmpty) return getCachedIncomingAlbumInvites();
 
     try {
+      final headers = await _authHeaders();
       final res = await httpClient.get(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/albums/invites/$myCode'),
+        headers: headers,
       ).timeout(const Duration(seconds: 4));
 
       if (res.statusCode == 200) {
@@ -517,14 +574,13 @@ class UserProfileService {
   }
 
   Future<bool> acceptAlbumInvite(AlbumInvite invite) async {
-    final myCode = friendCode.trim().toUpperCase();
     try {
+      final headers = await _authHeaders();
       await httpClient.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/albums/accept'),
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
         body: jsonEncode({
           'inviteId': invite.id,
-          'myCode': myCode,
         }),
       ).timeout(const Duration(seconds: 4));
     } catch (_) {}
@@ -544,7 +600,7 @@ class UserProfileService {
     );
     await LocalStorageService.instance.addAlbumMember(
       invite.albumId,
-      myCode,
+      friendCode.trim().toUpperCase(),
       displayName: username,
       role: 'member',
     );
@@ -573,14 +629,13 @@ class UserProfileService {
   }
 
   Future<bool> declineAlbumInvite(AlbumInvite invite) async {
-    final myCode = friendCode.trim().toUpperCase();
     try {
+      final headers = await _authHeaders();
       await httpClient.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/albums/decline'),
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
         body: jsonEncode({
           'inviteId': invite.id,
-          'myCode': myCode,
         }),
       ).timeout(const Duration(seconds: 4));
     } catch (_) {}

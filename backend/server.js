@@ -42,6 +42,27 @@ function createApp() {
 
   app.get('/health', (req, res) => res.json({ ok: true }));
 
+  // Public compliance & policy endpoints for app stores and web verification (P0-4)
+  const fs = require('fs');
+  const path = require('path');
+  app.get('/privacy', (req, res) => {
+    const privacyPath = path.resolve(__dirname, '../PRIVACY_POLICY.md');
+    if (fs.existsSync(privacyPath)) {
+      res.type('text/markdown').send(fs.readFileSync(privacyPath, 'utf8'));
+    } else {
+      res.type('text/plain').send('Kioku Zero-Knowledge Privacy Policy: Your photos and videos are end-to-end encrypted on device.');
+    }
+  });
+
+  app.get('/terms', (req, res) => {
+    const termsPath = path.resolve(__dirname, '../TERMS_OF_SERVICE.md');
+    if (fs.existsSync(termsPath)) {
+      res.type('text/markdown').send(fs.readFileSync(termsPath, 'utf8'));
+    } else {
+      res.type('text/plain').send('Kioku Terms of Service: Decentralized, local-first encrypted photo album.');
+    }
+  });
+
   app.use('/claim', claimRoutes);
   app.use('/flashbacks', flashbackRoutes);
   app.use('/friends', friendsRoutes);
@@ -49,6 +70,13 @@ function createApp() {
   // Deprecated legacy demo mode: Plaintext Google Drive routes.
   // Gated behind LEGACY_DEMO_MODE=true or test environment.
   // Never reachable or enabled in shipped E2EE zero-knowledge release builds.
+  // P1-7: Refuse to boot if LEGACY_DEMO_MODE=true in production.
+  if (process.env.LEGACY_DEMO_MODE === 'true') {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('FATAL: LEGACY_DEMO_MODE cannot be enabled in production. Refusing to start.');
+    }
+  }
+
   if (process.env.LEGACY_DEMO_MODE === 'true' || process.env.NODE_ENV === 'test') {
     const authRoutes = require('./routes/auth');
     const mediaRoutes = require('./routes/media');

@@ -37,6 +37,8 @@ a.out
 *.dll
 *.obj
 *.o
+*.apk
+releases/*.apk
 
 # Flutter / Dart
 **/doc/api/
