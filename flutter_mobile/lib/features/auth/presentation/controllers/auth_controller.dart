@@ -23,6 +23,7 @@ class AuthState {
     this.isLoading = false,
     this.isSignedIn = false,
     this.isGuest = false,
+    this.hasCompletedStartup = false,
     this.email,
     this.displayName,
     this.photoUrl,
@@ -32,17 +33,19 @@ class AuthState {
   final bool isLoading;
   final bool isSignedIn;
   final bool isGuest;
+  final bool hasCompletedStartup;
   final String? email;
   final String? displayName;
   final String? photoUrl;
   final String? error;
 
-  bool get isAuthenticated => isSignedIn || isGuest;
+  bool get isAuthenticated => isSignedIn || isGuest || hasCompletedStartup;
 
   AuthState copyWith({
     bool? isLoading,
     bool? isSignedIn,
     bool? isGuest,
+    bool? hasCompletedStartup,
     String? email,
     String? displayName,
     String? photoUrl,
@@ -52,6 +55,7 @@ class AuthState {
       isLoading: isLoading ?? this.isLoading,
       isSignedIn: isSignedIn ?? this.isSignedIn,
       isGuest: isGuest ?? this.isGuest,
+      hasCompletedStartup: hasCompletedStartup ?? this.hasCompletedStartup,
       email: email ?? this.email,
       displayName: displayName ?? this.displayName,
       photoUrl: photoUrl ?? this.photoUrl,
@@ -75,11 +79,24 @@ class AuthController extends StateNotifier<AuthState> {
       final prefs = await SharedPreferences.getInstance();
       final hasStartedBefore = prefs.getBool('first_startup_completed') ?? false;
 
+      if (hasStartedBefore) {
+        state = state.copyWith(
+          hasCompletedStartup: true,
+          isGuest: true,
+          isLoading: false,
+        );
+      }
+
       final account = await _authRepo.tryRestoreSession();
       if (!mounted) return;
       if (account == null) {
         if (hasStartedBefore) {
-          state = state.copyWith(isGuest: true, isLoading: false, error: null);
+          state = state.copyWith(
+            hasCompletedStartup: true,
+            isGuest: true,
+            isLoading: false,
+            error: null,
+          );
           return;
         }
         state = state.copyWith(isLoading: false);
@@ -88,9 +105,13 @@ class AuthController extends StateNotifier<AuthState> {
       await _finishSignIn(account);
     } catch (e) {
       if (!mounted) return;
+      final prefs = await SharedPreferences.getInstance();
+      final hasStartedBefore = prefs.getBool('first_startup_completed') ?? false;
       state = state.copyWith(
         isLoading: false,
-        error: 'Could not restore previous session: $e',
+        hasCompletedStartup: hasStartedBefore,
+        isGuest: hasStartedBefore ? true : state.isGuest,
+        error: hasStartedBefore ? null : 'Could not restore previous session: $e',
       );
     }
   }
@@ -100,7 +121,12 @@ class AuthController extends StateNotifier<AuthState> {
     SharedPreferences.getInstance().then((prefs) {
       prefs.setBool('first_startup_completed', true);
     });
-    state = state.copyWith(isGuest: true, isLoading: false, error: null);
+    state = state.copyWith(
+      hasCompletedStartup: true,
+      isGuest: true,
+      isLoading: false,
+      error: null,
+    );
   }
 
   /// Interactive Google Sign-In (Drive scope pre-authorized).
@@ -141,6 +167,7 @@ class AuthController extends StateNotifier<AuthState> {
       if (!mounted) return;
       state = AuthState(
         isSignedIn: true,
+        hasCompletedStartup: true,
         email: account.email,
         displayName: account.displayName,
         photoUrl: account.photoUrl,
@@ -148,9 +175,13 @@ class AuthController extends StateNotifier<AuthState> {
     } catch (e) {
       AppDrive.instance.clear();
       if (!mounted) return;
+      final prefs = await SharedPreferences.getInstance();
+      final hasStartedBefore = prefs.getBool('first_startup_completed') ?? false;
       state = AuthState(
         isLoading: false,
-        error: 'Connected to Google but could not reach Drive: $e',
+        hasCompletedStartup: hasStartedBefore,
+        isGuest: hasStartedBefore,
+        error: hasStartedBefore ? null : 'Connected to Google but could not reach Drive: $e',
       );
     }
   }
@@ -163,7 +194,15 @@ class AuthController extends StateNotifier<AuthState> {
     } catch (_) {
       // Even if the platform call fails, we clear local state below.
     }
-    state = const AuthState();
+    state = state.copyWith(
+      isSignedIn: false,
+      isGuest: true,
+      hasCompletedStartup: true,
+      email: null,
+      displayName: null,
+      photoUrl: null,
+      error: null,
+    );
   }
 
   void clearError() => state = state.copyWith(error: null);

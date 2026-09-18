@@ -15,25 +15,38 @@ class UsernameDialog extends StatefulWidget {
     if (_isShowing) return;
     try {
       final prefs = await SharedPreferences.getInstance();
+      final alreadyPrompted = prefs.getBool('kioku_username_prompted') ?? false;
+      final startupCompleted = prefs.getBool('first_startup_completed') ?? false;
+
+      // Never prompt on later startups
+      if (alreadyPrompted || startupCompleted) {
+        return;
+      }
+
       final saved = prefs.getString('kioku_username');
       if (saved != null && saved.trim().isNotEmpty && saved.trim() != 'Storyteller') {
+        await prefs.setBool('kioku_username_prompted', true);
         return;
       }
     } catch (_) {}
 
     if (!context.mounted) return;
 
-    if (!UserProfileService.instance.hasUsername) {
-      _isShowing = true;
-      try {
-        await showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => const UsernameDialog(isDismissible: false),
-        );
-      } finally {
-        _isShowing = false;
-      }
+    _isShowing = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('kioku_username_prompted', true);
+      await prefs.setBool('first_startup_completed', true);
+
+      if (!context.mounted) return;
+
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) => const UsernameDialog(isDismissible: true),
+      );
+    } finally {
+      _isShowing = false;
     }
   }
 
@@ -85,6 +98,11 @@ class _UsernameDialogState extends State<UsernameDialog> {
 
     setState(() => _submitting = true);
     final profile = await UserProfileService.instance.setUsername(text);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('kioku_username_prompted', true);
+      await prefs.setBool('first_startup_completed', true);
+    } catch (_) {}
     if (!mounted) return;
 
     Navigator.of(context).pop();

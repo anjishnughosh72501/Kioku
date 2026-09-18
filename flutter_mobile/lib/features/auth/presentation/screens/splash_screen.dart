@@ -26,13 +26,22 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   Future<void> _checkNextDestination() async {
-    // Show splash animation for at least 1.2s for a polished launch experience
-    await Future.delayed(const Duration(milliseconds: 1200));
+    final prefs = await SharedPreferences.getInstance();
+    final hasStartedBefore = prefs.getBool('first_startup_completed') ?? false;
+
+    // Show splash animation for at least 1.0s for a polished launch experience
+    await Future.delayed(const Duration(milliseconds: 1000));
     if (!mounted) return;
 
-    final prefs = await SharedPreferences.getInstance();
-    final onboardingDone = prefs.getBool('kioku_onboarding_done') ?? false;
+    if (hasStartedBefore) {
+      // Later startup: ALWAYS go directly to main feed!
+      // NEVER prompt for Google sign-in or username.
+      if (mounted) context.go('/');
+      return;
+    }
 
+    // First startup flow:
+    final onboardingDone = prefs.getBool('kioku_onboarding_done') ?? false;
     if (!onboardingDone) {
       if (mounted) context.go('/onboarding');
       return;

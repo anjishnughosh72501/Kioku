@@ -35,12 +35,16 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     super.initState();
     _scrollController.addListener(_onScroll);
     SharedPreferences.getInstance().then((prefs) {
-      prefs.setBool('first_startup_completed', true);
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        UsernameDialog.showIfNeeded(context);
+      final hasPrompted = prefs.getBool('kioku_username_prompted') ?? false;
+      final hasCompleted = prefs.getBool('first_startup_completed') ?? false;
+      if (!hasPrompted && !hasCompleted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            UsernameDialog.showIfNeeded(context);
+          }
+        });
       }
+      prefs.setBool('first_startup_completed', true);
     });
   }
 
