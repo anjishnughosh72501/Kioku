@@ -41,7 +41,7 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
   StorageProvider get provider => _providerGetter();
 
   StorageProvider _resolveProviderForAlbum(String albumId) {
-    if (albumId.startsWith('local_') && provider.type == StorageProviderType.drive) {
+    if (albumId.startsWith('local_')) {
       return const LocalStorageProvider();
     }
     return provider;
@@ -139,7 +139,7 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
       final memory = KiokuMemory.fromDecryptedMetadata(
         id: objectId,
         metadata: meta,
-      );
+      ).copyWith(albumId: albumId);
       _metadataCache[objectId] = memory;
       return memory;
     } catch (_) {
@@ -174,7 +174,7 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
         final existingIds = memories.map((m) => m.id).toSet();
         for (final lm in localMems) {
           if (!existingIds.contains(lm.id)) {
-            memories.add(lm);
+            memories.add(lm.copyWith(albumId: albumId));
           }
         }
       } catch (_) {}
@@ -347,7 +347,7 @@ class EncryptedMemoryRepository implements IMemoryRepository, IUploadRepository 
     final memory = KiokuMemory.fromDecryptedMetadata(
       id: storedId,
       metadata: metadataMap,
-    );
+    ).copyWith(albumId: albumId);
     _metadataCache[storedId] = memory;
     return memory;
   }

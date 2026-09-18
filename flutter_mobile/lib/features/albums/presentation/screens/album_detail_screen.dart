@@ -363,7 +363,7 @@ class _AlbumDetailScreenState extends ConsumerState<AlbumDetailScreen> {
         widget.album ??
         Album(id: widget.albumId, name: 'Album');
 
-    final memoriesAsync = ref.watch(memoriesProvider);
+    final memoriesAsync = ref.watch(albumMemoriesProvider(widget.albumId));
     final memories = memoriesAsync.value ?? <KiokuMemory>[];
 
     final hasCover = currentAlbum.thumbnailPath != null &&
@@ -373,7 +373,13 @@ class _AlbumDetailScreenState extends ConsumerState<AlbumDetailScreen> {
     return Scaffold(
       backgroundColor: colors.background,
       body: SafeArea(
-        child: CustomScrollView(
+        child: RefreshIndicator(
+          color: colors.primary,
+          onRefresh: () async {
+            ref.invalidate(albumMemoriesProvider(widget.albumId));
+            await ref.read(memoriesProvider.notifier).refresh();
+          },
+          child: CustomScrollView(
           slivers: [
             SliverAppBar(
               backgroundColor: colors.background,
@@ -604,6 +610,7 @@ class _AlbumDetailScreenState extends ConsumerState<AlbumDetailScreen> {
       ],
     ),
   ),
+),
 );
 }
 }

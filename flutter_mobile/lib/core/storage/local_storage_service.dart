@@ -284,6 +284,7 @@ class LocalStorageService {
       addedAt: now,
       sizeBytes: size,
       localPath: destFile.path,
+      albumId: albumId,
     );
 
     // Save to album index
@@ -319,6 +320,7 @@ class LocalStorageService {
               addedAt: stat.modified,
               sizeBytes: stat.size,
               localPath: f.path,
+              albumId: albumId,
             ));
           }
         }
@@ -352,6 +354,7 @@ class LocalStorageService {
               addedAt: DateTime.tryParse(item['addedAt']?.toString() ?? '') ?? DateTime.now(),
               sizeBytes: (item['sizeBytes'] as num?)?.toInt(),
               localPath: effectivePath,
+              albumId: albumId,
             ));
           }
         }

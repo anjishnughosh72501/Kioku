@@ -13,6 +13,7 @@ import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:flutter_mobile/features/feed/presentation/widgets/memory_card.dart';
 
+import 'package:flutter_mobile/features/feed/presentation/widgets/album_dropdown.dart';
 import 'package:flutter_mobile/features/auth/presentation/widgets/username_dialog.dart';
 import 'package:flutter_mobile/features/feed/presentation/widgets/shimmer_skeleton_card.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
@@ -86,7 +87,8 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                 floating: true,
                 snap: true,
                 pinned: false,
-                toolbarHeight: 76,
+                toolbarHeight: 88,
+                expandedHeight: 88,
                 flexibleSpace: FlexibleSpaceBar(
                   collapseMode: CollapseMode.parallax,
                   background: _buildHeader(authState, colors, typography)
@@ -121,16 +123,16 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppTheme.spacingMd,
+        4,
         AppTheme.spacingMd,
-        AppTheme.spacingMd,
-        AppTheme.spacingSm,
+        4,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
-            width: 48,
-            height: 48,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: colors.divider, width: 1),
@@ -148,6 +150,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
           const SizedBox(width: AppTheme.spacingMd),
           Expanded(
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -157,19 +160,17 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: typography.displayMedium?.copyWith(
                     color: colors.ink,
-                    fontSize: 22,
+                    fontSize: 20,
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.3,
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  'All updates',
-                  style: typography.bodySmall?.copyWith(
-                    color: colors.inkMuted,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
+                AlbumDropdown(
+                  albums: ref.watch(albumsProvider).valueOrNull ?? [],
+                  activeAlbumId: ref.watch(activeAlbumProvider),
+                  colors: colors,
+                  typography: typography,
                 ),
               ],
             ),
@@ -274,7 +275,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                     item: entry.memory,
                     colors: colors,
                     typography: typography,
-                    albumName: currentAlbumName,
+                    albumName: entry.memory.albumName ??
+                        albumsList.where((a) => a.id == entry.memory.albumId).firstOrNull?.title ??
+                        currentAlbumName,
                   ),
                 );
                 final disableAnims = MediaQuery.maybeDisableAnimationsOf(context) ?? false;

@@ -616,6 +616,9 @@ class Memories extends AsyncNotifier<List<KiokuMemory>> {
   Future<void> delete(String fileId) async {
     final albumId = ref.read(activeAlbumProvider);
     await ref.read(memoryRepositoryProvider).deleteMemory(fileId, albumId: albumId);
+    if (albumId != null) {
+      ref.invalidate(albumMemoriesProvider(albumId));
+    }
     if (state.hasValue) {
       state = AsyncData(
         state.requireValue.where((m) => m.id != fileId).toList(),
@@ -628,10 +631,20 @@ final memoriesProvider = AsyncNotifierProvider<Memories, List<KiokuMemory>>(
   Memories.new,
 );
 
+/// Filtered memories based on activeAlbumProvider (if set to a specific album).
+final filteredMemoriesProvider = Provider<List<KiokuMemory>>((ref) {
+  final all = ref.watch(memoriesProvider).value ?? const [];
+  final activeAlbumId = ref.watch(activeAlbumProvider);
+  if (activeAlbumId == null || activeAlbumId.isEmpty || activeAlbumId == 'all') {
+    return all;
+  }
+  return all.where((m) => m.albumId == activeAlbumId).toList();
+});
+
 /// Derived provider: groups memories by day, memoized by Riverpod.
 final groupedMemoriesProvider =
     Provider<List<({DateTime day, List<KiokuMemory> items})>>((ref) {
-  final memories = ref.watch(memoriesProvider).value ?? const [];
+  final memories = ref.watch(filteredMemoriesProvider);
   final map = <String, ({DateTime day, List<KiokuMemory> items})>{};
   for (final item in memories) {
     final d = item.takenAt;

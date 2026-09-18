@@ -24,8 +24,9 @@ class AlbumDropdown extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final current = albums.where((a) => a.id == activeAlbumId).firstOrNull;
-    final effectiveColors = (activeAlbumId != null && activeAlbumId!.isNotEmpty)
+    final isAll = activeAlbumId == null || activeAlbumId == 'all' || activeAlbumId!.isEmpty;
+    final current = isAll ? null : albums.where((a) => a.id == activeAlbumId).firstOrNull;
+    final effectiveColors = (!isAll && activeAlbumId != null)
         ? colors.withAlbumTint(activeAlbumId!)
         : colors;
 
@@ -33,7 +34,7 @@ class AlbumDropdown extends ConsumerWidget {
       onTap: () => _showPicker(context, ref),
       borderRadius: BorderRadius.circular(AppTheme.radiusPill),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1.5),
         decoration: BoxDecoration(
           color: effectiveColors.accentSoft,
           borderRadius: BorderRadius.circular(AppTheme.radiusPill),
@@ -44,16 +45,17 @@ class AlbumDropdown extends ConsumerWidget {
           children: [
             Flexible(
               child: Text(
-                current?.title ?? (albums.length > 1 ? 'Pick an album' : albums.first.title),
+                isAll ? 'All updates' : (current?.title ?? 'Pick an album'),
                 overflow: TextOverflow.ellipsis,
-                style: typography.bodyMedium?.copyWith(
+                style: typography.bodySmall?.copyWith(
                   color: effectiveColors.primaryDark,
                   fontWeight: FontWeight.w600,
+                  fontSize: 11,
                 ),
               ),
             ),
-            const SizedBox(width: 4),
-            Icon(Icons.arrow_drop_down, size: 18, color: effectiveColors.primaryDark),
+            const SizedBox(width: 2),
+            Icon(Icons.arrow_drop_down, size: 16, color: effectiveColors.primaryDark),
           ],
         ),
       ),
@@ -61,6 +63,7 @@ class AlbumDropdown extends ConsumerWidget {
   }
 
   void _showPicker(BuildContext context, WidgetRef ref) {
+    final isAll = activeAlbumId == null || activeAlbumId == 'all' || activeAlbumId!.isEmpty;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: colors.surfaceContainer,
@@ -74,9 +77,29 @@ class AlbumDropdown extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.all(AppTheme.spacingMd),
               child: Text(
-                'Your albums',
+                'Filter Feed',
                 style: typography.headlineSmall?.copyWith(color: colors.ink),
               ),
+            ),
+            ListTile(
+              leading: Icon(
+                Icons.dynamic_feed_outlined,
+                color: isAll ? colors.primaryDark : colors.inkMuted,
+              ),
+              title: Text(
+                'All updates',
+                style: typography.bodyMedium?.copyWith(
+                  color: colors.ink,
+                  fontWeight: isAll ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+              trailing: isAll
+                  ? Icon(Icons.check_circle, color: colors.primaryDark, size: 20)
+                  : null,
+              onTap: () {
+                ref.read(activeAlbumProvider.notifier).set(null);
+                Navigator.of(sheetContext).pop();
+              },
             ),
             ...albums.map((album) {
               final selected = album.id == activeAlbumId;

@@ -157,6 +157,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       );
 
       if (!mounted) return;
+      ref.invalidate(albumMemoriesProvider(albumId));
       ref.read(memoriesProvider.notifier).refresh();
       _showMessage('Memory saved to your album');
       context.pop();
@@ -175,6 +176,60 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
         content: Text(message),
         backgroundColor: colors.accentDark,
         behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _pickTargetAlbum(BuildContext context, List<Album> albums) {
+    if (albums.isEmpty) return;
+    final colors = context.kiokuColors;
+    final typography = Theme.of(context).textTheme;
+    final currentActiveId = ref.read(activeAlbumProvider);
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: colors.surfaceContainer,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusCard)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(AppTheme.spacingMd),
+              child: Text(
+                'Choose Destination Album',
+                style: typography.headlineSmall?.copyWith(color: colors.ink),
+              ),
+            ),
+            ...albums.map((album) {
+              final selected = album.id == currentActiveId;
+              final rowColors = colors.withAlbumTint(album.id);
+              return ListTile(
+                leading: Icon(
+                  selected ? Icons.folder_special : Icons.folder_outlined,
+                  color: selected ? rowColors.primaryDark : colors.inkMuted,
+                ),
+                title: Text(
+                  album.title,
+                  style: typography.bodyMedium?.copyWith(
+                    color: colors.ink,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+                trailing: selected
+                    ? Icon(Icons.check_circle, color: rowColors.primaryDark, size: 20)
+                    : null,
+                onTap: () {
+                  ref.read(activeAlbumProvider.notifier).set(album.id);
+                  Navigator.of(sheetCtx).pop();
+                },
+              );
+            }),
+            const SizedBox(height: AppTheme.spacingMd),
+          ],
+        ),
       ),
     );
   }
@@ -331,26 +386,45 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
               const SizedBox(height: AppTheme.spacingMd),
 
               // Target album
-              ClayCard(
-                variant: ClayVariant.defaultCard,
-                padding: const EdgeInsets.all(AppTheme.spacingMd),
-                child: Row(
-                  children: [
-                    Icon(Icons.folder_open_outlined, size: 16, color: colors.ink),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Album: ${targetAlbum?.title ?? '—'}',
-                        style: typography.bodyMedium?.copyWith(color: colors.ink),
+              InkWell(
+                onTap: () => _pickTargetAlbum(context, albums),
+                borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+                child: ClayCard(
+                  variant: ClayVariant.defaultCard,
+                  padding: const EdgeInsets.all(AppTheme.spacingMd),
+                  child: Row(
+                    children: [
+                      Icon(Icons.folder_open_outlined, size: 18, color: colors.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Destination Album',
+                              style: typography.bodySmall?.copyWith(color: colors.inkMuted, fontSize: 11),
+                            ),
+                            Text(
+                              targetAlbum?.title ?? 'Select an album',
+                              style: typography.bodyMedium?.copyWith(
+                                color: colors.ink,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    if (activeAlbumId == null)
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: Text('Pick an album',
-                            style: typography.bodySmall?.copyWith(color: colors.accentDark)),
+                      Text(
+                        'Change',
+                        style: typography.bodySmall?.copyWith(
+                          color: colors.primaryDark,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                  ],
+                      const SizedBox(width: 4),
+                      Icon(Icons.arrow_drop_down, color: colors.primaryDark, size: 20),
+                    ],
+                  ),
                 ),
               ).animate().fadeIn(delay: 180.ms, duration: 300.ms),
 
