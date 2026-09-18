@@ -1,10 +1,30 @@
 import argparse
 import os
+import secrets
 import shutil
 import socket
 import subprocess
+import sys
 import time
 import urllib.request
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+
+def safe_print(msg=""):
+    try:
+        print(msg)
+    except Exception:
+        try:
+            encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+            print(str(msg).encode(encoding, errors="replace").decode(encoding))
+        except Exception:
+            pass
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 FLUTTER_DIR = os.path.join(ROOT, "flutter_mobile")
@@ -26,14 +46,23 @@ def run(cmd, timeout=15, cwd=None, shell=False, check=True):
     """Run a command capturing output. Returns (ok, stdout)."""
     label = " ".join(cmd) if isinstance(cmd, list) else cmd
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd, shell=shell)
+        r = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            cwd=cwd,
+            shell=shell,
+        )
         ok = r.returncode == 0
         if check and not ok:
-            err_msg = r.stderr.strip() or r.stdout.strip()
-            print(f"  WARN: {label} failed: {err_msg}")
-        return ok, r.stdout.strip()
+            err_msg = (r.stderr or "").strip() or (r.stdout or "").strip()
+            safe_print(f"  WARN: {label} failed: {err_msg}")
+        return ok, (r.stdout or "").strip()
     except Exception as ex:
-        print(f"  WARN: {label} failed: {ex}")
+        safe_print(f"  WARN: {label} failed: {ex}")
         return False, ""
 
 
@@ -99,24 +128,58 @@ def ensure_libsodium():
                     pass
 
 
+def ensure_jwt_secret():
+    """Ensure backend/.env exists with a cryptographically secure random JWT_SECRET."""
+    env_path = os.path.join(BACKEND_DIR, ".env")
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        for line in content.splitlines():
+            line_str = line.strip()
+            if line_str.startswith("JWT_SECRET=") and len(line_str.split("=", 1)[1]) >= 16:
+                return line_str.split("=", 1)[1]
+
+    # Generate new random secret
+    secret = secrets.token_hex(32)
+    example_path = os.path.join(BACKEND_DIR, ".env.example")
+    if os.path.exists(example_path):
+        with open(example_path, "r", encoding="utf-8") as f:
+            template = f.read()
+        content = template.replace("JWT_SECRET=", f"JWT_SECRET={secret}")
+    else:
+        content = f"PORT=4000\nJWT_SECRET={secret}\nLEGACY_DEMO_MODE=false\n"
+
+    with open(env_path, "w", encoding="utf-8") as f:
+        f.write(content)
+    print("  Generated cryptographically secure random JWT_SECRET in backend/.env")
+    return secret
+
+
 def run_tests():
-    print("Running Kioku verification test suites...")
-    print("\n--- 1. Backend Tests (Node.js & Jest) ---")
-    ok, out = run("npm test", timeout=60, cwd=BACKEND_DIR, shell=True)
-    print(out)
+    safe_print("Running Kioku verification test suites...")
+    safe_print("\n--- 1. Backend Tests (Node.js & Jest: Signal Isolation, Room Isolation, Friend Requests & Auth) ---")
+    ok, out = run("npm test", timeout=120, cwd=BACKEND_DIR, shell=True)
+    safe_print(out)
     if not ok:
-        print("Backend tests failed!")
+        safe_print("Backend tests failed!")
         return False
 
-    print("\n--- 2. Flutter Mobile Tests (E2EE Crypto, Storage & Widgets) ---")
+    safe_print("\n--- 2. Flutter Mobile Tests (E2EE Crypto, Key Leak Prevention, Revocation, Friend Requests & UI) ---")
     ensure_libsodium()
-    ok, out = run("flutter test", timeout=120, cwd=FLUTTER_DIR, shell=True)
-    print(out)
+    ok, out = run("flutter test", timeout=180, cwd=FLUTTER_DIR, shell=True)
+    safe_print(out)
     if not ok:
-        print("Flutter tests failed!")
+        safe_print("Flutter tests failed!")
         return False
 
-    print("\nAll Kioku test suites passed successfully!")
+    safe_print("\n--- 3. Flutter Static Analysis ---")
+    ok, out = run("flutter analyze --no-fatal-infos", timeout=120, cwd=FLUTTER_DIR, shell=True)
+    safe_print(out)
+    if not ok:
+        safe_print("Flutter static analysis failed!")
+        return False
+
+    safe_print("\nAll Kioku verification and security test suites passed successfully!")
     return True
 
 
@@ -126,7 +189,11 @@ def main():
     parser.add_argument("--build-apk", action="store_true", help="Build the Android APK and exit")
     parser.add_argument("--release", action="store_true", help="Use release mode for building the APK (default is debug)")
     parser.add_argument("--no-emulator", action="store_true", help="Skip emulator startup (use physical device or desktop)")
+    parser.add_argument("--legacy-demo", action="store_true", help="Enable deprecated unencrypted Drive demo mode (disabled by default in E2EE release)")
+    parser.add_argument("--backend-url", default=None, help="Custom backend relay URL (passed as --dart-define=BACKEND_URL=<url>)")
     args = parser.parse_args()
+
+    dart_define = f"--dart-define=BACKEND_URL={args.backend_url}" if args.backend_url else ""
 
     if args.test:
         success = run_tests()
@@ -138,7 +205,8 @@ def main():
         run("flutter pub get", timeout=180, cwd=FLUTTER_DIR, shell=True)
         build_mode = "release" if args.release else "debug"
         print(f"Building {build_mode} APK...")
-        ok, out = run(f"flutter build apk --{build_mode}", timeout=600, cwd=FLUTTER_DIR, shell=True)
+        build_cmd = f"flutter build apk --{build_mode} {dart_define}".strip()
+        ok, out = run(build_cmd, timeout=600, cwd=FLUTTER_DIR, shell=True)
         if not ok:
             print(f"ERROR: flutter build apk failed:\n{out}")
             exit(1)
@@ -193,11 +261,21 @@ def main():
             backend_log = open(backend_log_path, "w", encoding="utf-8")
             log_files.append(backend_log)
 
+            secret = ensure_jwt_secret()
+            backend_env = os.environ.copy()
+            backend_env["JWT_SECRET"] = secret
+            if args.legacy_demo:
+                backend_env["LEGACY_DEMO_MODE"] = "true"
+                print("  WARN: Running in deprecated LEGACY_DEMO_MODE=true.")
+            else:
+                backend_env["LEGACY_DEMO_MODE"] = "false"
+
             proc = subprocess.Popen(
                 ["node", "server.js"],
                 cwd=BACKEND_DIR,
                 stdout=backend_log,
                 stderr=subprocess.STDOUT,
+                env=backend_env,
                 shell=False,
             )
             procs.append(proc)
@@ -242,7 +320,8 @@ def main():
         if not args.no_emulator and is_emulator_running():
             build_mode = "release" if args.release else "debug"
             print(f"  Building {build_mode} APK...")
-            ok, out = run(f"flutter build apk --{build_mode}", timeout=600, cwd=FLUTTER_DIR, shell=True)
+            build_cmd = f"flutter build apk --{build_mode} {dart_define}".strip()
+            ok, out = run(build_cmd, timeout=600, cwd=FLUTTER_DIR, shell=True)
             if not ok:
                 print(f"  ERROR: flutter build apk failed:\n{out}")
                 cleanup()
@@ -280,15 +359,24 @@ def main():
                 oauth_configured = "default_web_client_id" in f.read()
 
         print("\n========================================================")
-        print("  Kioku Development Environment is Ready!")
+        print("  Kioku Development & Production Environment is Ready!")
         print("========================================================")
-        print(f"  Flutter Package:   {FLUTTER_APP_PACKAGE}")
-        print(f"  HTTP Backend:      http://localhost:{BACKEND_PORT}")
-        print(f"  Signaling Relay:   ws://localhost:{BACKEND_PORT}/signal")
-        print("  Cryptography:      Ente-aligned E2EE (Sodium X25519, XChaCha20-Poly1305)")
-        print("  Recovery System:   24-word BIP39 mnemonic & master key recovery")
-        print("  Storage Backends:  Device, Google Drive, S3/R2/B2, WebDAV & Mesh")
-        print("  Backend Log:       backend.log")
+        print(f"  Flutter Package:     {FLUTTER_APP_PACKAGE}")
+        print(f"  HTTP Backend:        http://localhost:{BACKEND_PORT}")
+        print(f"  Signaling Relay:     ws://localhost:{BACKEND_PORT}/signal (IDOR-protected)")
+        print(f"  Claim Token Relay:   http://localhost:{BACKEND_PORT}/claim (10m TTL, single-use)")
+        print(f"  Friend Request Relay:http://localhost:{BACKEND_PORT}/friends (Two-way request & accept)")
+        print(f"  Configured Backend:  {args.backend_url or 'http://10.0.2.2:4000 (Default Android Emulator Loopback)'}")
+        print("  Key Storage:         Strict hardware keystore (zero SharedPreferences keys)")
+        print("  Invite Security:     crypto_box_seal device handoff (no keys in URLs)")
+        print("  Key Lifecycle:       Rotate-on-removal key revocation enabled")
+        print("  Video Security:      Streaming decrypt & cold-boot secure overwrite sweep")
+        print("  Recovery System:     24-word BIP39 mnemonic & encrypted vault blob")
+        print("  Storage Backends:    Device, Google Drive, S3/R2/B2, WebDAV & Mesh")
+        print(f"  Legacy Demo Mode:    {'ENABLED' if args.legacy_demo else 'DISABLED (Zero-Knowledge E2EE Only)'}")
+        print("  Backend Log:         backend.log")
+        if not args.backend_url:
+            print("  NOTICE: For production release, pass --backend-url https://api.yourdomain.com")
         if not oauth_configured:
             print("")
             print("  NOTE: Optional Google Sign-In needs OAuth setup.")

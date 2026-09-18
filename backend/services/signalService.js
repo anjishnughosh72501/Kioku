@@ -25,17 +25,19 @@ function setupSignaling(server) {
       return;
     }
 
+    if (!process.env.JWT_SECRET) {
+      socket.write('HTTP/1.1 500 Internal Server Error\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'ephemeral-secret');
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
       request.user = decoded;
     } catch (err) {
-      // Allow unauthenticated/guest mesh test mode if explicit query param
-      if (url.searchParams.get('allowGuest') !== 'true') {
-        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-        socket.destroy();
-        return;
-      }
-      request.user = { userId: 'guest_' + Math.random().toString(36).substring(7) };
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
     }
 
     wss.handleUpgrade(request, socket, head, (ws) => {
@@ -54,6 +56,19 @@ function setupSignaling(server) {
 
         switch (type) {
           case 'join': {
+            // Check group membership authorization to prevent IDOR
+            const authorizedGroup = request.user && (request.user.groupId || request.user.albumId);
+            if (authorizedGroup && authorizedGroup !== albumId) {
+              ws.send(
+                JSON.stringify({
+                  type: 'error',
+                  message: 'Forbidden: unauthorized album membership',
+                })
+              );
+              ws.close(4003, 'Forbidden');
+              return;
+            }
+
             currentAlbumId = albumId;
             currentDeviceId = deviceId;
 

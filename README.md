@@ -52,17 +52,17 @@ Social feeds encourage performance, metrics, and algorithms. But real life happe
 ### 🗂️ Dedicated Albums Hub & 2×2 Photo Grid
 - **Dedicated Albums Tab**: 4-tab bottom navigation (**Feed** | **Albums** | **Flashbacks** | **Profile**) with dedicated album management.
 - **2×2 Square Photo Grid**: Clean, edge-to-edge 2×2 photo grid in album details for dense, distraction-free visual browsing.
-- **Shareable Deep Links & Invites**: One-tap album invite links generating app-accessible URLs and `kioku://album/<id>` deep links.
+- **Shareable Deep Links & Invites**: One-tap album invite links generating app-accessible URLs and `kioku://album/<id>` deep links via single-use claim tokens and `crypto_box_seal` device key exchanges (never exposing raw keys in URLs).
 - **Home Quick Actions**: Instant access row on the main feed for rapid capture, album browsing, flashbacks, and profile navigation.
 
 ### 🛡️ Zero-Knowledge End-to-End Encryption (E2EE)
 - **libsodium Cryptographic Engine**: Industrial-grade `XChaCha20-Poly1305` chunked streaming encryption for media and `crypto_secretbox` for metadata.
 - **Three-Tier Key Hierarchy**:
-  - **Master Key**: Generated on device and held securely in hardware-backed keystores (`flutter_secure_storage`).
-  - **Collection Keys**: Unique per-album keys wrapped by the Master Key or device public keys for sharing.
+  - **Master Key**: Generated on device and held securely in hardware-backed keystores (`flutter_secure_storage` with Android EncryptedSharedPreferences and iOS Keychain FirstUnlock).
+  - **Collection Keys**: Unique per-album keys wrapped by the Master Key or device public keys for sharing, rotated automatically upon member removal.
   - **File Keys**: Ephemeral 256-bit keys minted per photo/video and wrapped inside the `.enc` envelope.
-- **BIP39 24-Word Recovery Phrase**: Standard mnemonic key recovery with 60s clipboard auto-clear and secondary vault recovery backup in `SharedPreferences`.
-- **Zero Decrypted Leaks**: Transient video player files are automatically swept on startup and deleted immediately upon disposal.
+- **BIP39 24-Word Recovery Phrase**: Standard mnemonic key recovery with 60s clipboard auto-clear and encrypted vault recovery blob.
+- **Zero Decrypted Leaks**: Streaming video decryption, secure overwrite-before-delete semantics, and cold-start cleanup sweeps.
 
 ### 🗄️ Multi-Cloud & Local Storage Engine
 - **Google Drive v3**: Native integration with direct authorized streaming (`alt=media`) and prefix filtering.

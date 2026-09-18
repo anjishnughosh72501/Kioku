@@ -12,7 +12,7 @@ describe('WebRTC Signaling Service', () => {
   beforeAll((done) => {
     process.env.JWT_SECRET = 'test-secret-mesh';
     validToken = jwt.sign(
-      { userId: 'user_1', groupId: 'group_1', name: 'Alice' },
+      { userId: 'user_1', groupId: 'album_vacation', name: 'Alice' },
       process.env.JWT_SECRET
     );
 

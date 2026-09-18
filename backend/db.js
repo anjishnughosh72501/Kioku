@@ -100,8 +100,46 @@ async function initDB() {
       UNIQUE(group_id, period, generated_for)
     );
 
+    CREATE TABLE IF NOT EXISTS claim_tokens (
+      token           TEXT PRIMARY KEY,
+      album_id        TEXT NOT NULL,
+      inviter_pub_key TEXT NOT NULL,
+      recipient_pub_key TEXT,
+      sealed_key      TEXT,
+      expires_at      INTEGER NOT NULL,
+      used            INTEGER DEFAULT 0,
+      created_at      TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS friend_requests (
+      id              TEXT PRIMARY KEY,
+      from_code       TEXT NOT NULL,
+      to_code         TEXT NOT NULL,
+      from_name       TEXT,
+      status          TEXT DEFAULT 'pending',
+      created_at      INTEGER NOT NULL,
+      updated_at      INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS album_invites (
+      id              TEXT PRIMARY KEY,
+      album_id        TEXT NOT NULL,
+      album_name      TEXT NOT NULL,
+      from_code       TEXT NOT NULL,
+      to_code         TEXT NOT NULL,
+      from_name       TEXT,
+      claim_token     TEXT,
+      inviter_pub_key TEXT,
+      status          TEXT DEFAULT 'pending',
+      created_at      INTEGER NOT NULL,
+      updated_at      INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_media_group_date ON media(group_id, taken_at);
     CREATE INDEX IF NOT EXISTS idx_media_uploader ON media(group_id, uploader_id);
+    CREATE INDEX IF NOT EXISTS idx_claim_token_exp ON claim_tokens(token, expires_at);
+    CREATE INDEX IF NOT EXISTS idx_fr_to_code ON friend_requests(to_code, status);
+    CREATE INDEX IF NOT EXISTS idx_ai_to_code ON album_invites(to_code, status);
   `).run();
 
   process.on('exit', saveNow);

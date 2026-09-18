@@ -7,24 +7,22 @@ const helmet = require('helmet');
 const { initDB } = require('./db');
 const { notFoundHandler, jsonErrorHandler } = require('./middleware/errorHandler');
 
-// If no JWT secret is configured, generate an ephemeral one so the app still
-// works out of the box. Tokens will stop validating after a restart, so a
-// real secret in .env is strongly recommended.
+// Fail closed if no secure JWT secret is configured in production or regular runs.
 function resolveJwtSecret() {
   const stored = process.env.JWT_SECRET;
   if (!stored || stored === 'change-me-to-a-random-secret') {
-    process.env.JWT_SECRET = crypto.randomBytes(32).toString('hex');
-    console.warn(
-      'WARN: JWT_SECRET not set in .env - using an ephemeral secret. ' +
-        'Tokens will invalidate on restart; set JWT_SECRET to keep sessions stable.'
-    );
+    if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV !== 'test') {
+      throw new Error(
+        'FATAL: JWT_SECRET must be set to a cryptographically secure random value in .env. Server will fail closed.'
+      );
+    }
   }
 }
 
 function createApp() {
-  const authRoutes = require('./routes/auth');
-  const mediaRoutes = require('./routes/media');
+  const claimRoutes = require('./routes/claim');
   const flashbackRoutes = require('./routes/flashbacks');
+  const friendsRoutes = require('./routes/friends');
 
   const app = express();
   app.disable('x-powered-by');
@@ -44,9 +42,19 @@ function createApp() {
 
   app.get('/health', (req, res) => res.json({ ok: true }));
 
-  app.use('/auth', authRoutes);
-  app.use('/media', mediaRoutes);
+  app.use('/claim', claimRoutes);
   app.use('/flashbacks', flashbackRoutes);
+  app.use('/friends', friendsRoutes);
+
+  // Deprecated legacy demo mode: Plaintext Google Drive routes.
+  // Gated behind LEGACY_DEMO_MODE=true or test environment.
+  // Never reachable or enabled in shipped E2EE zero-knowledge release builds.
+  if (process.env.LEGACY_DEMO_MODE === 'true' || process.env.NODE_ENV === 'test') {
+    const authRoutes = require('./routes/auth');
+    const mediaRoutes = require('./routes/media');
+    app.use('/auth', authRoutes);
+    app.use('/media', mediaRoutes);
+  }
 
   app.use(notFoundHandler);
   app.use(jsonErrorHandler);
