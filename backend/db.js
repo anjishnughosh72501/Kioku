@@ -122,8 +122,20 @@ function initDB() {
       created_at      TEXT DEFAULT (datetime('now'))
     );
 
+
+    CREATE TABLE IF NOT EXISTS friend_accounts (
+      id              TEXT PRIMARY KEY,
+      friend_code     TEXT UNIQUE NOT NULL,
+      secret_hash     TEXT NOT NULL,
+      username        TEXT,
+      created_at      INTEGER NOT NULL,
+      updated_at      INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS friend_requests (
       id              TEXT PRIMARY KEY,
+      sender_id       TEXT NOT NULL,
+      receiver_id     TEXT NOT NULL,
       from_code       TEXT NOT NULL,
       to_code         TEXT NOT NULL,
       from_name       TEXT,
@@ -146,13 +158,6 @@ function initDB() {
       updated_at      INTEGER NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS friend_accounts (
-      friend_code     TEXT PRIMARY KEY,
-      secret_hash     TEXT NOT NULL,
-      username        TEXT,
-      created_at      INTEGER NOT NULL
-    );
-
     CREATE TABLE IF NOT EXISTS friends (
       user_a          TEXT NOT NULL,
       user_b          TEXT NOT NULL,
@@ -169,24 +174,66 @@ function initDB() {
       status          TEXT DEFAULT 'valid',
       created_at      INTEGER NOT NULL
     );
+  `);
 
+  // Non-destructive schema migration for existing databases: ensure columns exist before indices
+  try {
+    _db.exec(`ALTER TABLE friend_accounts ADD COLUMN username TEXT;`);
+  } catch (_) {}
+
+  try {
+    _db.exec(`ALTER TABLE friend_accounts ADD COLUMN id TEXT;`);
+  } catch (_) {}
+
+  try {
+    _db.exec(`ALTER TABLE friend_accounts ADD COLUMN updated_at INTEGER;`);
+  } catch (_) {}
+
+  try {
+    _db.exec(`ALTER TABLE friend_requests ADD COLUMN sender_id TEXT;`);
+  } catch (_) {}
+
+  try {
+    _db.exec(`ALTER TABLE friend_requests ADD COLUMN receiver_id TEXT;`);
+  } catch (_) {}
+
+  // Backfill missing id and updated_at in friend_accounts
+  try {
+    const missingIdRows = _db.prepare(`SELECT rowid, friend_code, created_at FROM friend_accounts WHERE id IS NULL OR id = ''`).all();
+    for (const r of missingIdRows) {
+      const generatedId = 'usr_' + Buffer.from(r.friend_code).toString('hex').toLowerCase();
+      _db.prepare(`UPDATE friend_accounts SET id = ?, updated_at = ? WHERE rowid = ?`).run(generatedId, r.created_at || Date.now(), r.rowid);
+    }
+  } catch (_) {}
+
+  // Backfill sender_id and receiver_id in friend_requests
+  try {
+    const unlinkedReqs = _db.prepare(`SELECT id, from_code, to_code FROM friend_requests WHERE sender_id IS NULL OR receiver_id IS NULL`).all();
+    for (const req of unlinkedReqs) {
+      const sender = _db.prepare(`SELECT id FROM friend_accounts WHERE friend_code = ?`).get(req.from_code);
+      const receiver = _db.prepare(`SELECT id FROM friend_accounts WHERE friend_code = ?`).get(req.to_code);
+      const senderId = sender ? sender.id : ('usr_' + Buffer.from(req.from_code).toString('hex').toLowerCase());
+      const receiverId = receiver ? receiver.id : ('usr_' + Buffer.from(req.to_code).toString('hex').toLowerCase());
+      _db.prepare(`UPDATE friend_requests SET sender_id = ?, receiver_id = ? WHERE id = ?`).run(senderId, receiverId, req.id);
+    }
+  } catch (_) {}
+
+  // Create indices after columns are guaranteed to exist
+  _db.exec(`
     CREATE INDEX IF NOT EXISTS idx_media_group_date ON media(group_id, taken_at);
     CREATE INDEX IF NOT EXISTS idx_media_uploader ON media(group_id, uploader_id);
     CREATE INDEX IF NOT EXISTS idx_claim_token_exp ON claim_tokens(token, expires_at);
     CREATE INDEX IF NOT EXISTS idx_fr_to_code ON friend_requests(to_code, status);
     CREATE INDEX IF NOT EXISTS idx_fr_from_code ON friend_requests(from_code, status);
+    CREATE INDEX IF NOT EXISTS idx_fr_receiver ON friend_requests(receiver_id, status);
+    CREATE INDEX IF NOT EXISTS idx_fr_sender ON friend_requests(sender_id, status);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_fr_active_pending ON friend_requests(sender_id, receiver_id) WHERE status = 'pending';
     CREATE INDEX IF NOT EXISTS idx_ai_to_code ON album_invites(to_code, status);
     CREATE INDEX IF NOT EXISTS idx_friends_a ON friends(user_a);
     CREATE INDEX IF NOT EXISTS idx_friends_b ON friends(user_b);
     CREATE INDEX IF NOT EXISTS idx_invites_code ON invites(invite_code);
+    CREATE INDEX IF NOT EXISTS idx_fa_friend_code ON friend_accounts(friend_code);
   `);
-
-  // Non-destructive schema migration for existing databases
-  try {
-    _db.exec(`ALTER TABLE friend_accounts ADD COLUMN username TEXT;`);
-  } catch (_) {
-    // Column already exists
-  }
 
   process.once('exit', closeDB);
   process.once('SIGINT', () => { closeDB(); process.exit(); });

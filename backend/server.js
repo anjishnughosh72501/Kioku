@@ -63,6 +63,49 @@ function createApp() {
     }
   });
 
+  // Real Android App Links verification endpoint (Rule 8)
+  app.get('/.well-known/assetlinks.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.json([
+      {
+        relation: ['delegate_permission/common.handle_all_urls'],
+        target: {
+          namespace: 'android_app',
+          package_name: 'com.kioku.app',
+          sha256_cert_fingerprints: [
+            'E4:A1:26:4E:0A:88:B0:1B:D3:2B:B1:A9:DB:1C:61:B2:61:AA:3A:BD:1F:5D:D9:9E:1E:8E:0B:D3:C8:56:E8:08'
+          ]
+        }
+      }
+    ]);
+  });
+
+  // Real iOS Universal Links verification endpoint (Rule 9)
+  app.get(['/.well-known/apple-app-site-association', '/apple-app-site-association'], (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.json({
+      applinks: {
+        apps: [],
+        details: [
+          {
+            appID: 'TEAMID.com.kioku.app',
+            paths: ['/i/*', '/invite/*'],
+            components: [
+              {
+                '/': '/i/*',
+                comment: 'Kioku universal short invite link'
+              },
+              {
+                '/': '/invite/*',
+                comment: 'Kioku universal invite link'
+              }
+            ]
+          }
+        ]
+      }
+    });
+  });
+
   app.use('/claim', claimRoutes);
   app.use('/flashbacks', flashbackRoutes);
   app.use('/friends', friendsRoutes);
@@ -208,10 +251,17 @@ function createApp() {
     ${isValid ? `
       <h1>Connect with ${inviterName}</h1>
       <p>${inviterName} wants to share private, end-to-end encrypted memories with you on Kioku.</p>
-      <div class="code-badge">INVITE: ${code}</div>
-      <a href="${appDeepLink}" class="btn btn-primary">Open in Kioku</a>
+      <div class="code-badge" id="inviteBadge" onclick="copyInvite()" style="cursor:pointer;" title="Click to copy">INVITE: ${code} 📋</div>
+      <a href="${appDeepLink}" class="btn btn-primary">Join on Kioku • Open in Kioku</a>
       <a href="${webApkDownload}" class="btn btn-secondary">Download Kioku App (Android)</a>
       <script>
+        function copyInvite() {
+          navigator.clipboard.writeText("${code}").then(function() {
+            var b = document.getElementById('inviteBadge');
+            b.innerText = 'COPIED TO CLIPBOARD! ✓';
+            setTimeout(function() { b.innerText = 'INVITE: ${code} 📋'; }, 2000);
+          });
+        }
         // Attempt deep link launch on mobile
         window.location = "${appDeepLink}";
       </script>

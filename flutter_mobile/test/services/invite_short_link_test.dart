@@ -105,6 +105,13 @@ void main() {
 
       UserProfileService.instance.httpClient = MockClient((request) async {
         final path = request.url.path;
+        if (path == '/friends/token') {
+          return http.Response(
+            jsonEncode({'token': 'mock_token', 'friendCode': 'KIOKU-TEST'}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
         if (path == '/friends/invite') {
           return http.Response(
             jsonEncode({

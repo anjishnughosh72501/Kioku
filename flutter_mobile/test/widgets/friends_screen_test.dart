@@ -144,7 +144,7 @@ void main() {
         ProviderScope(
           overrides: [
             userInviteProvider.overrideWith((ref) {
-              final n = UserInviteNotifier();
+              final n = UserInviteNotifier(autoInit: false);
               n.state = const AsyncValue.data(
                 InviteCreation(code: '8F3KD2', url: 'https://kioku.app/i/8F3KD2'),
               );

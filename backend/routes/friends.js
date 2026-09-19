@@ -81,7 +81,17 @@ function requireFriendAuth(req, res, next) {
     if (!decoded || !decoded.friendCode) {
       return res.status(401).json({ error: 'Invalid token payload' });
     }
-    req.friend = { friendCode: decoded.friendCode };
+
+    let userId = decoded.userId;
+    if (!userId) {
+      const acc = db.prepare(`SELECT id FROM friend_accounts WHERE friend_code = ?`).get(decoded.friendCode);
+      userId = acc ? acc.id : ('usr_' + Buffer.from(decoded.friendCode).toString('hex').toLowerCase());
+    }
+
+    req.friend = {
+      userId,
+      friendCode: decoded.friendCode,
+    };
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired authorization token' });
@@ -91,7 +101,7 @@ function requireFriendAuth(req, res, next) {
 // 0. Issue / refresh authorization token for a friend code using device secret
 router.post('/token', TOKEN_LIMITER, (req, res, next) => {
   try {
-    const { friendCode, secret, username } = req.body;
+    const { friendCode, secret, username, userId } = req.body;
     if (!friendCode || !secret) {
       throw new HttpError(400, 'friendCode and secret are required');
     }
@@ -108,27 +118,81 @@ router.post('/token', TOKEN_LIMITER, (req, res, next) => {
 
     const secretHash = hashSecret(cleanSecret);
     const existing = db.prepare(`SELECT * FROM friend_accounts WHERE friend_code = ?`).get(cleanCode);
+    const now = Date.now();
+    let account;
 
     if (!existing) {
+      const canonicalUserId = (userId && String(userId).trim()) || ('usr_' + nanoid(12));
+      const cleanUsername = username ? String(username).trim() : null;
       db.prepare(
-        `INSERT INTO friend_accounts (friend_code, secret_hash, username, created_at) VALUES (?, ?, ?, ?)`
-      ).run(cleanCode, secretHash, username ? String(username).trim() : null, Date.now());
+        `INSERT INTO friend_accounts (id, friend_code, secret_hash, username, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
+      ).run(canonicalUserId, cleanCode, secretHash, cleanUsername, now, now);
+      account = {
+        id: canonicalUserId,
+        friend_code: cleanCode,
+        username: cleanUsername,
+        created_at: now,
+        updated_at: now,
+      };
     } else {
       if (existing.secret_hash !== secretHash) {
         throw new HttpError(401, 'Invalid device credentials for this friend code');
       }
-      if (username) {
-        db.prepare(`UPDATE friend_accounts SET username = ? WHERE friend_code = ?`).run(String(username).trim(), cleanCode);
+      let currentId = existing.id;
+      if (!currentId) {
+        currentId = 'usr_' + nanoid(12);
+        db.prepare(`UPDATE friend_accounts SET id = ?, updated_at = ? WHERE friend_code = ?`).run(currentId, now, cleanCode);
       }
+      if (username && String(username).trim() !== existing.username) {
+        const cleanUsername = String(username).trim();
+        db.prepare(`UPDATE friend_accounts SET username = ?, updated_at = ? WHERE friend_code = ?`).run(cleanUsername, now, cleanCode);
+        existing.username = cleanUsername;
+      }
+      account = {
+        ...existing,
+        id: currentId,
+      };
     }
 
     const token = jwt.sign(
-      { friendCode: cleanCode },
+      { userId: account.id, friendCode: cleanCode },
       process.env.JWT_SECRET,
       { expiresIn: '90d' }
     );
 
-    res.json({ token, friendCode: cleanCode });
+    res.json({
+      token,
+      friendCode: cleanCode,
+      user: {
+        id: account.id,
+        friendCode: cleanCode,
+        username: account.username,
+        createdAt: account.created_at,
+        updatedAt: account.updated_at || account.created_at,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 0b. Lookup public details of a friend code for pre-send confirmation (Method A)
+router.get('/lookup/:code', FRIENDS_LIMITER, (req, res, next) => {
+  try {
+    const rawCode = req.params.code;
+    if (!rawCode) {
+      throw new HttpError(400, 'friendCode parameter is required');
+    }
+    const cleanCode = String(rawCode).trim().toUpperCase();
+    const account = db.prepare(`SELECT id, friend_code, username FROM friend_accounts WHERE friend_code = ?`).get(cleanCode);
+    if (!account) {
+      return res.status(404).json({ exists: false, error: 'User not found' });
+    }
+    res.json({
+      exists: true,
+      friendCode: account.friend_code,
+      username: account.username || account.friend_code,
+    });
   } catch (err) {
     next(err);
   }
@@ -139,6 +203,7 @@ router.post('/request', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => 
   try {
     const { toCode, fromName } = req.body;
     const fromCode = req.friend.friendCode;
+    const fromUserId = req.friend.userId;
     if (!toCode) {
       throw new HttpError(400, 'toCode is required');
     }
@@ -150,7 +215,33 @@ router.post('/request', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => 
       throw new HttpError(400, 'Cannot send a friend request to yourself');
     }
 
-    // Check if an active pending request already exists
+    // Resolve receiver ID
+    const targetAccount = db.prepare(`SELECT id, username FROM friend_accounts WHERE friend_code = ?`).get(cleanTo);
+    const toUserId = targetAccount ? targetAccount.id : ('usr_' + Buffer.from(cleanTo).toString('hex').toLowerCase());
+
+    // Check if already connected friends
+    const u1 = cleanFrom < cleanTo ? cleanFrom : cleanTo;
+    const u2 = cleanFrom < cleanTo ? cleanTo : cleanFrom;
+    const existingFriend = db.prepare(`SELECT 1 FROM friends WHERE user_a = ? AND user_b = ?`).get(u1, u2);
+    if (existingFriend) {
+      return res.json({ status: 'already_friends', message: 'You are already friends', alreadyFriends: true });
+    }
+
+    // Check if reverse request exists (toCode already sent a pending request to me -> auto-accept!)
+    const reversePending = db.prepare(
+      `SELECT id, from_code, to_code FROM friend_requests WHERE from_code = ? AND to_code = ? AND status = 'pending'`
+    ).get(cleanTo, cleanFrom);
+
+    const now = Date.now();
+    if (reversePending) {
+      db.transaction(() => {
+        db.prepare(`UPDATE friend_requests SET status = 'accepted', updated_at = ? WHERE id = ?`).run(now, reversePending.id);
+        db.prepare(`INSERT OR IGNORE INTO friends (user_a, user_b, created_at) VALUES (?, ?, ?)`).run(u1, u2, now);
+      });
+      return res.json({ id: reversePending.id, status: 'accepted', autoAccepted: true, alreadySent: false });
+    }
+
+    // Check if an active pending request from me to toCode already exists
     const existing = db.prepare(
       `SELECT id, status FROM friend_requests WHERE from_code = ? AND to_code = ? AND status = 'pending'`
     ).get(cleanFrom, cleanTo);
@@ -160,12 +251,10 @@ router.post('/request', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => 
     }
 
     const id = nanoid(16);
-    const now = Date.now();
-
     db.prepare(
-      `INSERT INTO friend_requests (id, from_code, to_code, from_name, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'pending', ?, ?)`
-    ).run(id, cleanFrom, cleanTo, fromName ? String(fromName).trim() : null, now, now);
+      `INSERT INTO friend_requests (id, sender_id, receiver_id, from_code, to_code, from_name, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
+    ).run(id, fromUserId, toUserId, cleanFrom, cleanTo, fromName ? String(fromName).trim() : null, now, now);
 
     res.json({ id, status: 'pending', alreadySent: false });
   } catch (err) {
@@ -231,7 +320,7 @@ router.post('/ack', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
   }
 });
 
-// 4. Accept a friend request
+// 4. Accept a friend request (Atomic transaction)
 router.post('/accept', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
   try {
     const { requestId } = req.body;
@@ -240,25 +329,29 @@ router.post('/accept', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
     }
 
     const cleanCode = req.friend.friendCode;
+    const myUserId = req.friend.userId;
     const request = db.prepare(`SELECT * FROM friend_requests WHERE id = ?`).get(requestId);
 
     if (!request) {
       throw new HttpError(404, 'Friend request not found');
     }
 
-    if (request.to_code !== cleanCode) {
+    if (request.to_code !== cleanCode && request.receiver_id !== myUserId) {
       throw new HttpError(403, 'Unauthorized to accept this request');
     }
 
     const now = Date.now();
-    db.prepare(
-      `UPDATE friend_requests SET status = 'accepted', updated_at = ? WHERE id = ?`
-    ).run(now, requestId);
-
-    // Normalized bidirectional friendship insertion
     const u1 = cleanCode < request.from_code ? cleanCode : request.from_code;
     const u2 = cleanCode < request.from_code ? request.from_code : cleanCode;
-    db.prepare(`INSERT OR IGNORE INTO friends (user_a, user_b, created_at) VALUES (?, ?, ?)`).run(u1, u2, now);
+
+    // Atomic transaction: accept request + create normalized friendship
+    db.transaction(() => {
+      db.prepare(
+        `UPDATE friend_requests SET status = 'accepted', updated_at = ? WHERE id = ?`
+      ).run(now, requestId);
+
+      db.prepare(`INSERT OR IGNORE INTO friends (user_a, user_b, created_at) VALUES (?, ?, ?)`).run(u1, u2, now);
+    });
 
     res.json({
       ok: true,
@@ -279,13 +372,14 @@ router.post('/decline', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => 
     }
 
     const cleanCode = req.friend.friendCode;
+    const myUserId = req.friend.userId;
     const request = db.prepare(`SELECT * FROM friend_requests WHERE id = ?`).get(requestId);
 
     if (!request) {
       throw new HttpError(404, 'Friend request not found');
     }
 
-    if (request.to_code !== cleanCode) {
+    if (request.to_code !== cleanCode && request.receiver_id !== myUserId) {
       throw new HttpError(403, 'Unauthorized to decline this request');
     }
 
@@ -309,13 +403,14 @@ router.post('/cancel', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
     }
 
     const cleanCode = req.friend.friendCode;
+    const myUserId = req.friend.userId;
     const request = db.prepare(`SELECT * FROM friend_requests WHERE id = ?`).get(requestId);
 
     if (!request) {
       throw new HttpError(404, 'Friend request not found');
     }
 
-    if (request.from_code !== cleanCode) {
+    if (request.from_code !== cleanCode && request.sender_id !== myUserId) {
       throw new HttpError(403, 'Unauthorized to cancel this request');
     }
 
@@ -339,13 +434,14 @@ router.post('/resend', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
     }
 
     const cleanCode = req.friend.friendCode;
+    const myUserId = req.friend.userId;
     const request = db.prepare(`SELECT * FROM friend_requests WHERE id = ?`).get(requestId);
 
     if (!request) {
       throw new HttpError(404, 'Friend request not found');
     }
 
-    if (request.from_code !== cleanCode) {
+    if (request.from_code !== cleanCode && request.sender_id !== myUserId) {
       throw new HttpError(403, 'Unauthorized to resend this request');
     }
 
@@ -380,7 +476,7 @@ router.post('/remove', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
   }
 });
 
-// 5d. Get accepted friends list
+// 5d. Get accepted friends list (with real pagination)
 router.get('/list/:myCode', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
   try {
     const { myCode } = req.params;
@@ -389,12 +485,20 @@ router.get('/list/:myCode', FRIENDS_LIMITER, requireFriendAuth, (req, res, next)
       throw new HttpError(403, 'Forbidden: cannot access friend list for another code');
     }
 
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
     const rows = db.prepare(`
       SELECT CASE WHEN user_a = ? THEN user_b ELSE user_a END AS friendCode, created_at AS createdAt
       FROM friends
       WHERE user_a = ? OR user_b = ?
       ORDER BY created_at DESC
-    `).all(cleanCode, cleanCode, cleanCode);
+      LIMIT ? OFFSET ?
+    `).all(cleanCode, cleanCode, cleanCode, limit, offset);
+
+    const total = db.prepare(`
+      SELECT COUNT(*) AS count FROM friends WHERE user_a = ? OR user_b = ?
+    `).get(cleanCode, cleanCode).count;
 
     const enriched = rows.map((r) => {
       const acc = db.prepare(`SELECT username FROM friend_accounts WHERE friend_code = ?`).get(r.friendCode);
@@ -405,13 +509,13 @@ router.get('/list/:myCode', FRIENDS_LIMITER, requireFriendAuth, (req, res, next)
       };
     });
 
-    res.json({ friends: enriched });
+    res.json({ friends: enriched, total, limit, offset });
   } catch (err) {
     next(err);
   }
 });
 
-// 5e. Get sent friend requests (pending and expired)
+// 5e. Get sent friend requests (pending and expired with real pagination)
 router.get('/sent/:myCode', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
   try {
     const { myCode } = req.params;
@@ -420,12 +524,20 @@ router.get('/sent/:myCode', FRIENDS_LIMITER, requireFriendAuth, (req, res, next)
       throw new HttpError(403, 'Forbidden: cannot access sent requests for another code');
     }
 
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
     const rows = db.prepare(`
       SELECT id, from_code AS fromCode, to_code AS toCode, from_name AS fromName, status, created_at AS createdAt, updated_at AS updatedAt
       FROM friend_requests
       WHERE from_code = ?
       ORDER BY updated_at DESC
-    `).all(cleanCode);
+      LIMIT ? OFFSET ?
+    `).all(cleanCode, limit, offset);
+
+    const total = db.prepare(`
+      SELECT COUNT(*) AS count FROM friend_requests WHERE from_code = ?
+    `).get(cleanCode).count;
 
     const now = Date.now();
     const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
@@ -443,11 +555,12 @@ router.get('/sent/:myCode', FRIENDS_LIMITER, requireFriendAuth, (req, res, next)
       };
     });
 
-    res.json({ requests: enriched });
+    res.json({ requests: enriched, total, limit, offset });
   } catch (err) {
     next(err);
   }
 });
+
 
 // 5f. Create short universal invite link
 router.post('/invite', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
@@ -489,6 +602,76 @@ router.get('/invite/:code', FRIENDS_LIMITER, (req, res, next) => {
     next(err);
   }
 });
+
+// 5g-2. Confirm/Claim invite: Device B confirms invite from Device A, creating a friend request from A to B
+router.post('/invite/confirm', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {
+  try {
+    const { inviteCode } = req.body;
+    if (!inviteCode) {
+      throw new HttpError(400, 'inviteCode is required');
+    }
+
+    const cleanInviteCode = String(inviteCode).trim().toUpperCase();
+    const invite = db.prepare(`SELECT * FROM invites WHERE invite_code = ?`).get(cleanInviteCode);
+
+    if (!invite) {
+      throw new HttpError(404, 'Invite not found');
+    }
+
+    const now = Date.now();
+    if (invite.expires_at && invite.expires_at < now) {
+      db.prepare(`UPDATE invites SET status = 'expired' WHERE id = ?`).run(invite.id);
+      throw new HttpError(410, 'Invite has expired');
+    }
+
+    const cleanFrom = invite.created_by; // Device A
+    const cleanTo = req.friend.friendCode; // Device B
+    const toUserId = req.friend.userId;
+
+    if (cleanFrom === cleanTo) {
+      throw new HttpError(400, 'Cannot accept your own invite');
+    }
+
+    // Resolve inviter user ID
+    const inviterAccount = db.prepare(`SELECT id, username FROM friend_accounts WHERE friend_code = ?`).get(cleanFrom);
+    const fromUserId = inviterAccount ? inviterAccount.id : ('usr_' + Buffer.from(cleanFrom).toString('hex').toLowerCase());
+    const fromName = (inviterAccount && inviterAccount.username) || invite.from_name || 'Friend';
+
+    // Check if already friends
+    const u1 = cleanFrom < cleanTo ? cleanFrom : cleanTo;
+    const u2 = cleanFrom < cleanTo ? cleanTo : cleanFrom;
+    const existingFriend = db.prepare(`SELECT 1 FROM friends WHERE user_a = ? AND user_b = ?`).get(u1, u2);
+    if (existingFriend) {
+      return res.json({ status: 'already_friends', message: 'You are already friends', alreadyFriends: true });
+    }
+
+    // Check if a request from A to B already exists and is pending
+    const existing = db.prepare(
+      `SELECT id, status FROM friend_requests WHERE from_code = ? AND to_code = ? AND status = 'pending'`
+    ).get(cleanFrom, cleanTo);
+
+    if (existing) {
+      return res.json({ id: existing.id, status: 'pending', alreadySent: true, fromCode: cleanFrom, toCode: cleanTo });
+    }
+
+    const id = nanoid(16);
+    db.prepare(
+      `INSERT INTO friend_requests (id, sender_id, receiver_id, from_code, to_code, from_name, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
+    ).run(id, fromUserId, toUserId, cleanFrom, cleanTo, fromName, now, now);
+
+    res.json({
+      id,
+      status: 'pending',
+      fromCode: cleanFrom,
+      toCode: cleanTo,
+      fromName,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 
 // 5h. Update profile username
 router.post('/profile', FRIENDS_LIMITER, requireFriendAuth, (req, res, next) => {

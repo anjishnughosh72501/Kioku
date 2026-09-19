@@ -155,13 +155,37 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
           ),
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Column(
         children: [
-          _FriendsTab(onSwitchToAdd: () => _tabController.animateTo(3)),
-          const _IncomingTab(),
-          const _SentTab(),
-          _AddFriendTab(onInviteTap: () => InviteShareSheet.show(context)),
+          if (UserProfileService.instance.authStatus == FriendAuthStatus.offline)
+            Container(
+              color: Colors.amber.shade800,
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+              child: const Row(
+                children: [
+                  Icon(Icons.wifi_off_rounded, size: 16, color: Colors.white),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Offline mode — showing cached friends. Reconnect to sync.',
+                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _FriendsTab(onSwitchToAdd: () => _tabController.animateTo(3)),
+                const _IncomingTab(),
+                const _SentTab(),
+                _AddFriendTab(onInviteTap: () => InviteShareSheet.show(context)),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -847,6 +871,53 @@ class _AddFriendTabState extends ConsumerState<_AddFriendTab> {
       _codeError = null;
     });
 
+    FriendLookupResult? lookup;
+    try {
+      lookup = await UserProfileService.instance.lookupFriendCode(text);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _submittingCode = false;
+        _codeError = e is FriendException ? e.message : 'Unable to verify friend code';
+      });
+      return;
+    }
+
+    if (!mounted) return;
+
+    if (lookup == null) {
+      setState(() {
+        _submittingCode = false;
+        _codeError = 'Friend code not found. Please verify spelling.';
+      });
+      return;
+    }
+
+    // Show pre-send confirmation dialog
+    final recipientName = lookup.displayName;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Send Friend Request?'),
+        content: Text('Do you want to send a friend request to $recipientName ($text)?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Send Request'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) {
+      setState(() => _submittingCode = false);
+      return;
+    }
+
     final res = await UserProfileService.instance.sendFriendRequest(
       text,
       myName: UserProfileService.instance.username,
@@ -859,7 +930,7 @@ class _AddFriendTabState extends ConsumerState<_AddFriendTab> {
       _codeController.clear();
       ref.read(sentRequestsProvider.notifier).refresh();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Friend request sent to $text!')),
+        SnackBar(content: Text('Friend request sent to $recipientName!')),
       );
     } else if (res == FriendRequestResult.alreadyFriends) {
       setState(() => _codeError = 'Already in your friends list');

@@ -2,13 +2,17 @@ const request = require('supertest');
 
 process.env.JWT_SECRET = 'test-secret-key-1234567890-abcdefg';
 
-const { initDB } = require('../db');
+const db = require('../db');
+const { initDB } = db;
 const { createApp } = require('../server');
 
 let app;
 
 beforeAll(async () => {
   await initDB();
+  db.prepare(`DELETE FROM friends WHERE user_a LIKE 'KIOKU-%' OR user_b LIKE 'KIOKU-%'`).run();
+  db.prepare(`DELETE FROM friend_requests WHERE from_code LIKE 'KIOKU-%' OR to_code LIKE 'KIOKU-%'`).run();
+  db.prepare(`DELETE FROM friend_accounts WHERE friend_code LIKE 'KIOKU-%'`).run();
   app = createApp();
 });
 

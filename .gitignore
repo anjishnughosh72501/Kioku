@@ -12,6 +12,8 @@ backend.log
 # Databases & Runtime Storage
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 retro.db

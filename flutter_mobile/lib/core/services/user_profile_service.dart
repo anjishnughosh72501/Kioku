@@ -6,6 +6,47 @@ import 'package:flutter_mobile/core/config.dart';
 import 'package:flutter_mobile/core/network/http_client_helper.dart';
 import 'package:flutter_mobile/core/services/invite_service.dart';
 import 'package:flutter_mobile/core/storage/local_storage_service.dart';
+import 'package:flutter_mobile/core/util/kioku_log.dart';
+
+enum FriendAuthStatus {
+  unauthenticated,
+  authenticating,
+  authenticated,
+  authFailed,
+  offline,
+}
+
+class AuthException implements Exception {
+  final String message;
+  final int? statusCode;
+  const AuthException(this.message, {this.statusCode});
+
+  @override
+  String toString() => 'AuthException: $message (statusCode: $statusCode)';
+}
+
+class FriendException implements Exception {
+  final String message;
+  final String? code;
+  const FriendException(this.message, {this.code});
+
+  @override
+  String toString() => 'FriendException: $message ($code)';
+}
+
+class FriendLookupResult {
+  final bool exists;
+  final String friendCode;
+  final String? username;
+
+  const FriendLookupResult({
+    required this.exists,
+    required this.friendCode,
+    this.username,
+  });
+
+  String get displayName => (username != null && username!.isNotEmpty) ? username! : friendCode;
+}
 
 class UserProfile {
   final String username;
@@ -24,6 +65,7 @@ enum FriendRequestResult {
   sameUser,
   error,
 }
+
 
 class FriendRequest {
   final String id;
@@ -261,6 +303,25 @@ class UserProfileService {
   void addListener(void Function(UserProfile) listener) => _listeners.add(listener);
   void removeListener(void Function(UserProfile) listener) => _listeners.remove(listener);
 
+  FriendAuthStatus _authStatus = FriendAuthStatus.unauthenticated;
+  FriendAuthStatus get authStatus => _authStatus;
+  String? _canonicalUserId;
+  String? get canonicalUserId => _canonicalUserId;
+
+  final List<void Function(FriendAuthStatus)> _authStatusListeners = [];
+  void addAuthStatusListener(void Function(FriendAuthStatus) listener) => _authStatusListeners.add(listener);
+  void removeAuthStatusListener(void Function(FriendAuthStatus) listener) => _authStatusListeners.remove(listener);
+
+  void _setAuthStatus(FriendAuthStatus status) {
+    if (_authStatus != status) {
+      _authStatus = status;
+      KiokuLog.d('UserProfileService', 'FriendAuthStatus changed to: $status');
+      for (final listener in List.of(_authStatusListeners)) {
+        listener(status);
+      }
+    }
+  }
+
   UserProfile? get currentProfile => _currentProfile;
 
   Future<void> init() async {
@@ -295,6 +356,8 @@ class UserProfileService {
       return _cachedToken;
     }
 
+    _setAuthStatus(FriendAuthStatus.authenticating);
+
     final prefs = await SharedPreferences.getInstance();
     var secret = prefs.getString(_keyFriendSecret);
     if (secret == null || secret.isEmpty) {
@@ -312,25 +375,46 @@ class UserProfileService {
         body: jsonEncode({
           'friendCode': myCode,
           'secret': secret,
+          'username': username,
         }),
       );
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         _cachedToken = data['token'] as String?;
+        if (data['user'] is Map) {
+          _canonicalUserId = data['user']['id'] as String?;
+        }
+        _setAuthStatus(FriendAuthStatus.authenticated);
         return _cachedToken;
+      } else if (res.statusCode == 401 || res.statusCode == 403) {
+        _cachedToken = null;
+        _setAuthStatus(FriendAuthStatus.authFailed);
+        KiokuLog.e('UserProfileService', 'Auth rejected with status ${res.statusCode}');
+        throw AuthException('Authentication rejected by server (${res.statusCode})', statusCode: res.statusCode);
+      } else {
+        _cachedToken = null;
+        _setAuthStatus(FriendAuthStatus.authFailed);
+        KiokuLog.e('UserProfileService', 'Server error (${res.statusCode}) during auth');
+        throw AuthException('Server error (${res.statusCode}) during auth', statusCode: res.statusCode);
       }
-    } catch (_) {}
-    return null;
+    } catch (e) {
+      if (e is AuthException) rethrow;
+      _setAuthStatus(FriendAuthStatus.offline);
+      KiokuLog.e('UserProfileService', 'Failed to reach auth server: $e');
+      throw AuthException('Network unreachable / offline: $e');
+    }
   }
 
   Future<Map<String, String>> _authHeaders() async {
     final token = await getAuthToken();
-    final headers = {'Content-Type': 'application/json'};
-    if (token != null) {
-      headers['Authorization'] = 'Bearer $token';
+    if (token == null || token.isEmpty) {
+      throw const AuthException('No authentication token available');
     }
-    return headers;
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    };
   }
 
   bool get hasUsername =>
@@ -466,6 +550,66 @@ class UserProfileService {
     }
   }
 
+  /// Confirm/claim an invite code: Device B confirms invite from Device A,
+  /// creating a friend request from Device A to Device B.
+  Future<Map<String, dynamic>?> confirmInvite(String inviteCode) async {
+    final clean = inviteCode.trim().toUpperCase();
+    if (clean.isEmpty) return null;
+    try {
+      final headers = await _authHeaders();
+      final res = await clientHelper.post(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/invite/confirm'),
+        headers: headers,
+        body: jsonEncode({'inviteCode': clean}),
+      );
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        _notifyFriendListeners();
+        return data;
+      } else {
+        final err = jsonDecode(res.body);
+        throw FriendException(err['error'] ?? 'Could not confirm invite', code: err['code']);
+      }
+    } catch (e) {
+      KiokuLog.e('UserProfileService', 'Failed to confirm invite', e);
+      if (e is FriendException) rethrow;
+      throw FriendException('Unable to confirm invite: $e');
+    }
+  }
+
+  /// Method A pre-send lookup: inspect recipient identity before sending request
+  Future<FriendLookupResult?> lookupFriendCode(String code) async {
+    final clean = code.trim().toUpperCase();
+    if (clean.isEmpty) return null;
+    try {
+      final headers = await _authHeaders();
+      final res = await clientHelper.get(
+        Uri.parse('${AppConfig.backendBaseUrl}/friends/lookup/$clean'),
+        headers: headers,
+      );
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return FriendLookupResult(
+          exists: data['exists'] == true,
+          friendCode: data['friendCode'] as String? ?? clean,
+          username: data['username'] as String?,
+        );
+      } else if (res.statusCode == 404) {
+        return null;
+      } else {
+        final err = jsonDecode(res.body);
+        throw FriendException(err['error'] ?? 'Friend lookup failed', code: err['code']);
+      }
+    } catch (e) {
+      KiokuLog.e('UserProfileService', 'Lookup friend code failed', e);
+      if (e is FriendException) rethrow;
+      throw FriendException('Network error during lookup: $e');
+    }
+  }
+
+
   static const String _keyCachedFriendsJson = 'kioku_cached_friends_json';
 
   /// Reconcile local friend state with remote server (server is source of truth).
@@ -506,39 +650,23 @@ class UserProfileService {
                 .toList() ??
             [];
 
-        // Reconcile: server is authority.
-        final reconciled = <String, FriendUser>{};
-        for (final r in remoteList) {
-          final local = cachedMap[r.friendCode];
-          if (local != null && (local.updatedAt ?? 0) > (r.updatedAt ?? 0)) {
-            // Preserve optimistic timestamp if local is strictly newer
-            reconciled[r.friendCode] = FriendUser(
-              friendCode: r.friendCode,
-              username: r.username ?? local.username,
-              createdAt: r.createdAt ?? local.createdAt,
-              updatedAt: r.updatedAt ?? local.updatedAt,
-              status: r.status,
-            );
-          } else {
-            reconciled[r.friendCode] = r;
-          }
-        }
-
-        final list = reconciled.values.toList();
-        final codes = list.map((f) => f.friendCode).toList();
+        KiokuLog.d('UserProfileService', 'Fetched ${remoteList.length} remote friends for $myCode');
+        final codes = remoteList.map((f) => f.friendCode).toList();
         await prefs.setStringList(_keyConnectedFriends, codes);
         await prefs.setString(
           _keyCachedFriendsJson,
-          jsonEncode(list.map((f) => f.toJson()).toList()),
+          jsonEncode(remoteList.map((f) => f.toJson()).toList()),
         );
-        for (final f in list) {
+        for (final f in remoteList) {
           if (f.username != null && f.username!.isNotEmpty) {
             await prefs.setString('kioku_friend_name_${f.friendCode}', f.username!);
           }
         }
-        return list;
+        return remoteList;
       }
-    } catch (_) {}
+    } catch (e) {
+      KiokuLog.e('UserProfileService', 'getRemoteFriends offline or failed', e);
+    }
 
     // Offline fallback: use cached JSON records or local friend codes
     if (cachedMap.isNotEmpty) {

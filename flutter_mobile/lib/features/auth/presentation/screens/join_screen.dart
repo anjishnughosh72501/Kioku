@@ -11,6 +11,7 @@ import 'package:flutter_mobile/shared/widgets/washi_tape.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
 import 'package:flutter_mobile/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:flutter_mobile/features/auth/presentation/widgets/username_dialog.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class JoinScreen extends ConsumerWidget {
@@ -153,6 +154,18 @@ class JoinScreen extends ConsumerWidget {
                               ref.read(authControllerProvider.notifier).continueAsGuest();
                             },
                           ).animate().fadeIn(delay: 500.ms, duration: 300.ms),
+                          const SizedBox(height: AppTheme.spacingSm),
+                          TextButton.icon(
+                            onPressed: () => context.push('/recovery'),
+                            icon: Icon(Icons.key_rounded, size: 16, color: colors.inkMuted),
+                            label: Text(
+                              'Restore existing vault with 24-word phrase',
+                              style: typography.bodySmall?.copyWith(
+                                color: colors.inkMuted,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
                         ],
 
                         if (authState.error != null) ...[

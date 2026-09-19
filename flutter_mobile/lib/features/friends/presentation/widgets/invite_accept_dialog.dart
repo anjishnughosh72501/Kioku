@@ -83,35 +83,37 @@ class _InviteAcceptDialogState extends ConsumerState<InviteAcceptDialog> {
 
   Future<void> _acceptInvite() async {
     final res = _resolution;
-    if (res == null || res.friendCode == null) return;
+    if (res == null) return;
 
     setState(() => _submitting = true);
-    final toCode = res.friendCode!;
-    final result = await UserProfileService.instance.sendFriendRequest(
-      toCode,
-      myName: UserProfileService.instance.username,
-    );
+    final inviteCode = res.code ?? widget.inviteCode;
 
-    if (!mounted) return;
-    setState(() => _submitting = false);
+    try {
+      final confirmRes = await UserProfileService.instance.confirmInvite(inviteCode);
+      if (!mounted) return;
+      setState(() => _submitting = false);
 
-    Navigator.of(context).pop();
+      Navigator.of(context).pop();
 
-    ref.read(sentRequestsProvider.notifier).refresh();
-    ref.read(friendsListProvider.notifier).refresh();
+      ref.read(incomingRequestsProvider.notifier).refresh();
+      ref.read(sentRequestsProvider.notifier).refresh();
+      ref.read(friendsListProvider.notifier).refresh();
 
-    final name = res.username ?? toCode;
-    if (result == FriendRequestResult.sent || result == FriendRequestResult.alreadySent) {
+      final name = res.username ?? res.friendCode ?? 'your friend';
+      if (confirmRes != null && confirmRes['status'] == 'already_friends') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('You are already friends with $name!')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Invite confirmed with $name! Friend request received.')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Friend request sent to $name!')),
-      );
-    } else if (result == FriendRequestResult.alreadyFriends) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('You are already friends with $name!')),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not send friend request. Please try again.')),
+        SnackBar(content: Text(e is FriendException ? e.message : 'Could not confirm invite: $e')),
       );
     }
   }

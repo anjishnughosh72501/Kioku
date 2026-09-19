@@ -222,12 +222,14 @@ final friendsUnreadBadgeProvider = Provider<int>((ref) {
 
 // --- Short Universal Invite Provider ---
 class UserInviteNotifier extends StateNotifier<AsyncValue<InviteCreation?>> {
-  UserInviteNotifier() : super(const AsyncValue.loading()) {
-    loadOrGenerate();
+  UserInviteNotifier({bool autoInit = true}) : super(const AsyncValue.loading()) {
+    if (autoInit) {
+      loadOrGenerate();
+    }
   }
 
   Future<void> loadOrGenerate({bool forceRefresh = false}) async {
-    if (!forceRefresh && state.value != null) return;
+    if (!forceRefresh && state.valueOrNull != null) return;
     state = const AsyncValue.loading();
     try {
       final invite = await UserProfileService.instance.createUniversalInvite();
