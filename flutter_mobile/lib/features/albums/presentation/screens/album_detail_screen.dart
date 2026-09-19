@@ -11,8 +11,11 @@ import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/providers.dart';
 import 'package:flutter_mobile/core/services/invite_service.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
+import 'package:flutter_mobile/shared/design_system/index.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
 import 'package:flutter_mobile/shared/widgets/drive_thumb.dart';
+
+
 
 class AlbumDetailScreen extends ConsumerStatefulWidget {
   const AlbumDetailScreen({
@@ -380,237 +383,188 @@ class _AlbumDetailScreenState extends ConsumerState<AlbumDetailScreen> {
             await ref.read(memoriesProvider.notifier).refresh();
           },
           child: CustomScrollView(
-          slivers: [
-            SliverAppBar(
-              backgroundColor: colors.background,
-              pinned: true,
-              elevation: 0,
-              title: Text(
-                currentAlbum.title,
-                style: typography.headlineSmall?.copyWith(
-                  color: colors.ink,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 20,
-                ),
-              ),
-              actions: [
-                IconButton(
-                  tooltip: 'Change Cover Photo',
-                  icon: Icon(
-                    hasCover ? Icons.edit_outlined : Icons.add_photo_alternate_outlined,
-                    color: colors.primary,
+            slivers: [
+              SliverAppBar(
+                backgroundColor: colors.surfaceContainer,
+                pinned: true,
+                expandedHeight: 220,
+                elevation: 0,
+                flexibleSpace: FlexibleSpaceBar(
+                  titlePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  title: Text(
+                    currentAlbum.title,
+                    style: typography.titleLarge?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                  onPressed: () => _pickThumbnail(context, ref, currentAlbum),
-                ),
-                IconButton(
-                  tooltip: 'Share Invite Link',
-                  icon: Icon(Icons.share_outlined, color: colors.accentDark),
-                  onPressed: () => _shareInviteLink(currentAlbum.title),
-                ),
-                IconButton(
-                  tooltip: 'Invite Friends',
-                  icon: Icon(Icons.person_add_alt_1_outlined, color: colors.primary),
-                  onPressed: () => _showInviteDialog(context, colors, typography, currentAlbum.title),
-                ),
-                const SizedBox(width: 4),
-              ],
-            ),
-
-            // Optional Cover Banner
-            if (hasCover)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppTheme.spacingMd,
-                    vertical: AppTheme.spacingSm,
-                  ),
-                  child: Stack(
+                  background: Stack(
+                    fit: StackFit.expand,
                     children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-                        child: SizedBox(
-                          height: 150,
-                          width: double.infinity,
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              Image.file(
-                                File(currentAlbum.thumbnailPath!),
-                                fit: BoxFit.cover,
-                              ),
-                              Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [
-                                      Colors.transparent,
-                                      Colors.black.withValues(alpha: 0.65),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
+                      if (hasCover)
+                        Image.file(
+                          File(currentAlbum.thumbnailPath!),
+                          fit: BoxFit.cover,
+                        )
+                      else
+                        Container(
+                          color: colors.primary.withValues(alpha: 0.25),
+                          child: Center(
+                            child: Icon(
+                              Icons.photo_library_outlined,
+                              size: 64,
+                              color: colors.primary.withValues(alpha: 0.4),
+                            ),
                           ),
                         ),
-                      ),
-                      Positioned(
-                        bottom: 10,
-                        right: 10,
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () => _pickThumbnail(context, ref, currentAlbum),
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.6),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.white38, width: 0.8),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.edit_outlined, size: 13, color: Colors.white),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'Change Cover',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.40),
+                              Colors.transparent,
+                              Colors.black.withValues(alpha: 0.85),
+                            ],
+                            stops: const [0.0, 0.4, 1.0],
                           ),
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
-
-            // Members bar
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppTheme.spacingMd,
-                  vertical: AppTheme.spacingSm,
-                ),
-                child: FutureBuilder<List<AlbumMember>>(
-                  future: _membersFuture,
-                  builder: (context, snapshot) {
-                    final members = snapshot.data ?? [];
-                    if (members.isEmpty) return const SizedBox.shrink();
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: colors.surfaceContainer,
-                        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-                        border: Border.all(color: colors.divider, width: 0.5),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.group_outlined, size: 16, color: colors.inkMuted),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              '${members.length} ${members.length == 1 ? "member" : "members"}: ${members.map((m) => m.displayName ?? m.email.split('@').first).join(', ')}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
- style: typography.bodySmall?.copyWith(
- color: colors.inkMuted,
- fontSize: 12,
- ),
- ),
- ),
- ],
- ),
- );
- },
- ),
- ),
- ),
-
- // 2x2 Photo Grid
- if (memoriesAsync.isLoading && memories.isEmpty)
- SliverFillRemaining(
- child: Center(child: CircularProgressIndicator(color: colors.primary)),
- )
- else if (memories.isEmpty)
- SliverFillRemaining(
- child: Center(
- child: Column(
- mainAxisAlignment: MainAxisAlignment.center,
- children: [
- Icon(Icons.photo_outlined, size: 54, color: colors.inkMuted.withValues(alpha: 0.5)),
- const SizedBox(height: 12),
- Text('No photos yet', style: typography.headlineSmall?.copyWith(color: colors.ink)),
- const SizedBox(height: 6),
- Text('Capture photos to add them to this album.',
- style: typography.bodySmall?.copyWith(color: colors.inkMuted)),
-                  const SizedBox(height: 18),
-                  ClayButton(
-                    label: 'Add Photo',
-                    icon: const Icon(Icons.camera_alt_outlined, size: 16),
-                    onPressed: () => context.push('/upload'),
+                actions: [
+                  IconButton(
+                    tooltip: 'Change Cover Photo',
+                    icon: Icon(
+                      hasCover ? Icons.edit_outlined : Icons.add_photo_alternate_outlined,
+                      color: Colors.white,
+                    ),
+                    onPressed: () => _pickThumbnail(context, ref, currentAlbum),
                   ),
+                  IconButton(
+                    tooltip: 'Share Invite Link',
+                    icon: const Icon(Icons.share_outlined, color: Colors.white),
+                    onPressed: () => _shareInviteLink(currentAlbum.title),
+                  ),
+                  IconButton(
+                    tooltip: 'Invite Friends',
+                    icon: const Icon(Icons.person_add_alt_1_outlined, color: Colors.white),
+                    onPressed: () => _showInviteDialog(context, colors, typography, currentAlbum.title),
+                  ),
+                  const SizedBox(width: 4),
                 ],
               ),
-            ),
-          )
-        else
-          SliverPadding(
-            padding: const EdgeInsets.all(AppTheme.spacingSm),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 3,
-                mainAxisSpacing: 3,
-                childAspectRatio: 1.0,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final memory = memories[index];
-                  return RepaintBoundary(
-                    key: ValueKey(memory.id),
-                    child: GestureDetector(
-                      onTap: () => context.push('/media/${memory.id}', extra: memory),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusPhoto),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            DriveThumb(memory: memory),
-                            if (memory.isVideo)
-                              Align(
-                                alignment: Alignment.center,
-                                child: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withValues(alpha: 0.5),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(Icons.play_arrow, color: Colors.white, size: 24),
+
+              // Members & Security Bar
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppTheme.spacingMd,
+                    AppTheme.spacingMd,
+                    AppTheme.spacingMd,
+                    AppTheme.spacingSm,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      FutureBuilder<List<AlbumMember>>(
+                        future: _membersFuture,
+                        builder: (context, snapshot) {
+                          final members = snapshot.data ?? [];
+                          final avatarItems = members
+                              .map((m) => AvatarItem(name: m.displayName, email: m.email))
+                              .toList();
+                          return Row(
+                            children: [
+                              AvatarStack(avatars: avatarItems, size: 28),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${members.length} ${members.length == 1 ? "member" : "members"}',
+                                style: typography.bodySmall?.copyWith(
+                                  color: colors.inkMuted,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                          ],
-                        ),
+                            ],
+                          );
+                        },
                       ),
-                    ),
-                  );
-                },
-                childCount: memories.length,
+                      const EncryptedBadge(
+                        variant: EncryptedBadgeVariant.standard,
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
+
+              // 2x2 Photo Grid
+              if (memoriesAsync.isLoading && memories.isEmpty)
+                SliverFillRemaining(
+                  child: Center(child: CircularProgressIndicator(color: colors.primary)),
+                )
+              else if (memories.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: KiokuEmptyState(
+                    icon: Icons.photo_outlined,
+                    title: 'No memories in this album',
+                    subtitle: 'Be the first to capture or upload a memory to "${currentAlbum.title}".',
+                    buttonText: 'Add First Memory',
+                    onButtonPressed: () => context.push('/upload'),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.all(AppTheme.spacingSm),
+                  sliver: SliverGrid(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 3,
+                      mainAxisSpacing: 3,
+                      childAspectRatio: 1.0,
+                    ),
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final memory = memories[index];
+                        return RepaintBoundary(
+                          key: ValueKey(memory.id),
+                          child: GestureDetector(
+                            onTap: () => context.push('/media/${memory.id}', extra: memory),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(AppTheme.radiusPhoto),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  DriveThumb(memory: memory),
+                                  if (memory.isVideo)
+                                    Align(
+                                      alignment: Alignment.center,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withValues(alpha: 0.5),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(Icons.play_arrow, color: Colors.white, size: 24),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                      childCount: memories.length,
+                    ),
+                  ),
+                ),
+            ],
           ),
-      ],
-    ),
-  ),
-),
-);
+        ),
+      ),
+    );
+  }
 }
-}
+

@@ -8,6 +8,8 @@ import 'package:flutter_mobile/core/providers.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
 import 'package:flutter_mobile/shared/widgets/drive_thumb.dart';
+import 'package:flutter_mobile/shared/design_system/encrypted_badge.dart';
+
 
 class MemoryCard extends ConsumerWidget {
   const MemoryCard({
@@ -180,9 +182,16 @@ class MemoryCard extends ConsumerWidget {
                         ],
                       ),
                     ),
-                    Text(
-                      item.postmarkDate,
-                      style: typography.bodySmall?.copyWith(color: colors.inkMuted, fontSize: 11),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const EncryptedBadge(variant: EncryptedBadgeVariant.compact),
+                        const SizedBox(width: 8),
+                        Text(
+                          item.postmarkDate,
+                          style: typography.bodySmall?.copyWith(color: colors.inkMuted, fontSize: 11),
+                        ),
+                      ],
                     ),
                   ],
                 ),

@@ -8,8 +8,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/providers.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
+import 'package:flutter_mobile/shared/design_system/index.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
 import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
+
 
 class AlbumsScreen extends ConsumerWidget {
   const AlbumsScreen({super.key});
@@ -157,45 +159,13 @@ class AlbumsScreen extends ConsumerWidget {
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       children: [
-        const SizedBox(height: 100),
-        Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.photo_library_outlined,
-                  size: 64,
-                  color: colors.inkMuted.withValues(alpha: 0.6),
-                ),
-                const SizedBox(height: AppTheme.spacingLg),
-                Text(
-                  'No albums yet',
-                  style: typography.headlineSmall?.copyWith(
-                    color: colors.ink,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: AppTheme.spacingSm),
-                Text(
-                  'Create an album to organize your photos and share with close friends.',
-                  textAlign: TextAlign.center,
-                  style: typography.bodyMedium?.copyWith(
-                    color: colors.inkMuted,
-                  ),
-                ),
-                const SizedBox(height: AppTheme.spacingLg),
-                ClayButton(
-                  label: 'Create First Album',
-                  icon: const Icon(Icons.add, size: 18),
-                  variant: ClayButtonVariant.primary,
-                  onPressed: () => CreateAlbumDialog.show(context),
-                ),
-              ],
-            ),
-          ),
+        const SizedBox(height: 60),
+        KiokuEmptyState(
+          icon: Icons.photo_library_outlined,
+          title: 'No albums yet',
+          subtitle: 'Create an album to organize your photos and share with close friends.',
+          buttonText: 'Create First Album',
+          onButtonPressed: () => CreateAlbumDialog.show(context),
         ),
       ],
     );

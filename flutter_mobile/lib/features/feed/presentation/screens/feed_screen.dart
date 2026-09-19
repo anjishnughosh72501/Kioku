@@ -16,13 +16,15 @@ import 'package:flutter_mobile/features/feed/presentation/widgets/memory_card.da
 
 import 'package:flutter_mobile/features/feed/presentation/widgets/album_dropdown.dart';
 import 'package:flutter_mobile/features/auth/presentation/widgets/username_dialog.dart';
-import 'package:flutter_mobile/features/feed/presentation/widgets/shimmer_skeleton_card.dart';
+
 import 'package:flutter_mobile/features/friends/presentation/controllers/friends_controller.dart';
 import 'package:flutter_mobile/features/friends/presentation/widgets/invite_accept_dialog.dart';
 import 'package:flutter_mobile/core/services/deep_link_service.dart';
+import 'package:flutter_mobile/shared/design_system/index.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
 import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 
 class FeedScreen extends ConsumerStatefulWidget {
   const FeedScreen({super.key});
@@ -130,10 +132,6 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
           ),
         ),
       ),
-      floatingActionButton: _buildFloatingCapture(colors)
-          .animate()
-          .scale(delay: 600.ms, duration: 400.ms, curve: Curves.elasticOut),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 
@@ -252,9 +250,11 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
           ),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate(
-              (context, index) => const Padding(
-                padding: EdgeInsets.only(bottom: AppTheme.spacingMd),
-                child: ShimmerSkeletonCard(),
+              (context, index) => Padding(
+                padding: const EdgeInsets.only(bottom: AppTheme.spacingMd),
+                child: index == 0
+                    ? const MemorySkeleton(isHero: true)
+                    : const MemorySkeleton(),
               ),
               childCount: 3,
             ),
@@ -315,6 +315,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                   child: _buildDayHeader(entry.day, colors, typography),
                 );
               } else if (entry is _FeedMemoryEntry) {
+                final isFirstMemory = entry.memory.id == items.first.id;
                 final card = Padding(
                   key: ValueKey(entry.memory.id),
                   padding: const EdgeInsets.fromLTRB(
@@ -323,14 +324,22 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                     AppTheme.spacingMd,
                     AppTheme.spacingMd,
                   ),
-                  child: MemoryCard(
-                    item: entry.memory,
-                    colors: colors,
-                    typography: typography,
-                    albumName: entry.memory.albumName ??
-                        albumsList.where((a) => a.id == entry.memory.albumId).firstOrNull?.title ??
-                        currentAlbumName,
-                  ),
+                  child: isFirstMemory
+                      ? HeroMemoryCard(
+                          item: entry.memory,
+                          badgeLabel: "TODAY'S MEMORY",
+                          albumName: entry.memory.albumName ??
+                              albumsList.where((a) => a.id == entry.memory.albumId).firstOrNull?.title ??
+                              currentAlbumName,
+                        )
+                      : MemoryCard(
+                          item: entry.memory,
+                          colors: colors,
+                          typography: typography,
+                          albumName: entry.memory.albumName ??
+                              albumsList.where((a) => a.id == entry.memory.albumId).firstOrNull?.title ??
+                              currentAlbumName,
+                        ),
                 );
                 final disableAnims = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
                 if (disableAnims) return card;
@@ -376,7 +385,18 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
   }
 
   String _dayLabel(DateTime day) {
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final memoryDay = DateTime(day.year, day.month, day.day);
+    final diffDays = today.difference(memoryDay).inDays;
+
+    if (diffDays == 0) return 'Today';
+    if (diffDays == 1) return 'Yesterday';
+    if (diffDays > 1 && diffDays < 7) {
+      const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      return 'This ${days[day.weekday - 1]}';
+    }
+
     const months = [
       'Jan',
       'Feb',
@@ -391,7 +411,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
       'Nov',
       'Dec',
     ];
-    return '${days[day.weekday - 1]}, ${months[day.month - 1]} ${day.day}';
+    return '${months[day.month - 1]} ${day.day}, ${day.year}';
   }
 
   Widget _buildDayHeader(DateTime day, AppColors colors, TextTheme typography) {
@@ -444,82 +464,38 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
         (albums.isNotEmpty ? albums.first : null);
     final hasAlbums = albums.isNotEmpty;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppTheme.spacingXxl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              hasAlbums ? Icons.photo_library_outlined : Icons.auto_stories_outlined,
-              size: 64,
-              color: colors.inkMuted,
-            ),
-            const SizedBox(height: AppTheme.spacingLg),
-            Text(
-              'No memories yet',
-              style: typography.headlineSmall?.copyWith(color: colors.ink, fontSize: 20),
-            ),
-            const SizedBox(height: AppTheme.spacingSm),
-            Text(
-              hasAlbums
-                  ? (activeAlbum != null
-                      ? 'Capture your first memory in "${activeAlbum.title}"'
-                      : 'Capture your first memory to get started')
-                  : 'Create your first album to get started preserving memories.',
-              style: typography.bodyMedium?.copyWith(color: colors.inkMuted),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: AppTheme.spacingMd),
-            ClayButton(
-              label: hasAlbums ? 'Add a memory' : 'Create your first album',
-              variant: ClayButtonVariant.primary,
-              onPressed: () async {
-                if (hasAlbums) {
-                  context.push('/upload');
-                } else {
-                  final name = await CreateAlbumDialog.show(context);
-                  if (name != null && mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Album "$name" created')),
-                    );
-                  }
-                }
-              },
-            ),
-            if (hasAlbums) ...[
-              const SizedBox(height: AppTheme.spacingSm),
-              TextButton(
-                onPressed: () async {
-                  final name = await CreateAlbumDialog.show(context);
-                  if (name != null && mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Album "$name" created')),
-                    );
-                  }
-                },
-                child: Text(
-                  'Create another album',
-                  style: typography.bodySmall?.copyWith(color: colors.accentDark),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFloatingCapture(AppColors colors) {
-    return FloatingActionButton.extended(
-      onPressed: () => context.push('/upload'),
-      backgroundColor: colors.primary,
-      foregroundColor: colors.brightness == Brightness.dark ? const Color(0xFF140E0A) : Colors.white,
-      elevation: 8,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusPill)),
-      icon: const Icon(Icons.add, size: 24),
-      label: const Text('Capture'),
-      extendedPadding: const EdgeInsets.symmetric(horizontal: 24),
+    return KiokuEmptyState(
+      icon: hasAlbums ? Icons.photo_library_outlined : Icons.auto_stories_outlined,
+      title: 'No memories yet',
+      subtitle: hasAlbums
+          ? (activeAlbum != null
+              ? 'Capture your first memory in "${activeAlbum.title}"'
+              : 'Capture your first memory to get started')
+          : 'Create your first album to get started preserving memories.',
+      buttonText: hasAlbums ? 'Add a memory' : 'Create your first album',
+      onButtonPressed: () async {
+        if (hasAlbums) {
+          context.push('/upload');
+        } else {
+          final name = await CreateAlbumDialog.show(context);
+          if (name != null && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Album "$name" created')),
+            );
+          }
+        }
+      },
+      secondaryButtonText: hasAlbums ? 'Create another album' : null,
+      onSecondaryPressed: hasAlbums
+          ? () async {
+              final name = await CreateAlbumDialog.show(context);
+              if (name != null && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Album "$name" created')),
+                );
+              }
+            }
+          : null,
     );
   }
 }

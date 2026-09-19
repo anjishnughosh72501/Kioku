@@ -8,7 +8,10 @@ import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/features/friends/presentation/controllers/friends_controller.dart';
 import 'package:flutter_mobile/features/friends/presentation/widgets/invite_accept_dialog.dart';
 import 'package:flutter_mobile/features/friends/presentation/widgets/invite_share_sheet.dart';
+import 'package:flutter_mobile/features/friends/presentation/widgets/qr_scanner_dialog.dart';
+import 'package:flutter_mobile/shared/design_system/index.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
+
 
 class FriendsScreen extends ConsumerStatefulWidget {
   const FriendsScreen({super.key, this.initialTabIndex = 0});
@@ -69,8 +72,25 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
         ),
         actions: [
           IconButton(
+            tooltip: 'Scan QR Code',
+            icon: Icon(Icons.qr_code_scanner_rounded, color: colors.primary),
+            onPressed: () {
+              QrScannerDialog.show(
+                context,
+                onScanned: (scanned) {
+                  final clean = scanned.trim();
+                  if (clean.contains('i/') || clean.contains('invite') || clean.contains('http') || clean.contains('kioku://')) {
+                    InviteAcceptDialog.show(context, clean);
+                  } else {
+                    _tabController.animateTo(3);
+                  }
+                },
+              );
+            },
+          ),
+          IconButton(
             tooltip: 'Invite Friends',
-            icon: Icon(Icons.qr_code_rounded, color: colors.primary),
+            icon: Icon(Icons.qr_code_rounded, color: colors.accentDark),
             onPressed: () => InviteShareSheet.show(context),
           ),
         ],
@@ -203,7 +223,6 @@ class _FriendsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.kiokuColors;
-    final typography = Theme.of(context).textTheme;
     final friendsAsync = ref.watch(friendsListProvider);
 
     return RefreshIndicator(
@@ -212,48 +231,14 @@ class _FriendsTab extends ConsumerWidget {
       child: friendsAsync.when(
         data: (friends) {
           if (friends.isEmpty) {
-            return Center(
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(AppTheme.spacingXl),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: colors.surfaceContainer,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: colors.divider),
-                      ),
-                      child: Icon(Icons.people_outline_rounded, size: 40, color: colors.inkMuted),
-                    ),
-                    const SizedBox(height: AppTheme.spacingLg),
-                    Text(
-                      'No friends yet',
-                      style: typography.titleLarge?.copyWith(
-                        color: colors.ink,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Invite someone to begin sharing encrypted memories & shared albums.',
-                      textAlign: TextAlign.center,
-                      style: typography.bodyMedium?.copyWith(
-                        color: colors.inkMuted,
-                      ),
-                    ),
-                    const SizedBox(height: AppTheme.spacingLg),
-                    ClayButton(
-                      label: 'Invite Friends',
-                      icon: const Icon(Icons.person_add_alt_1_outlined, size: 18),
-                      variant: ClayButtonVariant.primary,
-                      onPressed: onSwitchToAdd,
-                    ),
-                  ],
-                ),
+            return SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: KiokuEmptyState(
+                icon: Icons.people_outline_rounded,
+                title: 'No friends yet',
+                subtitle: 'Invite someone to begin sharing encrypted memories & shared albums.',
+                buttonText: 'Invite Friends',
+                onButtonPressed: onSwitchToAdd,
               ),
             );
           }
@@ -434,8 +419,8 @@ class _IncomingTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.kiokuColors;
-    final typography = Theme.of(context).textTheme;
     final incomingAsync = ref.watch(incomingRequestsProvider);
+
 
     return RefreshIndicator(
       color: colors.primary,
@@ -443,41 +428,12 @@ class _IncomingTab extends ConsumerWidget {
       child: incomingAsync.when(
         data: (requests) {
           if (requests.isEmpty) {
-            return Center(
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(AppTheme.spacingXl),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: colors.surfaceContainer,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: colors.divider),
-                      ),
-                      child: Icon(Icons.inbox_rounded, size: 40, color: colors.inkMuted),
-                    ),
-                    const SizedBox(height: AppTheme.spacingLg),
-                    Text(
-                      'No incoming requests',
-                      style: typography.titleLarge?.copyWith(
-                        color: colors.ink,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'When someone adds you using your Friend Code or short invite link, their request appears here.',
-                      textAlign: TextAlign.center,
-                      style: typography.bodyMedium?.copyWith(
-                        color: colors.inkMuted,
-                      ),
-                    ),
-                  ],
-                ),
+            return const SingleChildScrollView(
+              physics: AlwaysScrollableScrollPhysics(),
+              child: KiokuEmptyState(
+                icon: Icons.inbox_rounded,
+                title: 'No incoming requests',
+                subtitle: 'When someone adds you using your Friend Code or short invite link, their request appears here.',
               ),
             );
           }
@@ -628,8 +584,8 @@ class _SentTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.kiokuColors;
-    final typography = Theme.of(context).textTheme;
     final sentAsync = ref.watch(sentRequestsProvider);
+
 
     return RefreshIndicator(
       color: colors.primary,
@@ -637,41 +593,12 @@ class _SentTab extends ConsumerWidget {
       child: sentAsync.when(
         data: (sentRequests) {
           if (sentRequests.isEmpty) {
-            return Center(
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(AppTheme.spacingXl),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: colors.surfaceContainer,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: colors.divider),
-                      ),
-                      child: Icon(Icons.outbox_rounded, size: 40, color: colors.inkMuted),
-                    ),
-                    const SizedBox(height: AppTheme.spacingLg),
-                    Text(
-                      'No sent requests',
-                      style: typography.titleLarge?.copyWith(
-                        color: colors.ink,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Friend requests you send to others will be tracked here until accepted.',
-                      textAlign: TextAlign.center,
-                      style: typography.bodyMedium?.copyWith(
-                        color: colors.inkMuted,
-                      ),
-                    ),
-                  ],
-                ),
+            return const SingleChildScrollView(
+              physics: AlwaysScrollableScrollPhysics(),
+              child: KiokuEmptyState(
+                icon: Icons.outbox_rounded,
+                title: 'No sent requests',
+                subtitle: 'Friend requests you send to others will be tracked here until accepted.',
               ),
             );
           }
@@ -1125,6 +1052,40 @@ class _AddFriendTabState extends ConsumerState<_AddFriendTab> {
                   label: _resolvingLink ? 'Checking...' : 'Open Invite Confirmation',
                   variant: ClayButtonVariant.primary,
                   onPressed: _resolvingLink ? () {} : _resolvePastedLink,
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    HapticFeedback.selectionClick();
+                    QrScannerDialog.show(
+                      context,
+                      onScanned: (scanned) {
+                        final clean = scanned.trim();
+                        if (clean.contains('i/') || clean.contains('invite') || clean.contains('http') || clean.contains('kioku://')) {
+                          _linkController.text = clean;
+                          _resolvePastedLink();
+                        } else {
+                          _codeController.text = clean.toUpperCase();
+                          _submitFriendCode();
+                        }
+                      },
+                    );
+                  },
+                  icon: Icon(Icons.qr_code_scanner_rounded, size: 18, color: colors.primary),
+                  label: Text(
+                    'Scan QR Code',
+                    style: typography.bodyMedium?.copyWith(
+                      color: colors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: colors.primary.withValues(alpha: 0.5)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusButton),
+                    ),
+                  ),
                 ),
               ],
             ),

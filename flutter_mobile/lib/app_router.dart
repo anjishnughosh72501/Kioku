@@ -159,11 +159,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/flashbacks',
-                name: 'flashbacks',
-                pageBuilder: (context, state) => const NoTransitionPage(
-                  child: FlashbacksScreen(),
-                ),
+                path: '/friends',
+                name: 'friends',
+                pageBuilder: (context, state) {
+                  final tab = state.uri.queryParameters['tab'];
+                  final initialTab = tab != null ? int.tryParse(tab) ?? 0 : 0;
+                  return NoTransitionPage(
+                    child: FriendsScreen(initialTabIndex: initialTab),
+                  );
+                },
               ),
             ],
           ),
@@ -179,6 +183,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+      GoRoute(
+        path: '/flashbacks',
+        name: 'flashbacks',
+        pageBuilder: (context, state) => buildPushTransitionPage(
+          key: state.pageKey,
+          child: const FlashbacksScreen(),
+        ),
       ),
       GoRoute(
         path: '/albums/:id',
@@ -218,25 +230,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           }
           // Redirect legacy query parameters to /friends without direct state mutation
           return '/friends';
-        },
-      ),
-      GoRoute(
-        path: '/friends',
-        name: 'friends',
-        pageBuilder: (context, state) {
-          final tab = state.uri.queryParameters['tab'];
-          final initialTab = tab != null ? int.tryParse(tab) ?? 0 : 0;
-          return CustomTransitionPage(
-            key: state.pageKey,
-            child: FriendsScreen(initialTabIndex: initialTab),
-            transitionDuration: const Duration(milliseconds: 280),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return FadeTransition(
-                opacity: CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-                child: child,
-              );
-            },
-          );
         },
       ),
       GoRoute(
