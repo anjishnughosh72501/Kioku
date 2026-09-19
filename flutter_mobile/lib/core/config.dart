@@ -6,7 +6,7 @@ class AppConfig {
   /// Override at build/run time with: --dart-define=BACKEND_URL=https://api.yourdomain.com
   static const String backendBaseUrl = String.fromEnvironment(
     'BACKEND_URL',
-    defaultValue: 'https://api.kioku.app',
+    defaultValue: 'https://kioku-api.rickjons72501.workers.dev',
   );
 
   static const String appScheme = 'kioku';

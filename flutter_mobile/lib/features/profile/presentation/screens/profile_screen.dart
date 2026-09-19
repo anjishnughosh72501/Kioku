@@ -106,7 +106,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Your memories live in your own Google Drive',
+                    'Mukashi no kioku.',
                     style: typography.bodySmall?.copyWith(color: colors.inkMuted),
                   ),
                 ],

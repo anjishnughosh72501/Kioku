@@ -182,7 +182,7 @@ Kioku
 ├── backend/                         # Node.js + Express + better-sqlite3 reference backend
 │   ├── routes/                      # API routes (auth, friends, invites, albums)
 │   ├── services/                    # Redis Pub/Sub signaling & storage services
-│   ├── __tests__/                   # 67 Jest test suites
+│   ├── __tests__/                   # 82 Jest tests across 9 suites
 │   ├── db.js                        # better-sqlite3 WAL database wrapper
 │   └── server.js                    # Express application & WebSocket signaling
 │

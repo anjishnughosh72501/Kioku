@@ -6,7 +6,7 @@ Official standalone release builds for Kioku are distributed via [GitHub Release
 
 | File | Platform | Architecture | Size | SHA-256 Checksum | Direct Download |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`V1-Release.apk`** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 63.6 MB | `3079136F6847DD881D5043A4AB1C7856D3C1371F408A6B5B35F5EAE362440515` | [Download V1-Release](V1-Release.apk) |
+| **`V1-Release.apk`** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.8 MB | `B41EB806EC718E0EB191E0773BCC7FD7D409B1CCB670B6C4EBDD5461B62A5DB3` | [Download V1-Release](V1-Release.apk) |
 
 ---
 
