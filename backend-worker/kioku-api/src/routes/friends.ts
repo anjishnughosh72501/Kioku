@@ -110,6 +110,30 @@ friendsApp.post('/token', async (c) => {
   return c.json({ token, friendCode: cleanCode });
 });
 
+// 0b. Lookup public details of a friend code for pre-send confirmation (Method A)
+friendsApp.get('/lookup/:code', async (c) => {
+  const rawCode = c.req.param('code');
+  if (!rawCode) {
+    return c.json({ error: 'friendCode parameter is required' }, 400);
+  }
+  const cleanCode = String(rawCode).trim().toUpperCase();
+  const account = await c.env.DB.prepare(
+    `SELECT friend_code, username FROM friend_accounts WHERE friend_code = ?`
+  )
+    .bind(cleanCode)
+    .first<{ friend_code: string; username: string | null }>();
+
+  if (!account) {
+    return c.json({ exists: false, error: 'User not found' }, 404);
+  }
+
+  return c.json({
+    exists: true,
+    friendCode: account.friend_code,
+    username: account.username || account.friend_code,
+  });
+});
+
 // 1. Send friend request
 friendsApp.post('/request', requireFriendAuth, async (c) => {
   const body = await c.req.json<{ toCode?: string; fromName?: string }>().catch(() => ({}) as any);
@@ -574,6 +598,128 @@ friendsApp.get('/invite/:code', async (c) => {
     return c.json(result, 404);
   }
   return c.json(result);
+});
+
+// 5g-2. Confirm/Claim invite: Device B confirms invite from Device A, creating a friend request from A to B
+friendsApp.post('/invite/confirm', requireFriendAuth, async (c) => {
+  const body = await c.req.json<{ inviteCode?: string }>().catch(() => ({}) as any);
+  const { inviteCode } = body;
+  if (!inviteCode) {
+    return c.json({ error: 'inviteCode is required' }, 400);
+  }
+
+  const cleanInviteCode = String(inviteCode).trim().toUpperCase();
+  const invite = await c.env.DB.prepare(
+    `SELECT * FROM invites WHERE invite_code = ?`
+  )
+    .bind(cleanInviteCode)
+    .first<InviteRow>();
+
+  if (!invite) {
+    return c.json({ error: 'Invite not found' }, 404);
+  }
+
+  const now = Date.now();
+  if (invite.expires_at && invite.expires_at < now) {
+    await c.env.DB.prepare(
+      `UPDATE invites SET status = 'expired' WHERE id = ?`
+    )
+      .bind(invite.id)
+      .run();
+    return c.json({ error: 'Invite has expired' }, 410);
+  }
+
+  const cleanFrom = invite.created_by; // Device A
+  const cleanTo = c.get('friendCode')!; // Device B
+
+  if (cleanFrom === cleanTo) {
+    return c.json({ error: 'Cannot accept your own invite' }, 400);
+  }
+
+  // Check if already friends
+  const u1 = cleanFrom < cleanTo ? cleanFrom : cleanTo;
+  const u2 = cleanFrom < cleanTo ? cleanTo : cleanFrom;
+  const existingFriend = await c.env.DB.prepare(
+    `SELECT 1 FROM friends WHERE user_a = ? AND user_b = ?`
+  )
+    .bind(u1, u2)
+    .first();
+
+  if (existingFriend) {
+    return c.json({ status: 'already_friends', message: 'You are already friends', alreadyFriends: true });
+  }
+
+  // Resolve inviter name
+  const inviterAccount = await c.env.DB.prepare(
+    `SELECT username FROM friend_accounts WHERE friend_code = ?`
+  )
+    .bind(cleanFrom)
+    .first<{ username: string | null }>();
+
+  const fromName = inviterAccount?.username || invite.from_name || 'Friend';
+
+  // Check if a request from A to B already exists and is pending
+  const existing = await c.env.DB.prepare(
+    `SELECT id, status FROM friend_requests WHERE from_code = ? AND to_code = ? AND status = 'pending'`
+  )
+    .bind(cleanFrom, cleanTo)
+    .first<{ id: string; status: string }>();
+
+  if (existing) {
+    return c.json({
+      id: existing.id,
+      status: 'pending',
+      alreadySent: true,
+      fromCode: cleanFrom,
+      toCode: cleanTo,
+      fromName,
+    });
+  }
+
+  // Check for reciprocal request (Device B had already sent a request to Device A)
+  const reciprocal = await c.env.DB.prepare(
+    `SELECT id FROM friend_requests WHERE from_code = ? AND to_code = ? AND status = 'pending'`
+  )
+    .bind(cleanTo, cleanFrom)
+    .first<{ id: string }>();
+
+  if (reciprocal) {
+    // Auto-accept reciprocal request
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE friend_requests SET status = 'accepted', updated_at = ? WHERE id = ?`
+      ).bind(now, reciprocal.id),
+      c.env.DB.prepare(
+        `INSERT OR IGNORE INTO friends (user_a, user_b, created_at) VALUES (?, ?, ?)`
+      ).bind(u1, u2, now),
+    ]);
+
+    return c.json({
+      id: reciprocal.id,
+      status: 'accepted',
+      alreadySent: false,
+      autoAccepted: true,
+      fromCode: cleanFrom,
+      toCode: cleanTo,
+      fromName,
+    });
+  }
+
+  const id = generateId(16);
+  await c.env.DB.prepare(
+    `INSERT INTO friend_requests (id, from_code, to_code, from_name, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'pending', ?, ?)`
+  )
+    .bind(id, cleanFrom, cleanTo, fromName, now, now)
+    .run();
+
+  return c.json({
+    id,
+    status: 'pending',
+    fromCode: cleanFrom,
+    toCode: cleanTo,
+    fromName,
+  });
 });
 
 // 5h. Update profile username

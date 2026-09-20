@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,6 +18,7 @@ class InviteShareSheet extends ConsumerWidget {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (_) => const InviteShareSheet(),
     );
@@ -28,24 +30,33 @@ class InviteShareSheet extends ConsumerWidget {
     final typography = Theme.of(context).textTheme;
     final myFriendCode = UserProfileService.instance.friendCode;
     final inviteAsync = ref.watch(userInviteProvider);
+    final viewPadding = MediaQuery.viewPaddingOf(context);
+    final viewInsets = MediaQuery.viewInsetsOf(context);
+    final bottomPadding = math.max(viewPadding.bottom, AppTheme.spacingLg) + viewInsets.bottom;
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.88;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.surfaceContainer,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        border: Border.all(color: colors.divider, width: 1),
-      ),
-      padding: EdgeInsets.fromLTRB(
-        AppTheme.spacingLg,
-        AppTheme.spacingMd,
-        AppTheme.spacingLg,
-        MediaQuery.of(context).viewInsets.bottom + AppTheme.spacingXl,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: Container(
+          decoration: BoxDecoration(
+            color: colors.surfaceContainer,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border.all(color: colors.divider, width: 1),
+          ),
+          padding: EdgeInsets.fromLTRB(
+            AppTheme.spacingLg,
+            AppTheme.spacingMd,
+            AppTheme.spacingLg,
+            bottomPadding,
+          ),
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
             // Drag Handle
             Center(
               child: Container(
@@ -323,6 +334,8 @@ class InviteShareSheet extends ConsumerWidget {
           ],
         ),
       ),
-    ).animate().fadeIn(duration: 250.ms).slideY(begin: 0.08, end: 0, duration: 250.ms);
+    ),
+  ),
+).animate().fadeIn(duration: 250.ms).slideY(begin: 0.08, end: 0, duration: 250.ms);
   }
 }

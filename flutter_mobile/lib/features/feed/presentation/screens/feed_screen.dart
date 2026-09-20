@@ -51,7 +51,6 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
       }
       final pendingInvite = prefs.getString('pending_invite_code');
       if (pendingInvite != null && pendingInvite.isNotEmpty) {
-        prefs.remove('pending_invite_code');
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             InviteAcceptDialog.show(context, pendingInvite);

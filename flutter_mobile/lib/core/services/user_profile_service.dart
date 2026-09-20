@@ -63,7 +63,39 @@ enum FriendRequestResult {
   alreadySent,
   alreadyFriends,
   sameUser,
+  notFound,
+  unauthorized,
+  networkOffline,
+  timeout,
   error,
+}
+
+extension FriendRequestResultExt on FriendRequestResult {
+  bool get isSuccess =>
+      this == FriendRequestResult.sent || this == FriendRequestResult.alreadySent;
+
+  String get userMessage {
+    switch (this) {
+      case FriendRequestResult.sent:
+        return 'Friend request sent!';
+      case FriendRequestResult.alreadySent:
+        return 'Friend request already sent and pending.';
+      case FriendRequestResult.alreadyFriends:
+        return 'Already in your friends list.';
+      case FriendRequestResult.sameUser:
+        return 'Cannot send a friend request to yourself.';
+      case FriendRequestResult.notFound:
+        return 'Friend code not found. Please verify spelling.';
+      case FriendRequestResult.unauthorized:
+        return 'Authentication rejected. Please check connection and retry.';
+      case FriendRequestResult.networkOffline:
+        return 'You appear to be offline. Please check your internet connection.';
+      case FriendRequestResult.timeout:
+        return 'Connection timed out. Please try again.';
+      case FriendRequestResult.error:
+        return 'Could not send request. Please check code and try again.';
+    }
+  }
 }
 
 
@@ -529,9 +561,15 @@ class UserProfileService {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         return InviteCreation.fromJson(data);
+      } else {
+        final err = jsonDecode(res.body);
+        throw FriendException(err['error'] ?? 'Server error (${res.statusCode}) creating invite', code: err['code']);
       }
-    } catch (_) {}
-    return null;
+    } catch (e) {
+      KiokuLog.e('UserProfileService', 'Failed to create universal invite', e);
+      if (e is FriendException || e is AuthException) rethrow;
+      throw FriendException('Unable to create invite: $e');
+    }
   }
 
   /// Resolve a short invite code publicly
@@ -783,12 +821,38 @@ class UserProfileService {
         }
         _notifyFriendListeners();
         return FriendRequestResult.sent;
+      } else if (res.statusCode == 400) {
+        final body = res.body.toLowerCase();
+        if (body.contains('yourself') || cleanTo == myCode) {
+          return FriendRequestResult.sameUser;
+        }
+        return FriendRequestResult.error;
+      } else if (res.statusCode == 404) {
+        return FriendRequestResult.notFound;
+      } else if (res.statusCode == 409) {
+        return FriendRequestResult.alreadyFriends;
+      } else if (res.statusCode == 401 || res.statusCode == 403) {
+        return FriendRequestResult.unauthorized;
+      } else {
+        return FriendRequestResult.error;
       }
-    } catch (_) {
-      // Do not fake success on network or server errors
+    } catch (e) {
+      KiokuLog.e('UserProfileService', 'sendFriendRequest failed', e);
+      if (e is AuthException) {
+        return FriendRequestResult.unauthorized;
+      }
+      final msg = e.toString().toLowerCase();
+      if (msg.contains('timeout')) {
+        return FriendRequestResult.timeout;
+      }
+      if (msg.contains('socket') ||
+          msg.contains('offline') ||
+          msg.contains('network') ||
+          msg.contains('failed host lookup')) {
+        return FriendRequestResult.networkOffline;
+      }
       return FriendRequestResult.error;
     }
-    return FriendRequestResult.error;
   }
 
   Future<List<FriendRequest>> getCachedIncomingRequests() async {

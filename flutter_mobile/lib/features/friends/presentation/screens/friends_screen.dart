@@ -177,7 +177,25 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
       ),
       body: Column(
         children: [
-          if (UserProfileService.instance.authStatus == FriendAuthStatus.offline)
+          if (UserProfileService.instance.authStatus == FriendAuthStatus.authFailed)
+            Container(
+              color: Colors.red.shade800,
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+              child: const Row(
+                children: [
+                  Icon(Icons.error_outline_rounded, size: 16, color: Colors.white),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Authentication error — please reconnect your account to sync friends.',
+                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (UserProfileService.instance.authStatus == FriendAuthStatus.offline)
             Container(
               color: Colors.amber.shade800,
               width: double.infinity,
@@ -853,16 +871,14 @@ class _AddFriendTabState extends ConsumerState<_AddFriendTab> {
     if (!mounted) return;
     setState(() => _submittingCode = false);
 
-    if (res == FriendRequestResult.sent || res == FriendRequestResult.alreadySent) {
+    if (res.isSuccess) {
       _codeController.clear();
       ref.read(sentRequestsProvider.notifier).refresh();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Friend request sent to $recipientName!')),
       );
-    } else if (res == FriendRequestResult.alreadyFriends) {
-      setState(() => _codeError = 'Already in your friends list');
     } else {
-      setState(() => _codeError = 'Could not send request. Check code and connection.');
+      setState(() => _codeError = res.userMessage);
     }
   }
 

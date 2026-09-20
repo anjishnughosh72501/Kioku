@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter_mobile/core/services/user_profile_service.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
@@ -93,6 +94,10 @@ class _InviteAcceptDialogState extends ConsumerState<InviteAcceptDialog> {
       if (!mounted) return;
       setState(() => _submitting = false);
 
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('pending_invite_code');
+      if (!mounted) return;
+
       Navigator.of(context).pop();
 
       ref.read(incomingRequestsProvider.notifier).refresh();
@@ -172,7 +177,11 @@ class _InviteAcceptDialogState extends ConsumerState<InviteAcceptDialog> {
               ClayButton(
                 label: 'Close',
                 variant: ClayButtonVariant.secondary,
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () async {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.remove('pending_invite_code');
+                  if (context.mounted) Navigator.of(context).pop();
+                },
               ),
             ] else if (_resolution != null) ...[
               Center(
@@ -231,7 +240,11 @@ class _InviteAcceptDialogState extends ConsumerState<InviteAcceptDialog> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () async {
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.remove('pending_invite_code');
+                        if (context.mounted) Navigator.of(context).pop();
+                      },
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(color: colors.divider),
                         shape: RoundedRectangleBorder(

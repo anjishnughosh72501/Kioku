@@ -150,9 +150,6 @@ async function handleInviteLanding(c: any, code: string) {
       <div class="code-badge">INVITE: ${code}</div>
       <a href="${appDeepLink}" class="btn btn-primary">Open in Kioku</a>
       <a href="${webApkDownload}" class="btn btn-secondary">Download Kioku App (Android)</a>
-      <script>
-        window.location = "${appDeepLink}";
-      </script>
     `
         : `
       <h1>Invite Unavailable</h1>
@@ -167,6 +164,51 @@ async function handleInviteLanding(c: any, code: string) {
 
   return c.html(html);
 }
+
+// Android Digital Asset Links verification endpoint
+landingApp.get('/.well-known/assetlinks.json', (c) => {
+  return c.json([
+    {
+      relation: ['delegate_permission/common.handle_all_urls'],
+      target: {
+        namespace: 'android_app',
+        package_name: 'com.kioku.app',
+        sha256_cert_fingerprints: [
+          'E4:A1:26:4E:0A:88:B0:1B:D3:2B:B1:A9:DB:1C:61:B2:61:AA:3A:BD:1F:5D:D9:9E:1E:8E:0B:D3:C8:56:E8:08'
+        ]
+      }
+    }
+  ]);
+});
+
+// iOS Universal Links verification endpoints
+landingApp.get('/.well-known/apple-app-site-association', (c) => {
+  return c.json({
+    applinks: {
+      apps: [],
+      details: [
+        {
+          appID: 'TEAMID.com.kioku.app',
+          paths: ['/i/*', '/invite/*', '/albums/*']
+        }
+      ]
+    }
+  });
+});
+
+landingApp.get('/apple-app-site-association', (c) => {
+  return c.json({
+    applinks: {
+      apps: [],
+      details: [
+        {
+          appID: 'TEAMID.com.kioku.app',
+          paths: ['/i/*', '/invite/*', '/albums/*']
+        }
+      ]
+    }
+  });
+});
 
 landingApp.get('/i/:code', async (c) => {
   return handleInviteLanding(c, c.req.param('code'));

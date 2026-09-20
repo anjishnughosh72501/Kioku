@@ -315,5 +315,136 @@ void main() {
 
       UserProfileService.instance.httpClient = originalClient;
     });
+
+    test('sendFriendRequest maps 404 to notFound', () async {
+      await UserProfileService.instance.init();
+      final originalClient = UserProfileService.instance.httpClient;
+      UserProfileService.instance.httpClient = MockClient((request) async {
+        if (request.url.path == '/friends/token') {
+          return http.Response(jsonEncode({'token': 'mock_tok', 'friendCode': 'TEST'}), 200, headers: {'content-type': 'application/json'});
+        }
+        return http.Response(jsonEncode({'error': 'Recipient not found'}), 404, headers: {'content-type': 'application/json'});
+      });
+
+      final result = await UserProfileService.instance.sendFriendRequest('NONEXISTENT-CODE');
+      expect(result, FriendRequestResult.notFound);
+      UserProfileService.instance.httpClient = originalClient;
+    });
+
+    test('sendFriendRequest maps 401/403 to unauthorized', () async {
+      await UserProfileService.instance.init();
+      final originalClient = UserProfileService.instance.httpClient;
+      UserProfileService.instance.httpClient = MockClient((request) async {
+        if (request.url.path == '/friends/token') {
+          return http.Response(jsonEncode({'token': 'mock_tok', 'friendCode': 'TEST'}), 200, headers: {'content-type': 'application/json'});
+        }
+        return http.Response(jsonEncode({'error': 'Invalid or expired token'}), 401, headers: {'content-type': 'application/json'});
+      });
+
+      final result = await UserProfileService.instance.sendFriendRequest('VALID-CODE-BUT-UNAUTH');
+      expect(result, FriendRequestResult.unauthorized);
+      UserProfileService.instance.httpClient = originalClient;
+    });
+
+    test('sendFriendRequest maps 409 Already friends to alreadyFriends', () async {
+      await UserProfileService.instance.init();
+      final originalClient = UserProfileService.instance.httpClient;
+      UserProfileService.instance.httpClient = MockClient((request) async {
+        if (request.url.path == '/friends/token') {
+          return http.Response(jsonEncode({'token': 'mock_tok', 'friendCode': 'TEST'}), 200, headers: {'content-type': 'application/json'});
+        }
+        return http.Response(jsonEncode({'error': 'Already connected as friends'}), 409, headers: {'content-type': 'application/json'});
+      });
+
+      final result = await UserProfileService.instance.sendFriendRequest('CONNECTED-FRIEND');
+      expect(result, FriendRequestResult.alreadyFriends);
+      UserProfileService.instance.httpClient = originalClient;
+    });
+
+    test('lookupFriendCode parses metadata on 200 and returns null on 404', () async {
+      await UserProfileService.instance.init();
+      final originalClient = UserProfileService.instance.httpClient;
+      UserProfileService.instance.httpClient = MockClient((request) async {
+        if (request.url.path == '/friends/token') {
+          return http.Response(jsonEncode({'token': 'mock_tok', 'friendCode': 'TEST'}), 200, headers: {'content-type': 'application/json'});
+        }
+        if (request.url.path == '/friends/lookup/VALID-USER') {
+          return http.Response(
+            jsonEncode({'exists': true, 'friendCode': 'VALID-USER', 'username': 'Valid User'}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response(jsonEncode({'error': 'Not found'}), 404, headers: {'content-type': 'application/json'});
+      });
+
+      final found = await UserProfileService.instance.lookupFriendCode('VALID-USER');
+      expect(found, isNotNull);
+      expect(found?.displayName, 'Valid User');
+      expect(found?.friendCode, 'VALID-USER');
+
+      final missing = await UserProfileService.instance.lookupFriendCode('UNKNOWN');
+      expect(missing, isNull);
+
+      UserProfileService.instance.httpClient = originalClient;
+    });
+
+    test('confirmInvite returns data on 200 and throws FriendException on 400/404', () async {
+      await UserProfileService.instance.init();
+      final originalClient = UserProfileService.instance.httpClient;
+      UserProfileService.instance.httpClient = MockClient((request) async {
+        if (request.url.path == '/friends/token') {
+          return http.Response(jsonEncode({'token': 'mock_tok', 'friendCode': 'TEST'}), 200, headers: {'content-type': 'application/json'});
+        }
+        if (request.url.path == '/friends/invite/confirm') {
+          final body = jsonDecode(request.body);
+          if (body['inviteCode'] == 'GOOD-INVITE') {
+            return http.Response(
+              jsonEncode({'success': true, 'fromCode': 'INVITER-1', 'status': 'request_created'}),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response(
+            jsonEncode({'error': 'Invite code not found or expired', 'code': 'INVITE_NOT_FOUND'}),
+            404,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final result = await UserProfileService.instance.confirmInvite('GOOD-INVITE');
+      expect(result, isNotNull);
+      expect(result?['status'], 'request_created');
+
+      expect(
+        () async => await UserProfileService.instance.confirmInvite('BAD-INVITE'),
+        throwsA(isA<FriendException>()),
+      );
+
+      UserProfileService.instance.httpClient = originalClient;
+    });
+
+    test('createUniversalInvite throws FriendException on server error', () async {
+      await UserProfileService.instance.init();
+      final originalClient = UserProfileService.instance.httpClient;
+      UserProfileService.instance.httpClient = MockClient((request) async {
+        if (request.url.path == '/friends/token') {
+          return http.Response(jsonEncode({'token': 'mock_tok', 'friendCode': 'TEST'}), 200, headers: {'content-type': 'application/json'});
+        }
+        if (request.url.path == '/friends/invite/create') {
+          return http.Response('Internal Error', 500);
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      expect(
+        () async => await UserProfileService.instance.createUniversalInvite(),
+        throwsA(isA<FriendException>()),
+      );
+
+      UserProfileService.instance.httpClient = originalClient;
+    });
   });
 }

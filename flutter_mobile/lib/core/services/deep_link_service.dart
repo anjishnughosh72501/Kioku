@@ -171,24 +171,37 @@ class DeepLinkService {
 
       // Zero-knowledge key handoff: never parse raw collection keys from URLs.
       // If a claim token is present, initiate the claim-token key-exchange flow.
+      bool keyExchangeSuccess = true;
       if (claimToken != null && claimToken.isNotEmpty) {
         try {
           await InviteService.instance.redeemClaim(claimToken: claimToken);
-        } catch (_) {}
+        } catch (e) {
+          keyExchangeSuccess = false;
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to acquire album encryption key: $e'),
+                backgroundColor: Colors.red.shade800,
+              ),
+            );
+          }
+        }
       }
 
-      await LocalStorageService.instance.ensureAlbum(
-        id: cleanAlbumId,
-        name: albumName,
-        storageType: storage,
-      );
-      await ref.read(albumsProvider.notifier).refresh();
-      await ref.read(activeAlbumProvider.notifier).set(cleanAlbumId);
-      await ref.read(memoriesProvider.notifier).refresh();
-      albumJoined = true;
+      if (keyExchangeSuccess) {
+        await LocalStorageService.instance.ensureAlbum(
+          id: cleanAlbumId,
+          name: albumName,
+          storageType: storage,
+        );
+        await ref.read(albumsProvider.notifier).refresh();
+        await ref.read(activeAlbumProvider.notifier).set(cleanAlbumId);
+        await ref.read(memoriesProvider.notifier).refresh();
+        albumJoined = true;
 
-      if (context.mounted) {
-        GoRouter.of(context).go('/albums/$cleanAlbumId');
+        if (context.mounted) {
+          GoRouter.of(context).go('/albums/$cleanAlbumId');
+        }
       }
     }
 

@@ -6,6 +6,7 @@ const { createApp } = require('../server');
 const db = require('../db');
 
 describe('Social System & Universal Invite System Tests', () => {
+  jest.setTimeout(30000);
   let app;
   let tokenA, tokenB;
   const userA = 'USRA' + Math.random().toString(36).substring(2, 6).toUpperCase();

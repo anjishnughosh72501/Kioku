@@ -465,6 +465,70 @@ describe('Kioku Cloudflare Worker API Suite', () => {
       expect(text).toContain('Connect with Alice');
       expect(text).toContain(`kioku://i/${inviteCode}`);
     });
+
+    it('looks up existing friend code via GET /friends/lookup/:code', async () => {
+      const found = await dispatch(`/friends/lookup/${userA}`);
+      expect(found.status).toBe(200);
+      const data = (await found.json()) as any;
+      expect(data.exists).toBe(true);
+      expect(data.friendCode).toBe(userA);
+      expect(data.username).toBe('Alice');
+
+      const notFound = await dispatch('/friends/lookup/NONEXISTENT999');
+      expect(notFound.status).toBe(404);
+      const notFoundData = (await notFound.json()) as any;
+      expect(notFoundData.exists).toBe(false);
+    });
+
+    it('confirms invite via POST /friends/invite/confirm from recipient (Device C to Alice)', async () => {
+      const userC = 'USER-CONFIRM-99';
+      const tRes = await dispatch('/friends/token', {
+        method: 'POST',
+        body: { friendCode: userC, secret: 'super-secret-user-c-123456', username: 'Charlie' },
+      });
+      const tData = (await tRes.json()) as any;
+      const tokenC = tData.token;
+
+      // User C confirms Alice's inviteCode
+      const confirmRes = await dispatch('/friends/invite/confirm', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${tokenC}` },
+        body: { inviteCode },
+      });
+
+      expect(confirmRes.status).toBe(200);
+      const data = (await confirmRes.json()) as any;
+      expect(data.status).toBe('pending');
+      expect(data.fromCode).toBe(userA);
+      expect(data.toCode).toBe(userC);
+
+      // Self confirm rejected
+      const selfRes = await dispatch('/friends/invite/confirm', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${tokenA}` },
+        body: { inviteCode },
+      });
+      expect(selfRes.status).toBe(400);
+
+      // Nonexistent invite 404
+      const nonExistent = await dispatch('/friends/invite/confirm', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${tokenC}` },
+        body: { inviteCode: 'NOCODE' },
+      });
+      expect(nonExistent.status).toBe(404);
+    });
+
+    it('serves /.well-known/assetlinks.json with com.kioku.app and SHA-256 fingerprint', async () => {
+      const res = await dispatch('/.well-known/assetlinks.json');
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(Array.isArray(data)).toBe(true);
+      expect(data[0].target.package_name).toBe('com.kioku.app');
+      expect(data[0].target.sha256_cert_fingerprints).toContain(
+        'E4:A1:26:4E:0A:88:B0:1B:D3:2B:B1:A9:DB:1C:61:B2:61:AA:3A:BD:1F:5D:D9:9E:1E:8E:0B:D3:C8:56:E8:08'
+      );
+    });
   });
 
   describe('Canonical Server-Backed Albums (/albums)', () => {
