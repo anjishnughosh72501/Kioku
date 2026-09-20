@@ -13,8 +13,11 @@ CREATE TABLE IF NOT EXISTS groups (
 
 CREATE TABLE IF NOT EXISTS users (
   id          TEXT PRIMARY KEY,
-  name        TEXT NOT NULL,
-  group_id    TEXT NOT NULL REFERENCES groups(id),
+  username    TEXT,
+  friend_code TEXT UNIQUE,
+  avatar      TEXT,
+  name        TEXT,
+  group_id    TEXT REFERENCES groups(id),
   created_at  TEXT DEFAULT (datetime('now'))
 );
 
@@ -944,6 +947,83 @@ describe('Kioku Cloudflare Worker API Suite', () => {
       await worker.scheduled(controller, env, ctx);
       await waitOnExecutionContext(ctx);
       expect(true).toBe(true);
+    });
+  });
+
+  describe('P0 Idempotent User Bootstrap in users table', () => {
+    const bootstrapCode = 'KIOKU-9T72';
+    const deviceSecret = 'device-secret-bootstrap-1234567890';
+
+    it('bootstraps new user in users table when table was empty', async () => {
+      // Clean users table
+      await env.DB.prepare(`DELETE FROM users WHERE friend_code = ?`).bind(bootstrapCode).run();
+
+      const res = await dispatch('/friends/token', {
+        method: 'POST',
+        body: {
+          friendCode: bootstrapCode,
+          deviceSecret,
+          username: 'KiokuExplorer',
+        },
+      });
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.token).toBeDefined();
+      expect(data.friendCode).toBe(bootstrapCode);
+      expect(data.user).toBeDefined();
+      expect(data.user.username).toBe('KiokuExplorer');
+      expect(data.user.friendCode).toBe(bootstrapCode);
+      expect(data.user.avatar).toBeNull();
+
+      // Verify DB row in users table
+      const rows = await env.DB.prepare(
+        `SELECT id, username, friend_code, avatar, created_at FROM users WHERE friend_code = ?`
+      )
+        .bind(bootstrapCode)
+        .all<any>();
+
+      expect(rows.results.length).toBe(1);
+      const row = rows.results[0];
+      expect(row.id).toBeDefined();
+      expect(row.username).toBe('KiokuExplorer');
+      expect(row.friend_code).toBe(bootstrapCode);
+      expect(row.avatar).toBeNull();
+      expect(row.created_at).toBeDefined();
+    });
+
+    it('updates existing user idempotently without creating duplicate rows', async () => {
+      const res = await dispatch('/friends/token', {
+        method: 'POST',
+        body: {
+          friendCode: bootstrapCode,
+          secret: deviceSecret,
+          username: 'UpdatedExplorer',
+        },
+      });
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.user.username).toBe('UpdatedExplorer');
+
+      // Verify no duplicates
+      const rows = await env.DB.prepare(
+        `SELECT id, username, friend_code FROM users WHERE friend_code = ?`
+      )
+        .bind(bootstrapCode)
+        .all<any>();
+
+      expect(rows.results.length).toBe(1);
+      expect(rows.results[0].username).toBe('UpdatedExplorer');
+    });
+
+    it('looks up bootstrapped user correctly via /friends/lookup/:code', async () => {
+      const res = await dispatch(`/friends/lookup/${bootstrapCode}`);
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.exists).toBe(true);
+      expect(data.friendCode).toBe(bootstrapCode);
+      expect(data.username).toBe('UpdatedExplorer');
     });
   });
 });

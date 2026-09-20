@@ -159,21 +159,42 @@ albumsApp.get('/:albumId', requireFriendAuth, async (c) => {
     }
     return c.json({ error: 'Album not found' }, 404);
   }
-  const members = await c.env.DB.prepare(
-    `SELECT
-       m.user_id AS userId,
-       m.user_id AS userCode,
-       m.role,
-       m.status,
-       m.joined_at AS joinedAt,
-       fa.username AS displayName
-     FROM album_members m
-     LEFT JOIN friend_accounts fa ON fa.friend_code = m.user_id
-     WHERE m.album_id = ? AND m.status != 'revoked'
-     ORDER BY m.joined_at ASC`
-  )
-    .bind(albumId)
-    .all();
+  let members: any = { results: [] };
+  try {
+    members = await c.env.DB.prepare(
+      `SELECT
+         m.user_id AS userId,
+         m.user_id AS userCode,
+         m.role,
+         m.status,
+         m.joined_at AS joinedAt,
+         u.username AS displayName
+       FROM album_members m
+       LEFT JOIN users u ON u.friend_code = m.user_id
+       WHERE m.album_id = ? AND m.status != 'revoked'
+       ORDER BY m.joined_at ASC`
+    )
+      .bind(albumId)
+      .all();
+  } catch (_) {
+    try {
+      members = await c.env.DB.prepare(
+        `SELECT
+           m.user_id AS userId,
+           m.user_id AS userCode,
+           m.role,
+           m.status,
+           m.joined_at AS joinedAt,
+           fa.username AS displayName
+         FROM album_members m
+         LEFT JOIN friend_accounts fa ON fa.friend_code = m.user_id
+         WHERE m.album_id = ? AND m.status != 'revoked'
+         ORDER BY m.joined_at ASC`
+      )
+        .bind(albumId)
+        .all();
+    } catch (_) {}
+  }
 
   return c.json({ album: row, members: members.results || [] });
 });
@@ -194,21 +215,42 @@ albumsApp.get('/:albumId/members', requireFriendAuth, async (c) => {
     return c.json({ error: 'Forbidden: not an active member of this album' }, 403);
   }
 
-  const rows = await c.env.DB.prepare(
-    `SELECT
-       m.user_id AS userId,
-       m.user_id AS userCode,
-       m.role,
-       m.status,
-       m.joined_at AS joinedAt,
-       fa.username AS displayName
-     FROM album_members m
-     LEFT JOIN friend_accounts fa ON fa.friend_code = m.user_id
-     WHERE m.album_id = ? AND m.status != 'revoked'
-     ORDER BY m.joined_at ASC`
-  )
-    .bind(albumId)
-    .all();
+  let rows: any = { results: [] };
+  try {
+    rows = await c.env.DB.prepare(
+      `SELECT
+         m.user_id AS userId,
+         m.user_id AS userCode,
+         m.role,
+         m.status,
+         m.joined_at AS joinedAt,
+         u.username AS displayName
+       FROM album_members m
+       LEFT JOIN users u ON u.friend_code = m.user_id
+       WHERE m.album_id = ? AND m.status != 'revoked'
+       ORDER BY m.joined_at ASC`
+    )
+      .bind(albumId)
+      .all();
+  } catch (_) {
+    try {
+      rows = await c.env.DB.prepare(
+        `SELECT
+           m.user_id AS userId,
+           m.user_id AS userCode,
+           m.role,
+           m.status,
+           m.joined_at AS joinedAt,
+           fa.username AS displayName
+         FROM album_members m
+         LEFT JOIN friend_accounts fa ON fa.friend_code = m.user_id
+         WHERE m.album_id = ? AND m.status != 'revoked'
+         ORDER BY m.joined_at ASC`
+      )
+        .bind(albumId)
+        .all();
+    } catch (_) {}
+  }
 
   return c.json({ members: rows.results || [] });
 });

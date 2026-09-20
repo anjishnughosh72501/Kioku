@@ -42,7 +42,7 @@ a.out
 *.o
 *.apk
 releases/*.apk
-!releases/V1-Release.apk
+!releases/v1-releaseBeta.apk
 
 # Flutter / Dart
 **/doc/api/

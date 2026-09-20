@@ -17,10 +17,10 @@
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
 [![Riverpod](https://img.shields.io/badge/Riverpod-2.6-7F52FF?style=for-the-badge)](https://riverpod.dev)
 [![License](https://img.shields.io/badge/License-MIT-amber?style=for-the-badge)](LICENSE)
-[![Download APK](https://img.shields.io/badge/Download-APK_V1.0-E06D53?style=for-the-badge&logo=android&logoColor=white)](releases/V1-Release.apk)
+[![Download APK](https://img.shields.io/badge/Download-APK_v1.0_Beta-E06D53?style=for-the-badge&logo=android&logoColor=white)](releases/v1-releaseBeta.apk)
 
 <p align="center">
-  <a href="releases/V1-Release.apk"><b>👉 Download Android APK (Release V1.0)</b></a> · 
+  <a href="releases/v1-releaseBeta.apk"><b>👉 Download Android APK (Release v1.0-beta)</b></a> · 
   <a href="releases/README.md">Release Notes & Checksums</a>
 </p>
 
@@ -187,7 +187,7 @@ Kioku
 │   └── server.js                    # Express application & WebSocket signaling
 │
 ├── releases/                        # Standalone release APKs & SHA-256 checksums
-│   ├── V1-Release.apk               # Official production release build
+│   ├── v1-releaseBeta.apk           # Official release beta build
 │   └── README.md                    # Release notes and verification hashes
 ├── assets/                          # App logos and visual branding
 └── LICENSE                          # MIT License

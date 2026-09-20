@@ -2,18 +2,18 @@
 
 Official standalone release builds for Kioku are distributed via [GitHub Releases](https://github.com/anjishnughosh72501/Kioku/releases) and packaged in the `releases/` directory.
 
-### Current Release: V1.0 (`V1-Release`)
+### Current Release: v1.0-Beta (`v1-releaseBeta`)
 
 | File | Platform | Architecture | Size | SHA-256 Checksum | Direct Download |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`V1-Release.apk`** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.9 MB | `2DFB5BDDC0502810EC66E3B33FA351C367C1C06B1E687D4AB2E3424E7AF757AF` | [Download V1-Release](V1-Release.apk) |
+| **`v1-releaseBeta.apk`** | Android 5.0+ (API 21+) | Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`) | 61.9 MB | `5F9C23980565E27AAB2EA3AD9DD0688455C729287E3954D4BB63CBE97348E2C8` | [Download v1-releaseBeta](v1-releaseBeta.apk) |
 
 ---
 
 ## 📲 Installation Instructions
 
 ### Option 1: Direct Device Install (Android Phone / Tablet)
-1. Download [`V1-Release.apk`](V1-Release.apk) directly to your Android device.
+1. Download [`v1-releaseBeta.apk`](v1-releaseBeta.apk) directly to your Android device.
 2. Open the downloaded APK from your browser's download manager or file browser.
 3. If prompted by Android, enable **"Install unknown apps"** for your browser or file manager.
 4. Tap **Install** and launch Kioku.
@@ -21,7 +21,7 @@ Official standalone release builds for Kioku are distributed via [GitHub Release
 ### Option 2: Via ADB (Command Line)
 Connect your Android device with USB debugging enabled (or start an Android emulator) and run:
 ```bash
-adb install -r releases/V1-Release.apk
+adb install -r releases/v1-releaseBeta.apk
 ```
 
 ---

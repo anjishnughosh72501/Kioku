@@ -382,6 +382,12 @@ class UserProfileService {
     }
   }
 
+  /// Ensures the user is bootstrapped and authenticated with the backend.
+  /// If JWT is missing or expired, calls bootstrap/token endpoint.
+  Future<String?> ensureBootstrapped({bool forceRefresh = false}) async {
+    return getAuthToken(forceRefresh: forceRefresh);
+  }
+
   /// Request or retrieve a cached signed JWT authorization token for this device's friend code
   Future<String?> getAuthToken({bool forceRefresh = false}) async {
     if (!forceRefresh && _cachedToken != null) {
@@ -407,6 +413,7 @@ class UserProfileService {
         body: jsonEncode({
           'friendCode': myCode,
           'secret': secret,
+          'deviceSecret': secret,
           'username': username,
         }),
       );
@@ -449,6 +456,29 @@ class UserProfileService {
     };
   }
 
+  /// Executes an authenticated HTTP request. If the server returns 401 or 403 (JWT expired/invalid),
+  /// automatically bootstraps/refreshes the token and retries the original request once.
+  Future<http.Response> authedRequest(
+    Future<http.Response> Function(Map<String, String> headers) sendFn,
+  ) async {
+    var headers = await _authHeaders();
+    var res = await sendFn(headers);
+
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      KiokuLog.d('UserProfileService', 'Token rejected with ${res.statusCode}. Auto-refreshing JWT bootstrap and retrying...');
+      try {
+        _cachedToken = null;
+        await getAuthToken(forceRefresh: true);
+        headers = await _authHeaders();
+        res = await sendFn(headers);
+      } catch (e) {
+        KiokuLog.e('UserProfileService', 'Auto-refresh bootstrap failed', e);
+      }
+    }
+
+    return res;
+  }
+
   bool get hasUsername =>
       _currentProfile != null &&
       _currentProfile!.username.isNotEmpty &&
@@ -483,12 +513,11 @@ class UserProfileService {
     }
 
     try {
-      final headers = await _authHeaders();
-      await clientHelper.post(
+      await authedRequest((headers) => clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/profile'),
         headers: headers,
         body: jsonEncode({'username': trimmed}),
-      );
+      ));
     } catch (_) {}
 
     return profile;
@@ -535,12 +564,11 @@ class UserProfileService {
     }
 
     try {
-      final headers = await _authHeaders();
-      await clientHelper.post(
+      await authedRequest((headers) => clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/remove'),
         headers: headers,
         body: jsonEncode({'friendCode': code}),
-      );
+      ));
     } catch (_) {}
 
     return removedLocally;
@@ -549,14 +577,13 @@ class UserProfileService {
   /// Create a short universal invite link (e.g. kioku.app/i/8F3KD2)
   Future<InviteCreation?> createUniversalInvite({String? myName}) async {
     try {
-      final headers = await _authHeaders();
-      final res = await clientHelper.post(
+      final res = await authedRequest((headers) => clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/invite'),
         headers: headers,
         body: jsonEncode({
           'fromName': myName ?? username,
         }),
-      );
+      ));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -594,12 +621,11 @@ class UserProfileService {
     final clean = inviteCode.trim().toUpperCase();
     if (clean.isEmpty) return null;
     try {
-      final headers = await _authHeaders();
-      final res = await clientHelper.post(
+      final res = await authedRequest((headers) => clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/invite/confirm'),
         headers: headers,
         body: jsonEncode({'inviteCode': clean}),
-      );
+      ));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -621,11 +647,10 @@ class UserProfileService {
     final clean = code.trim().toUpperCase();
     if (clean.isEmpty) return null;
     try {
-      final headers = await _authHeaders();
-      final res = await clientHelper.get(
+      final res = await authedRequest((headers) => clientHelper.get(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/lookup/$clean'),
         headers: headers,
-      );
+      ));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -675,11 +700,10 @@ class UserProfileService {
     }
 
     try {
-      final headers = await _authHeaders();
-      final res = await clientHelper.get(
+      final res = await authedRequest((headers) => clientHelper.get(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/list/$myCode'),
         headers: headers,
-      );
+      ));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -724,11 +748,10 @@ class UserProfileService {
   Future<List<SentFriendRequest>> getSentFriendRequests() async {
     final myCode = friendCode.trim().toUpperCase();
     try {
-      final headers = await _authHeaders();
-      final res = await clientHelper.get(
+      final res = await authedRequest((headers) => clientHelper.get(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/sent/$myCode'),
         headers: headers,
-      );
+      ));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -744,12 +767,11 @@ class UserProfileService {
   /// Cancel a sent pending request
   Future<bool> cancelSentRequest(String requestId) async {
     try {
-      final headers = await _authHeaders();
-      final res = await clientHelper.post(
+      final res = await authedRequest((headers) => clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/cancel'),
         headers: headers,
         body: jsonEncode({'requestId': requestId}),
-      );
+      ));
       return res.statusCode == 200;
     } catch (_) {
       return false;
@@ -759,12 +781,11 @@ class UserProfileService {
   /// Resend an expired or cancelled friend request
   Future<bool> resendSentRequest(String requestId) async {
     try {
-      final headers = await _authHeaders();
-      final res = await clientHelper.post(
+      final res = await authedRequest((headers) => clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/resend'),
         headers: headers,
         body: jsonEncode({'requestId': requestId}),
-      );
+      ));
       return res.statusCode == 200;
     } catch (_) {
       return false;
@@ -795,15 +816,14 @@ class UserProfileService {
     }
 
     try {
-      final headers = await _authHeaders();
-      final res = await clientHelper.post(
+      final res = await authedRequest((headers) => clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/request'),
         headers: headers,
         body: jsonEncode({
           'toCode': cleanTo,
           'fromName': myName ?? username,
         }),
-      );
+      ));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -875,11 +895,10 @@ class UserProfileService {
     if (myCode.isEmpty) return getCachedIncomingRequests();
 
     try {
-      final headers = await _authHeaders();
-      final res = await clientHelper.get(
+      final res = await authedRequest((headers) => clientHelper.get(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/requests/$myCode'),
         headers: headers,
-      );
+      ));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -902,12 +921,11 @@ class UserProfileService {
               }
               if (reqId != null) {
                 try {
-                  final ackHeaders = await _authHeaders();
-                  await clientHelper.post(
+                  await authedRequest((ackHeaders) => clientHelper.post(
                     Uri.parse('${AppConfig.backendBaseUrl}/friends/ack'),
                     headers: ackHeaders,
                     body: jsonEncode({'requestId': reqId}),
-                  );
+                  ));
                 } catch (_) {}
               }
             }
@@ -935,14 +953,13 @@ class UserProfileService {
 
   Future<bool> acceptRequest(FriendRequest req) async {
     try {
-      final headers = await _authHeaders();
-      final res = await clientHelper.post(
+      final res = await authedRequest((headers) => clientHelper.post(
         Uri.parse('${AppConfig.backendBaseUrl}/friends/accept'),
         headers: headers,
         body: jsonEncode({
           'requestId': req.id,
         }),
-      );
+      ));
 
       if (res.statusCode != 200) {
         return false;

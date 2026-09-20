@@ -12,6 +12,24 @@ import { requireFriendAuth } from '../middleware/auth';
 
 export const friendsApp = new Hono<AppEnv>();
 
+async function getUsername(db: D1Database, friendCode: string): Promise<string> {
+  try {
+    const user = await db
+      .prepare(`SELECT username FROM users WHERE friend_code = ?`)
+      .bind(friendCode)
+      .first<{ username: string | null }>();
+    if (user?.username) return user.username;
+  } catch (_) {}
+  try {
+    const account = await db
+      .prepare(`SELECT username FROM friend_accounts WHERE friend_code = ?`)
+      .bind(friendCode)
+      .first<{ username: string | null }>();
+    if (account?.username) return account.username;
+  } catch (_) {}
+  return friendCode;
+}
+
 export async function resolveInviteDetails(rawCode: string, db: D1Database) {
   if (!rawCode) return { status: 'invalid' };
   const cleanCode = String(rawCode).trim().toUpperCase();
@@ -38,76 +56,170 @@ export async function resolveInviteDetails(rawCode: string, db: D1Database) {
     return { status: invite.status };
   }
 
-  const account = await db
-    .prepare(`SELECT username FROM friend_accounts WHERE friend_code = ?`)
-    .bind(invite.created_by)
-    .first<{ username: string | null }>();
+  const inviterName = await getUsername(db, invite.created_by);
 
   return {
-    username: account?.username || invite.from_name || 'Friend',
+    username: inviterName !== invite.created_by ? inviterName : (invite.from_name || 'Friend'),
     friendCode: invite.created_by,
     status: 'valid',
     expiresAt: invite.expires_at,
   };
 }
 
-// 0. Issue / refresh authorization token for a friend code using device secret
+// 0. Idempotent user bootstrap & authorization token issuance
+// Bootstraps user in `users` table (id, username, friend_code, avatar, created_at)
 friendsApp.post('/token', async (c) => {
   const body = await c.req.json<{
     friendCode?: string;
     secret?: string;
+    deviceSecret?: string;
     username?: string;
+    avatar?: string;
+    publicKey?: string;
   }>().catch(() => ({}) as any);
 
-  const { friendCode, secret, username } = body;
-  if (!friendCode || !secret) {
+  const rawFriendCode = body.friendCode;
+  const rawSecret = body.deviceSecret || body.secret;
+  const rawUsername = body.username;
+  const rawAvatar = body.avatar;
+
+  if (!rawFriendCode || !rawSecret) {
     return c.json({ error: 'friendCode and secret are required' }, 400);
   }
 
-  const cleanCode = String(friendCode).trim().toUpperCase();
+  const cleanCode = String(rawFriendCode).trim().toUpperCase();
   if (cleanCode.length < 3 || cleanCode.length > 32) {
     return c.json({ error: 'friendCode must be between 3 and 32 characters' }, 400);
   }
 
-  const cleanSecret = String(secret).trim();
+  const cleanSecret = String(rawSecret).trim();
   if (cleanSecret.length < 16) {
     return c.json({ error: 'secret must be at least 16 characters' }, 400);
   }
 
-  const secretHash = await hashSecret(cleanSecret);
-  const existing = await c.env.DB.prepare(
-    `SELECT * FROM friend_accounts WHERE friend_code = ?`
-  )
-    .bind(cleanCode)
-    .first<FriendAccountRow>();
+  const cleanUsername = rawUsername ? String(rawUsername).trim() : cleanCode;
+  const cleanAvatar = rawAvatar ? String(rawAvatar).trim() : null;
+  const now = Date.now();
 
-  if (!existing) {
+  // 1. Try to bootstrap user with UPSERT (race-condition safe)
+  // Uses generateId for consistent ID format; preserves existing row on conflict
+  let user: {
+    id: string;
+    username: string | null;
+    friend_code: string;
+    avatar: string | null;
+    created_at: number | string;
+  } | null = null;
+
+  const newId = generateId(16);
+  try {
+    // First attempt: INSERT new user
     await c.env.DB.prepare(
-      `INSERT INTO friend_accounts (friend_code, secret_hash, username, created_at) VALUES (?, ?, ?, ?)`
+      `INSERT INTO users (id, username, friend_code, avatar, created_at) VALUES (?, ?, ?, ?, ?)`
     )
-      .bind(cleanCode, secretHash, username ? String(username).trim() : null, Date.now())
+      .bind(newId, cleanUsername, cleanCode, cleanAvatar, now)
       .run();
-  } else {
-    if (existing.secret_hash !== secretHash) {
-      return c.json({ error: 'Invalid device credentials for this friend code' }, 401);
-    }
-    if (username) {
-      await c.env.DB.prepare(
-        `UPDATE friend_accounts SET username = ? WHERE friend_code = ?`
-      )
-        .bind(String(username).trim(), cleanCode)
-        .run();
+
+    user = {
+      id: newId,
+      username: cleanUsername,
+      friend_code: cleanCode,
+      avatar: cleanAvatar,
+      created_at: now,
+    };
+  } catch (e: any) {
+    // If UNIQUE constraint on friend_code failed (race condition), fetch existing user
+    const isUniqueConstraint = e?.message?.includes('UNIQUE') || e?.message?.includes('unique');
+    if (isUniqueConstraint) {
+      try {
+        user = await c.env.DB.prepare(
+          `SELECT id, username, friend_code, avatar, created_at FROM users WHERE friend_code = ?`
+        )
+          .bind(cleanCode)
+          .first();
+      } catch (_) {}
+    } else {
+      // Other error (e.g., DB unavailable) - rethrow to surface the issue
+      throw e;
     }
   }
 
+  // 2. If user exists (either from INSERT or from conflict fetch), update username/avatar if provided
+  if (user) {
+    const needsUsername = rawUsername && cleanUsername !== user.username;
+    const needsAvatar = rawAvatar !== undefined && cleanAvatar !== user.avatar;
+    if (needsUsername || needsAvatar) {
+      const updatedUsername = needsUsername ? cleanUsername : user.username;
+      const updatedAvatar = needsAvatar ? cleanAvatar : user.avatar;
+      try {
+        await c.env.DB.prepare(
+          `UPDATE users SET username = ?, avatar = ? WHERE friend_code = ?`
+        )
+          .bind(updatedUsername, updatedAvatar, cleanCode)
+          .run();
+        user.username = updatedUsername;
+        user.avatar = updatedAvatar;
+      } catch (_) {}
+    }
+  } else {
+    // Fallback: if we still don't have a user (shouldn't happen), try SELECT once more
+    try {
+      user = await c.env.DB.prepare(
+        `SELECT id, username, friend_code, avatar, created_at FROM users WHERE friend_code = ?`
+      )
+        .bind(cleanCode)
+        .first();
+    } catch (_) {}
+    if (!user) {
+      return c.json({ error: 'Failed to bootstrap user' }, 500);
+    }
+  }
+
+  // Maintain friend_accounts table if present in environment
+  if (rawSecret) {
+    const cleanSecret = String(rawSecret).trim();
+    if (cleanSecret.length >= 16) {
+      try {
+        const secretHash = await hashSecret(cleanSecret);
+        const existingAccount = await c.env.DB.prepare(
+          `SELECT * FROM friend_accounts WHERE friend_code = ?`
+        ).bind(cleanCode).first<FriendAccountRow>();
+
+        if (!existingAccount) {
+          await c.env.DB.prepare(
+            `INSERT INTO friend_accounts (friend_code, secret_hash, username, created_at) VALUES (?, ?, ?, ?)`
+          ).bind(cleanCode, secretHash, cleanUsername, now).run();
+        } else {
+          if (existingAccount.secret_hash !== secretHash) {
+            return c.json({ error: 'Invalid device credentials for this friend code' }, 401);
+          }
+          await c.env.DB.prepare(
+            `UPDATE friend_accounts SET username = ? WHERE friend_code = ?`
+          ).bind(cleanUsername, cleanCode).run();
+        }
+      } catch (_) {}
+    }
+  }
+
+  // 5. Generate JWT
   const jwtSecret = getJwtSecret(c.env);
   const token = await signJwt(
-    { friendCode: cleanCode },
+    { friendCode: cleanCode, userId: user.id },
     jwtSecret,
     90 * 24 * 60 * 60 // 90 days
   );
 
-  return c.json({ token, friendCode: cleanCode });
+  // 6. Return token and user metadata
+  return c.json({
+    token,
+    friendCode: cleanCode,
+    user: {
+      id: user.id,
+      username: user.username || cleanCode,
+      friendCode: user.friend_code,
+      avatar: user.avatar,
+    },
+  });
 });
 
 // 0b. Lookup public details of a friend code for pre-send confirmation (Method A)
@@ -117,20 +229,38 @@ friendsApp.get('/lookup/:code', async (c) => {
     return c.json({ error: 'friendCode parameter is required' }, 400);
   }
   const cleanCode = String(rawCode).trim().toUpperCase();
-  const account = await c.env.DB.prepare(
-    `SELECT friend_code, username FROM friend_accounts WHERE friend_code = ?`
-  )
-    .bind(cleanCode)
-    .first<{ friend_code: string; username: string | null }>();
 
-  if (!account) {
+  let user: { id: string; friend_code: string; username: string | null; avatar: string | null } | null = null;
+  try {
+    user = await c.env.DB.prepare(
+      `SELECT id, friend_code, username, avatar FROM users WHERE friend_code = ?`
+    )
+      .bind(cleanCode)
+      .first();
+  } catch (_) {}
+
+  if (!user) {
+    try {
+      const account = await c.env.DB.prepare(
+        `SELECT friend_code, username FROM friend_accounts WHERE friend_code = ?`
+      )
+        .bind(cleanCode)
+        .first<{ friend_code: string; username: string | null }>();
+      if (account) {
+        user = { id: account.friend_code, friend_code: account.friend_code, username: account.username, avatar: null };
+      }
+    } catch (_) {}
+  }
+
+  if (!user) {
     return c.json({ exists: false, error: 'User not found' }, 404);
   }
 
   return c.json({
     exists: true,
-    friendCode: account.friend_code,
-    username: account.username || account.friend_code,
+    friendCode: user.friend_code,
+    username: user.username || user.friend_code,
+    avatar: user.avatar,
   });
 });
 
@@ -152,11 +282,24 @@ friendsApp.post('/request', requireFriendAuth, async (c) => {
   }
 
   // Verify recipient account exists (Section 5H)
-  const recipient = await c.env.DB.prepare(
-    `SELECT friend_code FROM friend_accounts WHERE friend_code = ?`
-  )
-    .bind(cleanTo)
-    .first<{ friend_code: string }>();
+  let recipient: { friend_code: string } | null = null;
+  try {
+    recipient = await c.env.DB.prepare(
+      `SELECT friend_code FROM users WHERE friend_code = ?`
+    )
+      .bind(cleanTo)
+      .first<{ friend_code: string }>();
+  } catch (_) {}
+
+  if (!recipient) {
+    try {
+      recipient = await c.env.DB.prepare(
+        `SELECT friend_code FROM friend_accounts WHERE friend_code = ?`
+      )
+        .bind(cleanTo)
+        .first<{ friend_code: string }>();
+    } catch (_) {}
+  }
 
   if (!recipient) {
     return c.json({ error: 'Recipient friend code does not exist' }, 404);
@@ -463,18 +606,36 @@ friendsApp.get('/list/:myCode', requireFriendAuth, async (c) => {
     return c.json({ error: 'Forbidden: cannot access friend list for another code' }, 403);
   }
 
-  const rows = await c.env.DB.prepare(
-    `SELECT
-       CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END AS friendCode,
-       f.created_at AS createdAt,
-       fa.username
-     FROM friends f
-     LEFT JOIN friend_accounts fa ON fa.friend_code = (CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END)
-     WHERE f.user_a = ? OR f.user_b = ?
-     ORDER BY f.created_at DESC`
-  )
-    .bind(cleanCode, cleanCode, cleanCode, cleanCode)
-    .all<{ friendCode: string; createdAt: number; username: string | null }>();
+  let rows: { results?: Array<{ friendCode: string; createdAt: number; username: string | null }> } = { results: [] };
+  try {
+    rows = await c.env.DB.prepare(
+      `SELECT
+         CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END AS friendCode,
+         f.created_at AS createdAt,
+         u.username
+       FROM friends f
+       LEFT JOIN users u ON u.friend_code = (CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END)
+       WHERE f.user_a = ? OR f.user_b = ?
+       ORDER BY f.created_at DESC`
+    )
+      .bind(cleanCode, cleanCode, cleanCode, cleanCode)
+      .all();
+  } catch (_) {
+    try {
+      rows = await c.env.DB.prepare(
+        `SELECT
+           CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END AS friendCode,
+           f.created_at AS createdAt,
+           fa.username
+         FROM friends f
+         LEFT JOIN friend_accounts fa ON fa.friend_code = (CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END)
+         WHERE f.user_a = ? OR f.user_b = ?
+         ORDER BY f.created_at DESC`
+      )
+        .bind(cleanCode, cleanCode, cleanCode, cleanCode)
+        .all();
+    } catch (_) {}
+  }
 
   const enriched = (rows.results || []).map((r) => ({
     friendCode: r.friendCode,
@@ -493,23 +654,8 @@ friendsApp.get('/sent/:myCode', requireFriendAuth, async (c) => {
     return c.json({ error: 'Forbidden: cannot access sent requests for another code' }, 403);
   }
 
-  const rows = await c.env.DB.prepare(
-    `SELECT
-       fr.id,
-       fr.from_code AS fromCode,
-       fr.to_code AS toCode,
-       fr.from_name AS fromName,
-       fr.status,
-       fr.created_at AS createdAt,
-       fr.updated_at AS updatedAt,
-       fa.username AS toName
-     FROM friend_requests fr
-     LEFT JOIN friend_accounts fa ON fa.friend_code = fr.to_code
-     WHERE fr.from_code = ?
-     ORDER BY fr.updated_at DESC`
-  )
-    .bind(cleanCode)
-    .all<{
+  let rows: {
+    results?: Array<{
       id: string;
       fromCode: string;
       toCode: string;
@@ -518,7 +664,48 @@ friendsApp.get('/sent/:myCode', requireFriendAuth, async (c) => {
       createdAt: number;
       updatedAt: number;
       toName: string | null;
-    }>();
+    }>;
+  } = { results: [] };
+
+  try {
+    rows = await c.env.DB.prepare(
+      `SELECT
+         fr.id,
+         fr.from_code AS fromCode,
+         fr.to_code AS toCode,
+         fr.from_name AS fromName,
+         fr.status,
+         fr.created_at AS createdAt,
+         fr.updated_at AS updatedAt,
+         u.username AS toName
+       FROM friend_requests fr
+       LEFT JOIN users u ON u.friend_code = fr.to_code
+       WHERE fr.from_code = ?
+       ORDER BY fr.updated_at DESC`
+    )
+      .bind(cleanCode)
+      .all();
+  } catch (_) {
+    try {
+      rows = await c.env.DB.prepare(
+        `SELECT
+           fr.id,
+           fr.from_code AS fromCode,
+           fr.to_code AS toCode,
+           fr.from_name AS fromName,
+           fr.status,
+           fr.created_at AS createdAt,
+           fr.updated_at AS updatedAt,
+           fa.username AS toName
+         FROM friend_requests fr
+         LEFT JOIN friend_accounts fa ON fa.friend_code = fr.to_code
+         WHERE fr.from_code = ?
+         ORDER BY fr.updated_at DESC`
+      )
+        .bind(cleanCode)
+        .all();
+    } catch (_) {}
+  }
 
   const now = Date.now();
   const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
@@ -565,16 +752,11 @@ friendsApp.post('/invite', requireFriendAuth, async (c) => {
   const inviteCode = generateInviteCode();
   const expiresAt = now + 30 * 24 * 60 * 60 * 1000; // 30 days TTL
 
-  const account = await c.env.DB.prepare(
-    `SELECT username FROM friend_accounts WHERE friend_code = ?`
-  )
-    .bind(cleanCode)
-    .first<{ username: string | null }>();
-
+  const inviterName = await getUsername(c.env.DB, cleanCode);
   const effectiveName = fromName
     ? String(fromName).trim()
-    : account?.username
-    ? account.username
+    : inviterName !== cleanCode
+    ? inviterName
     : null;
 
   await c.env.DB.prepare(
@@ -650,13 +832,8 @@ friendsApp.post('/invite/confirm', requireFriendAuth, async (c) => {
   }
 
   // Resolve inviter name
-  const inviterAccount = await c.env.DB.prepare(
-    `SELECT username FROM friend_accounts WHERE friend_code = ?`
-  )
-    .bind(cleanFrom)
-    .first<{ username: string | null }>();
-
-  const fromName = inviterAccount?.username || invite.from_name || 'Friend';
+  const inviterName = await getUsername(c.env.DB, cleanFrom);
+  const fromName = inviterName !== cleanFrom ? inviterName : (invite.from_name || 'Friend');
 
   // Check if a request from A to B already exists and is pending
   const existing = await c.env.DB.prepare(
@@ -695,26 +872,27 @@ friendsApp.post('/invite/confirm', requireFriendAuth, async (c) => {
     ]);
 
     return c.json({
-      id: reciprocal.id,
-      status: 'accepted',
-      alreadySent: false,
-      autoAccepted: true,
+      success: true,
       fromCode: cleanFrom,
       toCode: cleanTo,
       fromName,
+      status: 'paired',
+      autoAccepted: true,
     });
   }
 
-  const id = generateId(16);
+  // Create standard incoming friend request from A to B
+  const reqId = generateId(16);
   await c.env.DB.prepare(
     `INSERT INTO friend_requests (id, from_code, to_code, from_name, status, created_at, updated_at)
      VALUES (?, ?, ?, ?, 'pending', ?, ?)`
   )
-    .bind(id, cleanFrom, cleanTo, fromName, now, now)
+    .bind(reqId, cleanFrom, cleanTo, fromName, now, now)
     .run();
 
   return c.json({
-    id,
+    success: true,
+    id: reqId,
     status: 'pending',
     fromCode: cleanFrom,
     toCode: cleanTo,
@@ -733,9 +911,17 @@ friendsApp.post('/profile', requireFriendAuth, async (c) => {
   const cleanCode = c.get('friendCode')!;
   const cleanName = String(username).trim();
 
-  await c.env.DB.prepare(`UPDATE friend_accounts SET username = ? WHERE friend_code = ?`)
-    .bind(cleanName, cleanCode)
-    .run();
+  try {
+    await c.env.DB.prepare(`UPDATE users SET username = ? WHERE friend_code = ?`)
+      .bind(cleanName, cleanCode)
+      .run();
+  } catch (_) {}
+
+  try {
+    await c.env.DB.prepare(`UPDATE friend_accounts SET username = ? WHERE friend_code = ?`)
+      .bind(cleanName, cleanCode)
+      .run();
+  } catch (_) {}
 
   return c.json({ ok: true, username: cleanName });
 });
@@ -767,12 +953,25 @@ friendsApp.post('/albums/invite', requireFriendAuth, async (c) => {
     return c.json({ error: 'Cannot invite yourself to an album' }, 400);
   }
 
-  // Verify recipient friend code exists (Section 7)
-  const recipient = await c.env.DB.prepare(
-    `SELECT friend_code FROM friend_accounts WHERE friend_code = ?`
-  )
-    .bind(cleanTo)
-    .first<{ friend_code: string }>();
+  // Verify recipient friend code exists in users or friend_accounts
+  let recipient: { friend_code: string } | null = null;
+  try {
+    recipient = await c.env.DB.prepare(
+      `SELECT friend_code FROM users WHERE friend_code = ?`
+    )
+      .bind(cleanTo)
+      .first<{ friend_code: string }>();
+  } catch (_) {}
+
+  if (!recipient) {
+    try {
+      recipient = await c.env.DB.prepare(
+        `SELECT friend_code FROM friend_accounts WHERE friend_code = ?`
+      )
+        .bind(cleanTo)
+        .first<{ friend_code: string }>();
+    } catch (_) {}
+  }
 
   if (!recipient) {
     return c.json({ error: 'Recipient friend code does not exist' }, 404);
