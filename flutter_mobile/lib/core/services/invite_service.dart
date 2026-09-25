@@ -4,6 +4,8 @@ import 'package:flutter_mobile/core/config.dart';
 import 'package:flutter_mobile/core/crypto/crypto_core.dart';
 import 'package:flutter_mobile/core/crypto/key_store.dart';
 import 'package:flutter_mobile/core/network/http_client_helper.dart';
+import 'package:flutter_mobile/core/services/user_profile_service.dart';
+import 'package:flutter_mobile/core/util/kioku_log.dart';
 
 class InviteService {
   InviteService._();
@@ -12,7 +14,7 @@ class InviteService {
   HttpClientHelper client = HttpClientHelper.instance;
 
   // Configurable signaling/relay server host
-  String backendBaseUrl = AppConfig.backendBaseUrl;
+  String get backendBaseUrl => AppConfig.backendBaseUrl;
 
   /// 1. Create a claim token with a 10-minute TTL and inviter device public key
   Future<({String claimToken, String inviterPubKey})?> createInviteClaim({
@@ -22,13 +24,12 @@ class InviteService {
       final myPubKey = await KeyStore.instance.getDevicePublicKey();
       final myPubKeyB64 = base64UrlEncode(myPubKey);
 
-      final res = await client.post(
-        Uri.parse('$backendBaseUrl/claim/request'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'albumId': albumId,
-          'inviterPubKey': myPubKeyB64,
-        }),
+      final res = await UserProfileService.instance.authedRequest(
+        (headers) => client.post(
+          Uri.parse('$backendBaseUrl/claim/request'),
+          headers: {...headers, 'Content-Type': 'application/json'},
+          body: jsonEncode({'albumId': albumId, 'inviterPubKey': myPubKeyB64}),
+        ),
       );
 
       if (res.statusCode == 200) {
@@ -37,20 +38,16 @@ class InviteService {
           claimToken: data['claimToken'] as String,
           inviterPubKey: myPubKeyB64,
         );
+      } else {
+        KiokuLog.e(
+          'InviteService',
+          'createInviteClaim failed: ${res.statusCode} ${res.body}',
+        );
       }
-    } catch (_) {
-      // Fallback for offline / direct mesh exchange
+    } catch (e) {
+      KiokuLog.e('InviteService', 'createInviteClaim exception', e);
     }
-
-    try {
-      final myPubKey = await KeyStore.instance.getDevicePublicKey();
-      return (
-        claimToken: '',
-        inviterPubKey: base64UrlEncode(myPubKey),
-      );
-    } catch (_) {
-      return null;
-    }
+    return null;
   }
 
   /// 2. Redeem a claim token as joiner
@@ -59,13 +56,15 @@ class InviteService {
   }) async {
     try {
       final myPubKey = await KeyStore.instance.getDevicePublicKey();
-      final res = await client.post(
-        Uri.parse('$backendBaseUrl/claim/redeem'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'claimToken': claimToken,
-          'recipientPubKey': base64UrlEncode(myPubKey),
-        }),
+      final res = await UserProfileService.instance.authedRequest(
+        (headers) => client.post(
+          Uri.parse('$backendBaseUrl/claim/redeem'),
+          headers: {...headers, 'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'claimToken': claimToken,
+            'recipientPubKey': base64UrlEncode(myPubKey),
+          }),
+        ),
       );
 
       if (res.statusCode == 200) {
@@ -73,10 +72,19 @@ class InviteService {
         final inviterPubKeyB64 = data['inviterPubKey'] as String;
         return (
           albumId: data['albumId'] as String,
-          inviterPubKey: base64Url.decode(base64Url.normalize(inviterPubKeyB64)),
+          inviterPubKey: base64Url.decode(
+            base64Url.normalize(inviterPubKeyB64),
+          ),
+        );
+      } else {
+        KiokuLog.e(
+          'InviteService',
+          'redeemClaim failed: ${res.statusCode} ${res.body}',
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      KiokuLog.e('InviteService', 'redeemClaim exception', e);
+    }
     return null;
   }
 
@@ -87,20 +95,28 @@ class InviteService {
     required Uint8List recipientPubKey,
   }) async {
     try {
-      final collectionKey = await KeyStore.instance.getOrCreateCollectionKey(albumId);
-      final sealed = CryptoCore.instance.sealForPublicKey(collectionKey, recipientPubKey);
+      final collectionKey = await KeyStore.instance.getOrCreateCollectionKey(
+        albumId,
+      );
+      final sealed = CryptoCore.instance.sealForPublicKey(
+        collectionKey,
+        recipientPubKey,
+      );
 
-      final res = await client.post(
-        Uri.parse('$backendBaseUrl/claim/seal'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'claimToken': claimToken,
-          'sealedKey': base64UrlEncode(sealed),
-        }),
+      final res = await UserProfileService.instance.authedRequest(
+        (headers) => client.post(
+          Uri.parse('$backendBaseUrl/claim/seal'),
+          headers: {...headers, 'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'claimToken': claimToken,
+            'sealedKey': base64UrlEncode(sealed),
+          }),
+        ),
       );
 
       return res.statusCode == 200;
-    } catch (_) {
+    } catch (e) {
+      KiokuLog.e('InviteService', 'sealAndPostCollectionKey exception', e);
       return false;
     }
   }
@@ -119,7 +135,9 @@ class InviteService {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         final sealedKeyB64 = data['sealedKey'] as String?;
         if (sealedKeyB64 != null && sealedKeyB64.isNotEmpty) {
-          final sealedBytes = base64Url.decode(base64Url.normalize(sealedKeyB64));
+          final sealedBytes = base64Url.decode(
+            base64Url.normalize(sealedKeyB64),
+          );
           final myPubKey = await KeyStore.instance.getDevicePublicKey();
           final mySecKey = await KeyStore.instance.getDevicePrivateKey();
 
@@ -135,7 +153,9 @@ class InviteService {
           }
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      KiokuLog.e('InviteService', 'fetchAndUnsealCollectionKey exception', e);
+    }
     return false;
   }
 }

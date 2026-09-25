@@ -6,11 +6,7 @@ class AvatarItem {
   final String? email;
   final String? imageUrl;
 
-  const AvatarItem({
-    this.name,
-    this.email,
-    this.imageUrl,
-  });
+  const AvatarItem({this.name, this.email, this.imageUrl});
 
   String get initials {
     if (name != null && name!.trim().isNotEmpty) {
@@ -18,7 +14,9 @@ class AvatarItem {
       if (parts.length > 1) {
         return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
       }
-      return parts.first.substring(0, parts.first.length >= 2 ? 2 : 1).toUpperCase();
+      return parts.first
+          .substring(0, parts.first.length >= 2 ? 2 : 1)
+          .toUpperCase();
     }
     if (email != null && email!.trim().isNotEmpty) {
       return email!.substring(0, 1).toUpperCase();
@@ -56,7 +54,9 @@ class AvatarStack extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final visibleCount = avatars.length > maxVisible ? maxVisible - 1 : avatars.length;
+    final visibleCount = avatars.length > maxVisible
+        ? maxVisible - 1
+        : avatars.length;
     final remainingCount = avatars.length - visibleCount;
 
     final itemsToRender = avatars.take(visibleCount).toList();
@@ -65,7 +65,10 @@ class AvatarStack extends StatelessWidget {
       onTap: onTap,
       child: SizedBox(
         height: size,
-        width: size + (itemsToRender.length - 1 + (remainingCount > 0 ? 1 : 0)) * (size - overlap),
+        width:
+            size +
+            (itemsToRender.length - 1 + (remainingCount > 0 ? 1 : 0)) *
+                (size - overlap),
         child: Stack(
           children: [
             for (int i = 0; i < itemsToRender.length; i++)
@@ -117,10 +120,7 @@ class AvatarStack extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: bgColor,
-        border: Border.all(
-          color: effBorderColor,
-          width: borderWidth,
-        ),
+        border: Border.all(color: effBorderColor, width: borderWidth),
       ),
       alignment: Alignment.center,
       child: avatar.imageUrl != null && avatar.imageUrl!.isNotEmpty
@@ -130,7 +130,8 @@ class AvatarStack extends StatelessWidget {
                 width: size,
                 height: size,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => _buildInitialsText(avatar.initials, colors),
+                errorBuilder: (context, error, stackTrace) =>
+                    _buildInitialsText(avatar.initials, colors),
               ),
             )
           : _buildInitialsText(avatar.initials, colors),
@@ -161,10 +162,7 @@ class AvatarStack extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: colors.surfaceContainerHighest,
-        border: Border.all(
-          color: effBorderColor,
-          width: borderWidth,
-        ),
+        border: Border.all(color: effBorderColor, width: borderWidth),
       ),
       alignment: Alignment.center,
       child: Text(

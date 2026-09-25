@@ -1,4 +1,4 @@
-﻿// routes/claim.js
+// routes/claim.js
 // Short-lived single-use claim tokens for secure device-keypair collection key exchange.
 // NO raw collection keys or master keys ever pass through here.
 
@@ -10,13 +10,15 @@ const { HttpError } = require('../middleware/errorHandler');
 
 const router = express.Router();
 
-const CLAIM_LIMITER = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many claim requests, please try again later' },
-});
+const CLAIM_LIMITER = process.env.NODE_ENV === 'test'
+  ? (req, res, next) => next()
+  : rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: 30,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { error: 'Too many claim requests, please try again later' },
+    });
 
 // 1. Inviter creates a short-lived, single-use claim token
 router.post('/request', CLAIM_LIMITER, (req, res, next) => {

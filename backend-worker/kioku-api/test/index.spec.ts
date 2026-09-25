@@ -181,11 +181,25 @@ describe('Kioku Cloudflare Worker API Suite', () => {
   let createdRequestId: string;
 
   describe('Health & Static Endpoints', () => {
-    it('GET /health returns 200 { ok: true }', async () => {
+    it('GET /health returns 200 with service, database, and environment', async () => {
       const res = await dispatch('/health');
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
-      expect(data).toEqual({ ok: true });
+      expect(data.ok).toBe(true);
+      expect(data.service).toBe('kioku-api');
+      expect(data.database).toBe('ok');
+    });
+
+    it('GET /auth/me without token returns 401', async () => {
+      const res = await dispatch('/auth/me');
+      expect(res.status).toBe(401);
+    });
+
+    it('GET /auth/me with invalid token returns 401', async () => {
+      const res = await dispatch('/auth/me', {
+        headers: { Authorization: 'Bearer invalid.jwt.token' },
+      });
+      expect(res.status).toBe(401);
     });
 
     it('GET /privacy returns privacy policy markdown', async () => {
@@ -240,6 +254,17 @@ describe('Kioku Cloudflare Worker API Suite', () => {
       expect(dataB).toHaveProperty('token');
       expect(dataB.friendCode).toBe(userB);
       tokenB = dataB.token;
+    });
+
+    it('GET /auth/me with valid token returns authenticated user details', async () => {
+      const res = await dispatch('/auth/me', {
+        headers: { Authorization: `Bearer ${tokenA}` },
+      });
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.authenticated).toBe(true);
+      expect(data.friendCode).toBe(userA);
+      expect(data).toHaveProperty('serverTime');
     });
 
     it('rejects token request with incorrect secret for existing code', async () => {

@@ -174,6 +174,27 @@ function initDB() {
       status          TEXT DEFAULT 'valid',
       created_at      INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS albums (
+      id                TEXT PRIMARY KEY,
+      owner_user_id     TEXT NOT NULL,
+      title             TEXT NOT NULL,
+      storage_type      TEXT DEFAULT 'local',
+      storage_reference TEXT,
+      current_epoch     INTEGER DEFAULT 1,
+      created_at        INTEGER NOT NULL,
+      updated_at        INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS album_members (
+      album_id          TEXT NOT NULL,
+      user_id           TEXT NOT NULL,
+      role              TEXT DEFAULT 'member',
+      status            TEXT DEFAULT 'active',
+      joined_at         INTEGER NOT NULL,
+      updated_at        INTEGER NOT NULL,
+      PRIMARY KEY (album_id, user_id)
+    );
   `);
 
   // Non-destructive schema migration for existing databases: ensure columns exist before indices

@@ -3,16 +3,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
 
 class QrScannerDialog extends StatefulWidget {
-  const QrScannerDialog({
-    super.key,
-    required this.onScanned,
-  });
+  const QrScannerDialog({super.key, required this.onScanned});
 
   final ValueChanged<String> onScanned;
 
-  static Future<void> show(BuildContext context, {required ValueChanged<String> onScanned}) {
+  static Future<void> show(
+    BuildContext context, {
+    required ValueChanged<String> onScanned,
+  }) {
     return showDialog<void>(
       context: context,
+      useRootNavigator: true,
       barrierColor: Colors.black87,
       builder: (ctx) => QrScannerDialog(onScanned: onScanned),
     );
@@ -71,10 +72,7 @@ class _QrScannerDialogState extends State<QrScannerDialog>
         decoration: BoxDecoration(
           color: colors.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(28),
-          border: Border.all(
-            color: colors.divider,
-            width: 1,
-          ),
+          border: Border.all(color: colors.divider, width: 1),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.45),
@@ -92,7 +90,11 @@ class _QrScannerDialogState extends State<QrScannerDialog>
               children: [
                 Row(
                   children: [
-                    Icon(Icons.qr_code_scanner_rounded, color: colors.primary, size: 24),
+                    Icon(
+                      Icons.qr_code_scanner_rounded,
+                      color: colors.primary,
+                      size: 24,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'Scan Kioku Code',
@@ -140,7 +142,10 @@ class _QrScannerDialogState extends State<QrScannerDialog>
                       animation: _scanLineAnimation,
                       builder: (context, child) {
                         return Align(
-                          alignment: Alignment(0, (_scanLineAnimation.value * 2) - 1),
+                          alignment: Alignment(
+                            0,
+                            (_scanLineAnimation.value * 2) - 1,
+                          ),
                           child: Container(
                             height: 2.5,
                             margin: const EdgeInsets.symmetric(horizontal: 24),
@@ -210,7 +215,11 @@ class _QrScannerDialogState extends State<QrScannerDialog>
                     ),
                   ),
                   IconButton(
-                    icon: Icon(Icons.arrow_forward_rounded, color: colors.primary, size: 20),
+                    icon: Icon(
+                      Icons.arrow_forward_rounded,
+                      color: colors.primary,
+                      size: 20,
+                    ),
                     onPressed: _submitManual,
                   ),
                 ],
@@ -223,7 +232,10 @@ class _QrScannerDialogState extends State<QrScannerDialog>
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 IconButton.filledTonal(
-                  icon: Icon(_torchOn ? Icons.flash_on_rounded : Icons.flash_off_rounded, size: 20),
+                  icon: Icon(
+                    _torchOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
+                    size: 20,
+                  ),
                   onPressed: () {
                     HapticFeedback.selectionClick();
                     setState(() => _torchOn = !_torchOn);
@@ -267,7 +279,12 @@ class _ViewfinderCornersPainter extends CustomPainter {
     final pathTR = Path()
       ..moveTo(size.width - margin - cornerLength, margin)
       ..lineTo(size.width - margin - cornerRadius, margin)
-      ..quadraticBezierTo(size.width - margin, margin, size.width - margin, margin + cornerRadius)
+      ..quadraticBezierTo(
+        size.width - margin,
+        margin,
+        size.width - margin,
+        margin + cornerRadius,
+      )
       ..lineTo(size.width - margin, margin + cornerLength);
     canvas.drawPath(pathTR, paint);
 
@@ -275,7 +292,12 @@ class _ViewfinderCornersPainter extends CustomPainter {
     final pathBL = Path()
       ..moveTo(margin, size.height - margin - cornerLength)
       ..lineTo(margin, size.height - margin - cornerRadius)
-      ..quadraticBezierTo(margin, size.height - margin, margin + cornerRadius, size.height - margin)
+      ..quadraticBezierTo(
+        margin,
+        size.height - margin,
+        margin + cornerRadius,
+        size.height - margin,
+      )
       ..lineTo(margin + cornerLength, size.height - margin);
     canvas.drawPath(pathBL, paint);
 
@@ -283,7 +305,12 @@ class _ViewfinderCornersPainter extends CustomPainter {
     final pathBR = Path()
       ..moveTo(size.width - margin - cornerLength, size.height - margin)
       ..lineTo(size.width - margin - cornerRadius, size.height - margin)
-      ..quadraticBezierTo(size.width - margin, size.height - margin, size.width - margin, size.height - margin - cornerRadius)
+      ..quadraticBezierTo(
+        size.width - margin,
+        size.height - margin,
+        size.width - margin,
+        size.height - margin - cornerRadius,
+      )
       ..lineTo(size.width - margin, size.height - margin - cornerLength);
     canvas.drawPath(pathBR, paint);
   }

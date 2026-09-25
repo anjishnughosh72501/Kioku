@@ -10,9 +10,12 @@ CREATE TABLE IF NOT EXISTS groups (
 
 CREATE TABLE IF NOT EXISTS users (
   id          TEXT PRIMARY KEY,
-  name        TEXT NOT NULL,
-  group_id    TEXT NOT NULL REFERENCES groups(id),
-  created_at  TEXT DEFAULT (datetime('now'))
+  username    TEXT,
+  friend_code TEXT UNIQUE,
+  avatar      TEXT,
+  name        TEXT,
+  group_id    TEXT REFERENCES groups(id),
+  created_at  INTEGER DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS media (
@@ -49,6 +52,8 @@ CREATE TABLE IF NOT EXISTS claim_tokens (
 
 CREATE TABLE IF NOT EXISTS friend_requests (
   id              TEXT PRIMARY KEY,
+  sender_id       TEXT,
+  receiver_id     TEXT,
   from_code       TEXT NOT NULL,
   to_code         TEXT NOT NULL,
   from_name       TEXT,
@@ -75,7 +80,8 @@ CREATE TABLE IF NOT EXISTS friend_accounts (
   friend_code     TEXT PRIMARY KEY,
   secret_hash     TEXT NOT NULL,
   username        TEXT,
-  created_at      INTEGER NOT NULL
+  created_at      INTEGER NOT NULL,
+  updated_at      INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS friends (
@@ -95,6 +101,7 @@ CREATE TABLE IF NOT EXISTS invites (
   created_at      INTEGER NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS idx_users_friend_code ON users(friend_code);
 CREATE INDEX IF NOT EXISTS idx_media_group_date ON media(group_id, taken_at);
 CREATE INDEX IF NOT EXISTS idx_media_uploader ON media(group_id, uploader_id);
 CREATE INDEX IF NOT EXISTS idx_claim_token_exp ON claim_tokens(token, expires_at);
@@ -104,3 +111,4 @@ CREATE INDEX IF NOT EXISTS idx_ai_to_code ON album_invites(to_code, status);
 CREATE INDEX IF NOT EXISTS idx_friends_a ON friends(user_a);
 CREATE INDEX IF NOT EXISTS idx_friends_b ON friends(user_b);
 CREATE INDEX IF NOT EXISTS idx_invites_code ON invites(invite_code);
+CREATE INDEX IF NOT EXISTS idx_fa_friend_code ON friend_accounts(friend_code);

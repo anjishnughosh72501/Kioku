@@ -12,6 +12,8 @@ import { landingApp } from './routes/landing';
 import { signalingApp } from './routes/signaling';
 import { legacyAuthApp, legacyMediaApp } from './routes/legacy';
 
+import { requireFriendAuth } from './middleware/auth';
+
 const app = new Hono<AppEnv>();
 
 // CORS configuration matching backend/server.js
@@ -30,9 +32,20 @@ app.use('*', async (c, next) => {
   return corsMiddleware(c, next);
 });
 
-// Health check endpoint (matches Flutter & start.py expectation)
-app.get('/health', (c) => {
-  return c.json({ ok: true });
+// Safe diagnostic health check endpoint verifying D1 database connectivity
+app.get('/health', async (c) => {
+  let dbStatus = 'ok';
+  try {
+    await c.env.DB.prepare('SELECT 1').first();
+  } catch (_) {
+    dbStatus = 'error';
+  }
+  return c.json({
+    ok: dbStatus === 'ok',
+    service: 'kioku-api',
+    database: dbStatus,
+    environment: c.env.ENVIRONMENT || 'development',
+  });
 });
 
 // App store and compliance endpoints

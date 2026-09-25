@@ -13,10 +13,10 @@ class ScrubbedLogEntry {
   });
 
   Map<String, dynamic> toJson() => {
-        'timestamp': timestamp.toIso8601String(),
-        'message': message,
-        'stackTrace': stackTrace,
-      };
+    'timestamp': timestamp.toIso8601String(),
+    'message': message,
+    'stackTrace': stackTrace,
+  };
 }
 
 /// Privacy-respecting error telemetry service with PII scrubbing.
@@ -33,7 +33,9 @@ class ErrorReporter {
   /// Captures an error, scrubs all sensitive data, and buffers it.
   void recordError(dynamic error, dynamic stackTrace, {String? context}) {
     final scrubbedMsg = scrub(error.toString());
-    final scrubbedStack = stackTrace != null ? scrub(stackTrace.toString()) : null;
+    final scrubbedStack = stackTrace != null
+        ? scrub(stackTrace.toString())
+        : null;
     final prefix = context != null ? '[$context] ' : '';
 
     final entry = ScrubbedLogEntry(
@@ -58,7 +60,10 @@ class ErrorReporter {
 
     // Scrub file paths (Windows, Linux, macOS, Android sandbox)
     result = result.replaceAll(RegExp(r'[a-zA-Z]:\\[^\s]+'), '[LOCAL_PATH]');
-    result = result.replaceAll(RegExp(r'/data/user/0/[^\s]+'), '[APP_SANDBOX_PATH]');
+    result = result.replaceAll(
+      RegExp(r'/data/user/0/[^\s]+'),
+      '[APP_SANDBOX_PATH]',
+    );
     result = result.replaceAll(RegExp(r'/Users/[^\s]+'), '[USER_PATH]');
     result = result.replaceAll(RegExp(r'/home/[^\s]+'), '[HOME_PATH]');
 

@@ -11,21 +11,27 @@ const { HttpError } = require('../middleware/errorHandler');
 
 const router = express.Router();
 
-const FRIENDS_LIMITER = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many friend requests, please try again later' },
-});
+const NOOP_MIDDLEWARE = (req, res, next) => next();
 
-const TOKEN_LIMITER = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 60,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many authentication attempts, please try again later' },
-});
+const FRIENDS_LIMITER = process.env.NODE_ENV === 'test'
+  ? NOOP_MIDDLEWARE
+  : rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: 100,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { error: 'Too many friend requests, please try again later' },
+    });
+
+const TOKEN_LIMITER = process.env.NODE_ENV === 'test'
+  ? NOOP_MIDDLEWARE
+  : rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: 60,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { error: 'Too many authentication attempts, please try again later' },
+    });
 
 function hashSecret(secret) {
   return crypto.createHash('sha256').update(String(secret).trim()).digest('hex');
@@ -830,3 +836,4 @@ router.post('/albums/decline', FRIENDS_LIMITER, requireFriendAuth, (req, res, ne
 
 module.exports = router;
 module.exports.resolveInviteDetails = resolveInviteDetails;
+module.exports.requireFriendAuth = requireFriendAuth;

@@ -189,11 +189,7 @@ class _CaptureDockButton extends StatelessWidget {
           ],
         ),
         child: const Center(
-          child: Icon(
-            Icons.add_rounded,
-            color: Colors.white,
-            size: 26,
-          ),
+          child: Icon(Icons.add_rounded, color: Colors.white, size: 26),
         ),
       ),
     );

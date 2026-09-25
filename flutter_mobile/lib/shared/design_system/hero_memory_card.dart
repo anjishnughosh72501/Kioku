@@ -30,7 +30,9 @@ class HeroMemoryCard extends ConsumerWidget {
       context: context,
       backgroundColor: colors.surfaceContainer,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusCard)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppTheme.radiusCard),
+        ),
       ),
       builder: (ctx) => SafeArea(
         child: Column(
@@ -47,7 +49,10 @@ class HeroMemoryCard extends ConsumerWidget {
             ),
             ListTile(
               leading: Icon(Icons.share_outlined, color: colors.ink),
-              title: Text('Share memory', style: typography.bodyMedium?.copyWith(color: colors.ink)),
+              title: Text(
+                'Share memory',
+                style: typography.bodyMedium?.copyWith(color: colors.ink),
+              ),
               onTap: () {
                 Navigator.of(ctx).pop();
                 final text = item.caption != null && item.caption!.isNotEmpty
@@ -58,7 +63,10 @@ class HeroMemoryCard extends ConsumerWidget {
             ),
             ListTile(
               leading: Icon(Icons.delete_outline, color: colors.danger),
-              title: Text('Delete memory', style: typography.bodyMedium?.copyWith(color: colors.danger)),
+              title: Text(
+                'Delete memory',
+                style: typography.bodyMedium?.copyWith(color: colors.danger),
+              ),
               onTap: () {
                 Navigator.of(ctx).pop();
                 _confirmDelete(context, ref, colors);
@@ -89,11 +97,20 @@ class HeroMemoryCard extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('Cancel', style: typography.bodyMedium?.copyWith(color: colors.inkMuted)),
+            child: Text(
+              'Cancel',
+              style: typography.bodyMedium?.copyWith(color: colors.inkMuted),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('Delete', style: typography.bodyMedium?.copyWith(color: colors.danger, fontWeight: FontWeight.w600)),
+            child: Text(
+              'Delete',
+              style: typography.bodyMedium?.copyWith(
+                color: colors.danger,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -102,14 +119,17 @@ class HeroMemoryCard extends ConsumerWidget {
         try {
           await ref.read(memoriesProvider.notifier).delete(item.id);
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Memory deleted')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('Memory deleted')));
           }
         } catch (e) {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to delete memory: $e'), backgroundColor: colors.danger),
+              SnackBar(
+                content: Text('Failed to delete memory: $e'),
+                backgroundColor: colors.danger,
+              ),
             );
           }
         }
@@ -124,8 +144,11 @@ class HeroMemoryCard extends ConsumerWidget {
 
     final albums = ref.watch(albumsProvider).valueOrNull ?? [];
     final activeAlbumId = ref.watch(activeAlbumProvider);
-    final currentAlbum = albums.where((a) => a.id == (item.albumId ?? activeAlbumId)).firstOrNull;
-    final displayAlbum = albumName ?? item.albumName ?? currentAlbum?.title ?? 'Album';
+    final currentAlbum = albums
+        .where((a) => a.id == (item.albumId ?? activeAlbumId))
+        .firstOrNull;
+    final displayAlbum =
+        albumName ?? item.albumName ?? currentAlbum?.title ?? 'Album';
 
     return GestureDetector(
       onTap: () {
@@ -190,10 +213,15 @@ class HeroMemoryCard extends ConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.50),
-                        borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.radiusPill,
+                        ),
                         border: Border.all(
                           color: Colors.white.withValues(alpha: 0.2),
                           width: 0.8,
@@ -229,10 +257,15 @@ class HeroMemoryCard extends ConsumerWidget {
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: colors.primary.withValues(alpha: 0.35),
-                            borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                            borderRadius: BorderRadius.circular(
+                              AppTheme.radiusPill,
+                            ),
                             border: Border.all(
                               color: colors.primary.withValues(alpha: 0.6),
                               width: 0.8,
@@ -241,10 +274,16 @@ class HeroMemoryCard extends ConsumerWidget {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.photo_library_outlined, size: 11, color: Colors.white),
+                              const Icon(
+                                Icons.photo_library_outlined,
+                                size: 11,
+                                color: Colors.white,
+                              ),
                               const SizedBox(width: 4),
                               ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 140),
+                                constraints: const BoxConstraints(
+                                  maxWidth: 140,
+                                ),
                                 child: Text(
                                   displayAlbum,
                                   maxLines: 1,
@@ -273,7 +312,8 @@ class HeroMemoryCard extends ConsumerWidget {
                     const SizedBox(height: 8),
 
                     // Caption or placeholder
-                    if (item.caption != null && item.caption!.trim().isNotEmpty) ...[
+                    if (item.caption != null &&
+                        item.caption!.trim().isNotEmpty) ...[
                       Text(
                         item.caption!,
                         maxLines: 2,

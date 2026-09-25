@@ -52,11 +52,7 @@ class KiokuEmptyState extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Icon(
-                icon,
-                size: 38,
-                color: colors.primary,
-              ),
+              child: Icon(icon, size: 38, color: colors.primary),
             ),
             const SizedBox(height: 24),
 

@@ -17,6 +17,9 @@ export const requireFriendAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
       return c.json({ error: 'Invalid token payload' }, 401);
     }
     c.set('friendCode', decoded.friendCode);
+    if (decoded.userId) {
+      c.set('userId', decoded.userId);
+    }
     await next();
   } catch (err) {
     return c.json({ error: 'Invalid or expired authorization token' }, 401);

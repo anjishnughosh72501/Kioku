@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,7 +12,6 @@ import 'package:flutter_mobile/features/friends/presentation/widgets/invite_shar
 import 'package:flutter_mobile/features/friends/presentation/widgets/qr_scanner_dialog.dart';
 import 'package:flutter_mobile/shared/design_system/index.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
-
 
 class FriendsScreen extends ConsumerStatefulWidget {
   const FriendsScreen({super.key, this.initialTabIndex = 0});
@@ -34,10 +34,24 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
       vsync: this,
       initialIndex: widget.initialTabIndex.clamp(0, 3),
     );
+    UserProfileService.instance.addAuthStatusListener(_onAuthStatusChanged);
+  }
+
+  void _onAuthStatusChanged(FriendAuthStatus status) {
+    if (!mounted) return;
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    } else {
+      setState(() {});
+    }
   }
 
   @override
   void dispose() {
+    UserProfileService.instance.removeAuthStatusListener(_onAuthStatusChanged);
     _tabController.dispose();
     super.dispose();
   }
@@ -59,7 +73,11 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
         backgroundColor: colors.background,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: colors.ink, size: 20),
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: colors.ink,
+            size: 20,
+          ),
           onPressed: () => context.pop(),
         ),
         title: Text(
@@ -79,7 +97,10 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
                 context,
                 onScanned: (scanned) {
                   final clean = scanned.trim();
-                  if (clean.contains('i/') || clean.contains('invite') || clean.contains('http') || clean.contains('kioku://')) {
+                  if (clean.contains('i/') ||
+                      clean.contains('invite') ||
+                      clean.contains('http') ||
+                      clean.contains('kioku://')) {
                     InviteAcceptDialog.show(context, clean);
                   } else {
                     _tabController.animateTo(3);
@@ -120,8 +141,14 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
               ),
               labelColor: Colors.white,
               unselectedLabelColor: colors.inkMuted,
-              labelStyle: typography.bodySmall?.copyWith(fontWeight: FontWeight.w700, fontSize: 12),
-              unselectedLabelStyle: typography.bodySmall?.copyWith(fontWeight: FontWeight.w500, fontSize: 12),
+              labelStyle: typography.bodySmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+              unselectedLabelStyle: typography.bodySmall?.copyWith(
+                fontWeight: FontWeight.w500,
+                fontSize: 12,
+              ),
               tabs: [
                 Tab(
                   child: Row(
@@ -130,7 +157,10 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
                       const Text('Friends'),
                       if (friendsCount > 0) ...[
                         const SizedBox(width: 4),
-                        Text('($friendsCount)', style: const TextStyle(fontSize: 10)),
+                        Text(
+                          '($friendsCount)',
+                          style: const TextStyle(fontSize: 10),
+                        ),
                       ],
                     ],
                   ),
@@ -143,14 +173,21 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
                       if (unreadCount > 0) ...[
                         const SizedBox(width: 4),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.redAccent,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
                             '$unreadCount',
-                            style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],
@@ -164,7 +201,10 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
                       const Text('Sent'),
                       if (sentCount > 0) ...[
                         const SizedBox(width: 4),
-                        Text('($sentCount)', style: const TextStyle(fontSize: 10)),
+                        Text(
+                          '($sentCount)',
+                          style: const TextStyle(fontSize: 10),
+                        ),
                       ],
                     ],
                   ),
@@ -177,42 +217,284 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
       ),
       body: Column(
         children: [
-          if (UserProfileService.instance.authStatus == FriendAuthStatus.authFailed)
+          if (UserProfileService.instance.authStatus ==
+              FriendAuthStatus.authFailed)
             Container(
-              color: Colors.red.shade800,
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
-              child: const Row(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+              decoration: BoxDecoration(
+                color: colors.surfaceContainer,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: Colors.redAccent.withValues(alpha: 0.6),
+                ),
+              ),
+              child: Row(
                 children: [
-                  Icon(Icons.error_outline_rounded, size: 16, color: Colors.white),
-                  SizedBox(width: 8),
+                  const Icon(
+                    Icons.lock_clock_outlined,
+                    size: 18,
+                    color: Colors.redAccent,
+                  ),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Authentication error — please reconnect your account to sync friends.',
-                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                      'Session expired. Sign in again.',
+                      style: TextStyle(
+                        color: colors.ink,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      await UserProfileService.instance.getAuthToken(
+                        forceRefresh: true,
+                      );
+                      if (context.mounted) {
+                        ref.invalidate(friendsListProvider);
+                        ref.invalidate(sentRequestsProvider);
+                        ref.invalidate(incomingRequestsProvider);
+                      }
+                    },
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      'Retry',
+                      style: TextStyle(
+                        color: colors.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ],
               ),
             )
-          else if (UserProfileService.instance.authStatus == FriendAuthStatus.offline)
+          else if (UserProfileService.instance.authStatus ==
+              FriendAuthStatus.notAuthorized)
             Container(
-              color: Colors.amber.shade800,
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
-              child: const Row(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+              decoration: BoxDecoration(
+                color: colors.surfaceContainer,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: Colors.redAccent.withValues(alpha: 0.6),
+                ),
+              ),
+              child: Row(
                 children: [
-                  Icon(Icons.wifi_off_rounded, size: 16, color: Colors.white),
-                  SizedBox(width: 8),
+                  const Icon(
+                    Icons.block_rounded,
+                    size: 18,
+                    color: Colors.redAccent,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      "Couldn't authenticate with Kioku.",
+                      style: TextStyle(
+                        color: colors.ink,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      await UserProfileService.instance.getAuthToken(
+                        forceRefresh: true,
+                      );
+                      if (context.mounted) {
+                        ref.invalidate(friendsListProvider);
+                        ref.invalidate(sentRequestsProvider);
+                        ref.invalidate(incomingRequestsProvider);
+                      }
+                    },
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      'Retry',
+                      style: TextStyle(
+                        color: colors.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (UserProfileService.instance.authStatus ==
+              FriendAuthStatus.serverError)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+              decoration: BoxDecoration(
+                color: colors.surfaceContainer,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: Colors.deepOrangeAccent.withValues(alpha: 0.6),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.cloud_off_rounded,
+                    size: 18,
+                    color: Colors.deepOrangeAccent,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Kioku is temporarily unavailable.',
+                      style: TextStyle(
+                        color: colors.ink,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      await UserProfileService.instance.getAuthToken(
+                        forceRefresh: true,
+                      );
+                      if (context.mounted) {
+                        ref.invalidate(friendsListProvider);
+                        ref.invalidate(sentRequestsProvider);
+                        ref.invalidate(incomingRequestsProvider);
+                      }
+                    },
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      'Retry',
+                      style: TextStyle(
+                        color: colors.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (UserProfileService.instance.authStatus ==
+              FriendAuthStatus.timeout)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+              decoration: BoxDecoration(
+                color: colors.surfaceContainer,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: Colors.orangeAccent.withValues(alpha: 0.6),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.timer_outlined,
+                    size: 18,
+                    color: Colors.orangeAccent,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Connection timed out. Check your internet connection.',
+                      style: TextStyle(
+                        color: colors.ink,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      await UserProfileService.instance.getAuthToken(
+                        forceRefresh: true,
+                      );
+                      if (context.mounted) {
+                        ref.invalidate(friendsListProvider);
+                        ref.invalidate(sentRequestsProvider);
+                        ref.invalidate(incomingRequestsProvider);
+                      }
+                    },
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      'Retry',
+                      style: TextStyle(
+                        color: colors.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (UserProfileService.instance.authStatus ==
+              FriendAuthStatus.offline)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+              decoration: BoxDecoration(
+                color: colors.surfaceContainer,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: Colors.amber.shade700.withValues(alpha: 0.7),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.wifi_off_rounded,
+                    size: 18,
+                    color: Colors.amber.shade400,
+                  ),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       'Offline mode — showing cached friends. Reconnect to sync.',
-                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        color: colors.ink,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
+
           Expanded(
             child: TabBarView(
               controller: _tabController,
@@ -220,7 +502,9 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
                 _FriendsTab(onSwitchToAdd: () => _tabController.animateTo(3)),
                 const _IncomingTab(),
                 const _SentTab(),
-                _AddFriendTab(onInviteTap: () => InviteShareSheet.show(context)),
+                _AddFriendTab(
+                  onInviteTap: () => InviteShareSheet.show(context),
+                ),
               ],
             ),
           ),
@@ -254,7 +538,8 @@ class _FriendsTab extends ConsumerWidget {
               child: KiokuEmptyState(
                 icon: Icons.people_outline_rounded,
                 title: 'No friends yet',
-                subtitle: 'Invite someone to begin sharing encrypted memories & shared albums.',
+                subtitle:
+                    'Invite someone to begin sharing encrypted memories & shared albums.',
                 buttonText: 'Invite Friends',
                 onButtonPressed: onSwitchToAdd,
               ),
@@ -276,12 +561,20 @@ class _FriendsTab extends ConsumerWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('Error loading friends: $err', style: TextStyle(color: colors.primary)),
+              Text(
+                "Couldn't load friends right now.",
+                style: TextStyle(
+                  color: colors.inkMuted,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               const SizedBox(height: 12),
               ClayButton(
                 label: 'Retry',
                 size: ClayButtonSize.small,
-                onPressed: () => ref.read(friendsListProvider.notifier).refresh(),
+                onPressed: () =>
+                    ref.read(friendsListProvider.notifier).refresh(),
               ),
             ],
           ),
@@ -300,7 +593,9 @@ class _FriendCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.kiokuColors;
     final typography = Theme.of(context).textTheme;
-    final displayName = friend.username?.isNotEmpty == true ? friend.username! : friend.friendCode;
+    final displayName = friend.username?.isNotEmpty == true
+        ? friend.username!
+        : friend.friendCode;
     final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
 
     return ClayCard(
@@ -342,7 +637,10 @@ class _FriendCard extends ConsumerWidget {
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.green.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(6),
@@ -385,7 +683,9 @@ class _FriendCard extends ConsumerWidget {
           ),
           PopupMenuButton<String>(
             icon: Icon(Icons.more_horiz_rounded, color: colors.inkMuted),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             color: colors.surfaceContainer,
             onSelected: (action) async {
               if (action == 'albums') {
@@ -393,33 +693,54 @@ class _FriendCard extends ConsumerWidget {
               } else if (action == 'remove') {
                 final confirm = await showDialog<bool>(
                   context: context,
+                  useRootNavigator: true,
                   builder: (ctx) => AlertDialog(
                     backgroundColor: colors.surfaceContainer,
                     title: const Text('Remove Friend'),
-                    content: Text('Are you sure you want to remove $displayName from your friends?'),
+                    content: Text(
+                      'Are you sure you want to remove $displayName from your friends?',
+                    ),
                     actions: [
-                      TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        child: const Text('Cancel'),
+                      ),
                       TextButton(
                         onPressed: () => Navigator.of(ctx).pop(true),
-                        style: TextButton.styleFrom(foregroundColor: Colors.red),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red,
+                        ),
                         child: const Text('Remove'),
                       ),
                     ],
                   ),
                 );
                 if (confirm == true) {
-                  await ref.read(friendsListProvider.notifier).removeFriend(friend.friendCode);
+                  await ref
+                      .read(friendsListProvider.notifier)
+                      .removeFriend(friend.friendCode);
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Removed $displayName from friends')),
+                    showKiokuSnackBar(
+                      context,
+                      'Removed $displayName from friends',
+                      aboveBottomNav: true,
                     );
                   }
                 }
               }
             },
             itemBuilder: (context) => [
-              const PopupMenuItem(value: 'albums', child: Text('Shared Albums')),
-              const PopupMenuItem(value: 'remove', child: Text('Remove Friend', style: TextStyle(color: Colors.red))),
+              const PopupMenuItem(
+                value: 'albums',
+                child: Text('Shared Albums'),
+              ),
+              const PopupMenuItem(
+                value: 'remove',
+                child: Text(
+                  'Remove Friend',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
             ],
           ),
         ],
@@ -439,7 +760,6 @@ class _IncomingTab extends ConsumerWidget {
     final colors = context.kiokuColors;
     final incomingAsync = ref.watch(incomingRequestsProvider);
 
-
     return RefreshIndicator(
       color: colors.primary,
       onRefresh: () => ref.read(incomingRequestsProvider.notifier).refresh(),
@@ -451,7 +771,8 @@ class _IncomingTab extends ConsumerWidget {
               child: KiokuEmptyState(
                 icon: Icons.inbox_rounded,
                 title: 'No incoming requests',
-                subtitle: 'When someone adds you using your Friend Code or short invite link, their request appears here.',
+                subtitle:
+                    'When someone adds you using your Friend Code or short invite link, their request appears here.',
               ),
             );
           }
@@ -468,7 +789,26 @@ class _IncomingTab extends ConsumerWidget {
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, _) => Center(
-          child: Text('Error loading requests: $err', style: TextStyle(color: colors.primary)),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                "Couldn't load incoming requests right now.",
+                style: TextStyle(
+                  color: colors.inkMuted,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ClayButton(
+                label: 'Retry',
+                size: ClayButtonSize.small,
+                onPressed: () =>
+                    ref.read(incomingRequestsProvider.notifier).refresh(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -552,15 +892,22 @@ class _IncomingCardState extends ConsumerState<_IncomingCard> {
                       ? null
                       : () async {
                           setState(() => _acting = true);
-                          await ref.read(incomingRequestsProvider.notifier).decline(widget.request);
+                          await ref
+                              .read(incomingRequestsProvider.notifier)
+                              .decline(widget.request);
                         },
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(color: colors.divider),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusButton),
+                      borderRadius: BorderRadius.circular(
+                        AppTheme.radiusButton,
+                      ),
                     ),
                   ),
-                  child: Text('Decline', style: TextStyle(color: colors.inkMuted)),
+                  child: Text(
+                    'Decline',
+                    style: TextStyle(color: colors.inkMuted),
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
@@ -578,8 +925,10 @@ class _IncomingCardState extends ConsumerState<_IncomingCard> {
                               .read(incomingRequestsProvider.notifier)
                               .accept(widget.request);
                           if (ok && context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Connected with $name!')),
+                            showKiokuSnackBar(
+                              context,
+                              'Connected with $name!',
+                              aboveBottomNav: true,
                             );
                           }
                         },
@@ -604,7 +953,6 @@ class _SentTab extends ConsumerWidget {
     final colors = context.kiokuColors;
     final sentAsync = ref.watch(sentRequestsProvider);
 
-
     return RefreshIndicator(
       color: colors.primary,
       onRefresh: () => ref.read(sentRequestsProvider.notifier).refresh(),
@@ -616,7 +964,8 @@ class _SentTab extends ConsumerWidget {
               child: KiokuEmptyState(
                 icon: Icons.outbox_rounded,
                 title: 'No sent requests',
-                subtitle: 'Friend requests you send to others will be tracked here until accepted.',
+                subtitle:
+                    'Friend requests you send to others will be tracked here until accepted.',
               ),
             );
           }
@@ -633,7 +982,26 @@ class _SentTab extends ConsumerWidget {
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, _) => Center(
-          child: Text('Error loading sent requests: $err', style: TextStyle(color: colors.primary)),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                "Couldn't load sent requests right now.",
+                style: TextStyle(
+                  color: colors.inkMuted,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ClayButton(
+                label: 'Retry',
+                size: ClayButtonSize.small,
+                onPressed: () =>
+                    ref.read(sentRequestsProvider.notifier).refresh(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -692,7 +1060,10 @@ class _SentCardState extends ConsumerState<_SentCard> {
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: isExpired
                             ? Colors.redAccent.withValues(alpha: 0.12)
@@ -727,15 +1098,23 @@ class _SentCardState extends ConsumerState<_SentCard> {
                   ? null
                   : () async {
                       setState(() => _busy = true);
-                      await ref.read(sentRequestsProvider.notifier).resend(widget.req.id);
+                      await ref
+                          .read(sentRequestsProvider.notifier)
+                          .resend(widget.req.id);
                       if (mounted) setState(() => _busy = false);
                     },
               style: OutlinedButton.styleFrom(
                 side: BorderSide(color: colors.primary),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 minimumSize: Size.zero,
               ),
-              child: Text('Resend', style: TextStyle(color: colors.primary, fontSize: 12)),
+              child: Text(
+                'Resend',
+                style: TextStyle(color: colors.primary, fontSize: 12),
+              ),
             ),
           ] else ...[
             OutlinedButton(
@@ -743,15 +1122,23 @@ class _SentCardState extends ConsumerState<_SentCard> {
                   ? null
                   : () async {
                       setState(() => _busy = true);
-                      await ref.read(sentRequestsProvider.notifier).cancel(widget.req.id);
+                      await ref
+                          .read(sentRequestsProvider.notifier)
+                          .cancel(widget.req.id);
                       if (mounted) setState(() => _busy = false);
                     },
               style: OutlinedButton.styleFrom(
                 side: BorderSide(color: colors.divider),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 minimumSize: Size.zero,
               ),
-              child: Text('Cancel', style: TextStyle(color: colors.inkMuted, fontSize: 12)),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: colors.inkMuted, fontSize: 12),
+              ),
             ),
           ],
         ],
@@ -807,7 +1194,9 @@ class _AddFriendTabState extends ConsumerState<_AddFriendTab> {
 
     final sent = await UserProfileService.instance.getSentFriendRequests();
     if (sent.any((r) => r.toCode.trim().toUpperCase() == text && r.isPending)) {
-      setState(() => _codeError = 'A request to this friend is already pending');
+      setState(
+        () => _codeError = 'A request to this friend is already pending',
+      );
       return;
     }
 
@@ -823,7 +1212,9 @@ class _AddFriendTabState extends ConsumerState<_AddFriendTab> {
       if (!mounted) return;
       setState(() {
         _submittingCode = false;
-        _codeError = e is FriendException ? e.message : 'Unable to verify friend code';
+        _codeError = e is FriendException
+            ? e.message
+            : 'Unable to verify friend code';
       });
       return;
     }
@@ -840,11 +1231,17 @@ class _AddFriendTabState extends ConsumerState<_AddFriendTab> {
 
     // Show pre-send confirmation dialog
     final recipientName = lookup.displayName;
+    final colors = context.kiokuColors;
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: true,
       builder: (ctx) => AlertDialog(
+        backgroundColor: colors.surfaceContainer,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Send Friend Request?'),
-        content: Text('Do you want to send a friend request to $recipientName ($text)?'),
+        content: Text(
+          'Do you want to send a friend request to $recipientName ($text)?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -874,8 +1271,10 @@ class _AddFriendTabState extends ConsumerState<_AddFriendTab> {
     if (res.isSuccess) {
       _codeController.clear();
       ref.read(sentRequestsProvider.notifier).refresh();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Friend request sent to $recipientName!')),
+      showKiokuSnackBar(
+        context,
+        'Friend request sent to $recipientName!',
+        aboveBottomNav: true,
       );
     } else {
       setState(() => _codeError = res.userMessage);
@@ -936,7 +1335,11 @@ class _AddFriendTabState extends ConsumerState<_AddFriendTab> {
                     color: colors.primary.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.qr_code_2_rounded, size: 28, color: colors.primary),
+                  child: Icon(
+                    Icons.qr_code_2_rounded,
+                    size: 28,
+                    color: colors.primary,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -1004,7 +1407,10 @@ class _AddFriendTabState extends ConsumerState<_AddFriendTab> {
                   decoration: InputDecoration(
                     hintText: 'e.g. ABCD1234',
                     errorText: _codeError,
-                    prefixIcon: Icon(Icons.badge_outlined, color: colors.primary),
+                    prefixIcon: Icon(
+                      Icons.badge_outlined,
+                      color: colors.primary,
+                    ),
                   ),
                 ),
                 const SizedBox(height: AppTheme.spacingMd),
@@ -1028,7 +1434,11 @@ class _AddFriendTabState extends ConsumerState<_AddFriendTab> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.qr_code_scanner_rounded, size: 20, color: colors.accentDark),
+                    Icon(
+                      Icons.qr_code_scanner_rounded,
+                      size: 20,
+                      color: colors.accentDark,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'Method B — Short Link / QR Code',
@@ -1050,7 +1460,10 @@ class _AddFriendTabState extends ConsumerState<_AddFriendTab> {
                   decoration: InputDecoration(
                     hintText: 'kioku.app/i/8F3KD2 or code',
                     errorText: _linkError,
-                    prefixIcon: Icon(Icons.link_rounded, color: colors.accentDark),
+                    prefixIcon: Icon(
+                      Icons.link_rounded,
+                      color: colors.accentDark,
+                    ),
                     suffixIcon: IconButton(
                       icon: const Icon(Icons.paste_rounded, size: 18),
                       tooltip: 'Paste from clipboard',
@@ -1065,7 +1478,9 @@ class _AddFriendTabState extends ConsumerState<_AddFriendTab> {
                 ),
                 const SizedBox(height: AppTheme.spacingMd),
                 ClayButton(
-                  label: _resolvingLink ? 'Checking...' : 'Open Invite Confirmation',
+                  label: _resolvingLink
+                      ? 'Checking...'
+                      : 'Open Invite Confirmation',
                   variant: ClayButtonVariant.primary,
                   onPressed: _resolvingLink ? () {} : _resolvePastedLink,
                 ),
@@ -1077,7 +1492,10 @@ class _AddFriendTabState extends ConsumerState<_AddFriendTab> {
                       context,
                       onScanned: (scanned) {
                         final clean = scanned.trim();
-                        if (clean.contains('i/') || clean.contains('invite') || clean.contains('http') || clean.contains('kioku://')) {
+                        if (clean.contains('i/') ||
+                            clean.contains('invite') ||
+                            clean.contains('http') ||
+                            clean.contains('kioku://')) {
                           _linkController.text = clean;
                           _resolvePastedLink();
                         } else {
@@ -1087,7 +1505,11 @@ class _AddFriendTabState extends ConsumerState<_AddFriendTab> {
                       },
                     );
                   },
-                  icon: Icon(Icons.qr_code_scanner_rounded, size: 18, color: colors.primary),
+                  icon: Icon(
+                    Icons.qr_code_scanner_rounded,
+                    size: 18,
+                    color: colors.primary,
+                  ),
                   label: Text(
                     'Scan QR Code',
                     style: typography.bodyMedium?.copyWith(
@@ -1096,10 +1518,14 @@ class _AddFriendTabState extends ConsumerState<_AddFriendTab> {
                     ),
                   ),
                   style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: colors.primary.withValues(alpha: 0.5)),
+                    side: BorderSide(
+                      color: colors.primary.withValues(alpha: 0.5),
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusButton),
+                      borderRadius: BorderRadius.circular(
+                        AppTheme.radiusButton,
+                      ),
                     ),
                   ),
                 ),

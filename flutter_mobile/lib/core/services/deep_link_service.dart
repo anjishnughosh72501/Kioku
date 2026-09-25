@@ -26,7 +26,8 @@ class DeepLinkService {
   /// Extracts 6-char short invite code from https://kioku.app/i/:code, https://kioku.app/invite/:code, or kioku://i/:code
   static String? extractInviteCode(Uri uri) {
     if (uri.pathSegments.isNotEmpty) {
-      if ((uri.pathSegments.first == 'i' || uri.pathSegments.first == 'invite') &&
+      if ((uri.pathSegments.first == 'i' ||
+              uri.pathSegments.first == 'invite') &&
           uri.pathSegments.length > 1) {
         return uri.pathSegments[1].trim().toUpperCase();
       }
@@ -126,8 +127,12 @@ class DeepLinkService {
 
     // Require explicit user confirmation before touching local albums or state
     if (context.mounted) {
-      final friendLabel = from != null && from.isNotEmpty ? from : (friendCode ?? 'A friend');
-      final promptTitle = hasAlbum ? 'Join Shared Album?' : 'Connect with Friend?';
+      final friendLabel = from != null && from.isNotEmpty
+          ? from
+          : (friendCode ?? 'A friend');
+      final promptTitle = hasAlbum
+          ? 'Join Shared Album?'
+          : 'Connect with Friend?';
       final promptBody = hasAlbum
           ? '$friendLabel wants to share the album "$albumName" with you.'
           : '$friendLabel wants to connect with you on Kioku.';
@@ -206,7 +211,9 @@ class DeepLinkService {
     }
 
     if (context.mounted && (friendAdded || albumJoined)) {
-      final friendLabel = from != null && from.isNotEmpty ? from : (friendCode ?? 'friend');
+      final friendLabel = from != null && from.isNotEmpty
+          ? from
+          : (friendCode ?? 'friend');
       String message;
       if (friendAdded && albumJoined) {
         message = 'Connected with $friendLabel & joined "$albumName"!';

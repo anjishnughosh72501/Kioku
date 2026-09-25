@@ -59,7 +59,8 @@ class AppLockService with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!_isEnabled) return;
 
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
       _backgroundedTime ??= DateTime.now();
     } else if (state == AppLifecycleState.resumed) {
       if (_backgroundedTime != null) {

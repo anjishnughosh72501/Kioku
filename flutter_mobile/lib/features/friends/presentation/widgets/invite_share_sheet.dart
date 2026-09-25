@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,194 +8,317 @@ import 'package:share_plus/share_plus.dart';
 import 'package:flutter_mobile/core/services/user_profile_service.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/features/friends/presentation/controllers/friends_controller.dart';
+import 'package:flutter_mobile/shared/design_system/index.dart';
 import 'package:flutter_mobile/shared/widgets/clay_card.dart';
 
-class InviteShareSheet extends ConsumerWidget {
+class InviteShareSheet extends ConsumerStatefulWidget {
   const InviteShareSheet({super.key});
 
+  /// Opens the Invite Friends modal bottom sheet on the root navigator.
   static Future<void> show(BuildContext context) {
-    return showModalBottomSheet<void>(
+    return showKiokuBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
+      useRootNavigator: true,
       builder: (_) => const InviteShareSheet(),
     );
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<InviteShareSheet> createState() => _InviteShareSheetState();
+}
+
+class _InviteShareSheetState extends ConsumerState<InviteShareSheet> {
+  @override
+  void initState() {
+    super.initState();
+    // Schedule invite generation outside of the widget build phase.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final legacy = ref.read(userInviteProvider).valueOrNull;
+      if (legacy != null && !legacy.isExpired) return;
+      ref.read(inviteControllerProvider.notifier).ensureInviteGenerated();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colors = context.kiokuColors;
     final typography = Theme.of(context).textTheme;
     final myFriendCode = UserProfileService.instance.friendCode;
-    final inviteAsync = ref.watch(userInviteProvider);
-    final viewPadding = MediaQuery.viewPaddingOf(context);
-    final viewInsets = MediaQuery.viewInsetsOf(context);
-    final bottomPadding = math.max(viewPadding.bottom, AppTheme.spacingLg) + viewInsets.bottom;
-    final maxHeight = MediaQuery.sizeOf(context).height * 0.88;
 
-    return SafeArea(
-      top: false,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxHeight),
-        child: Container(
-          decoration: BoxDecoration(
-            color: colors.surfaceContainer,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            border: Border.all(color: colors.divider, width: 1),
-          ),
-          padding: EdgeInsets.fromLTRB(
-            AppTheme.spacingLg,
-            AppTheme.spacingMd,
-            AppTheme.spacingLg,
-            bottomPadding,
-          ),
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-            // Drag Handle
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: AppTheme.spacingMd),
-                decoration: BoxDecoration(
-                  color: colors.divider,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+    // Observe dedicated invite controller
+    final inviteState = ref.watch(inviteControllerProvider);
+    // Backward compatibility with callers/tests providing userInviteProvider
+    final legacyInviteAsync = ref.watch(userInviteProvider);
+    final legacyInvite = legacyInviteAsync.valueOrNull;
+    final hasLegacyData = legacyInvite != null && !legacyInvite.isExpired;
+
+    final activeInvite = hasLegacyData ? legacyInvite : inviteState.invite;
+    final isReady =
+        (hasLegacyData || inviteState.isReady) &&
+        activeInvite != null &&
+        !activeInvite.isExpired;
+    final isExpired =
+        !hasLegacyData &&
+        (inviteState.isExpired ||
+            (activeInvite != null && activeInvite.isExpired));
+    final isGenerating =
+        !hasLegacyData &&
+        (inviteState.isGenerating ||
+            (inviteState.isIdle && legacyInviteAsync.isLoading));
+    final isError =
+        !hasLegacyData &&
+        (inviteState.isError ||
+            (legacyInviteAsync.hasError && activeInvite == null));
+
+    return KiokuBottomSheet(
+      title: const Text('Invite Friends'),
+      subtitle: const Text(
+        'Share memories privately with end-to-end encryption',
+      ),
+      headerLeading: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: colors.primary.withValues(alpha: 0.15),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(Icons.person_add_outlined, size: 22, color: colors.primary),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Section 1: Friend Code (Always available immediately)
+          Text(
+            'Your Friend Code',
+            style: typography.bodySmall?.copyWith(
+              color: colors.inkMuted,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+              letterSpacing: 0.5,
             ),
-
-            // Header
-            Row(
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: colors.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: colors.divider),
+            ),
+            child: Row(
               children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: colors.primary.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(Icons.person_add_outlined, size: 22, color: colors.primary),
-                ),
-                const SizedBox(width: 12),
+                Icon(Icons.badge_outlined, size: 20, color: colors.primary),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Invite Friends',
-                        style: typography.headlineSmall?.copyWith(
-                          color: colors.ink,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      Text(
-                        'Share memories privately with end-to-end encryption',
-                        style: typography.bodySmall?.copyWith(
-                          color: colors.inkMuted,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    myFriendCode,
+                    style: typography.titleMedium?.copyWith(
+                      color: colors.ink,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.5,
+                    ),
                   ),
                 ),
-                IconButton(
-                  icon: Icon(Icons.close_rounded, color: colors.inkMuted),
-                  onPressed: () => Navigator.of(context).pop(),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    Clipboard.setData(ClipboardData(text: myFriendCode));
+                    showKiokuSnackBar(
+                      context,
+                      'Friend code copied',
+                      icon: Icons.copy_rounded,
+                      aboveBottomNav: false,
+                    );
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: 14),
+                  label: const Text('Copy'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: colors.ink,
+                    side: BorderSide(color: colors.divider),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                    ),
+                  ),
                 ),
               ],
             ),
+          ),
 
-            const SizedBox(height: AppTheme.spacingLg),
+          const SizedBox(height: AppTheme.spacingLg),
+          Divider(color: colors.divider, height: 1),
+          const SizedBox(height: AppTheme.spacingLg),
 
-            // Section 1: Friend Code
-            Text(
-              'Your Friend Code',
-              style: typography.bodySmall?.copyWith(
-                color: colors.inkMuted,
-                fontWeight: FontWeight.w600,
-                fontSize: 11,
-                letterSpacing: 0.5,
-              ),
+          // Section 2: Universal Short Link
+          Text(
+            'Share Invite Link',
+            style: typography.bodySmall?.copyWith(
+              color: colors.inkMuted,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+              letterSpacing: 0.5,
             ),
-            const SizedBox(height: 6),
+          ),
+          const SizedBox(height: 8),
+
+          // Invite Loading State
+          if (isGenerating)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+              decoration: BoxDecoration(
+                color: colors.surfaceContainerHigh.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: colors.divider),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: colors.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Generating secure invite...',
+                    style: typography.bodyMedium?.copyWith(
+                      color: colors.inkMuted,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          // Invite Error State (Never shows raw stack traces or internal framework errors)
+          else if (isError)
+            Container(
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: colors.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: colors.divider),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(Icons.badge_outlined, size: 20, color: colors.primary),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      myFriendCode,
-                      style: typography.titleMedium?.copyWith(
-                        color: colors.ink,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.5,
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        size: 20,
+                        color: colors.primary,
                       ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "Couldn't generate an invite link.",
+                          style: typography.bodyMedium?.copyWith(
+                            color: colors.ink,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Check your connection and try again. Your Friend Code remains usable above.',
+                    style: typography.bodySmall?.copyWith(
+                      color: colors.inkMuted,
                     ),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      HapticFeedback.lightImpact();
-                      Clipboard.setData(ClipboardData(text: myFriendCode));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Friend code copied!')),
-                      );
-                    },
-                    icon: const Icon(Icons.copy_rounded, size: 14),
-                    label: const Text('Copy'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: colors.ink,
-                      side: BorderSide(color: colors.divider),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-                      ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: ClayButton(
+                      label: 'Retry',
+                      icon: const Icon(Icons.refresh_rounded, size: 14),
+                      variant: ClayButtonVariant.primary,
+                      size: ClayButtonSize.small,
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        ref.read(inviteControllerProvider.notifier).retry();
+                      },
                     ),
                   ),
                 ],
               ),
-            ),
-
-            const SizedBox(height: AppTheme.spacingLg),
-            Divider(color: colors.divider, height: 1),
-            const SizedBox(height: AppTheme.spacingLg),
-
-            // Section 2: Universal Short Link
-            Text(
-              'Share Invite Link',
-              style: typography.bodySmall?.copyWith(
-                color: colors.inkMuted,
-                fontWeight: FontWeight.w600,
-                fontSize: 11,
-                letterSpacing: 0.5,
+            )
+          // Invite Expired State
+          else if (isExpired)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: colors.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: colors.divider),
               ),
-            ),
-            const SizedBox(height: 6),
-
-            inviteAsync.when(
-              data: (invite) {
-                final shortUrl = invite?.url ?? 'https://kioku.app/i/$myFriendCode';
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.timer_off_outlined,
+                        size: 20,
+                        color: colors.inkMuted,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Invite link has expired.',
+                          style: typography.bodyMedium?.copyWith(
+                            color: colors.ink,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: ClayButton(
+                      label: 'Generate New Link',
+                      icon: const Icon(Icons.refresh_rounded, size: 14),
+                      variant: ClayButtonVariant.primary,
+                      size: ClayButtonSize.small,
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        ref.read(inviteControllerProvider.notifier).retry();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            )
+          // Invite Ready / Success State
+          else if (isReady) ...[
+            Builder(
+              builder: (context) {
+                final shortUrl = activeInvite.url.isNotEmpty
+                    ? activeInvite.url
+                    : 'https://kioku.app/i/${activeInvite.code}';
                 final displayShort = shortUrl.replaceFirst('https://', '');
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
                         color: colors.surfaceContainerHigh,
                         borderRadius: BorderRadius.circular(16),
@@ -204,7 +326,11 @@ class InviteShareSheet extends ConsumerWidget {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.link_rounded, size: 20, color: colors.accentDark),
+                          Icon(
+                            Icons.link_rounded,
+                            size: 20,
+                            color: colors.accentDark,
+                          ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
@@ -232,8 +358,11 @@ class InviteShareSheet extends ConsumerWidget {
                             onPressed: () {
                               HapticFeedback.lightImpact();
                               Clipboard.setData(ClipboardData(text: shortUrl));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Short invite link copied!')),
+                              showKiokuSnackBar(
+                                context,
+                                'Invite link copied',
+                                icon: Icons.link_rounded,
+                                aboveBottomNav: false,
                               );
                             },
                           ),
@@ -261,7 +390,7 @@ class InviteShareSheet extends ConsumerWidget {
                     Divider(color: colors.divider, height: 1),
                     const SizedBox(height: AppTheme.spacingLg),
 
-                    // Section 3: QR Code
+                    // Section 3: QR Code (Data comes directly from created invite)
                     Center(
                       child: Column(
                         children: [
@@ -317,25 +446,26 @@ class InviteShareSheet extends ConsumerWidget {
                   ],
                 );
               },
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (err, _) => Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Text(
-                    'Could not generate short link: $err',
-                    style: typography.bodySmall?.copyWith(color: colors.primary),
-                  ),
+            ),
+          ] else
+            // Idle initial state before generation triggers
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: ClayButton(
+                  label: 'Generate Invite Link',
+                  icon: const Icon(Icons.link_rounded, size: 16),
+                  size: ClayButtonSize.small,
+                  onPressed: () {
+                    ref
+                        .read(inviteControllerProvider.notifier)
+                        .ensureInviteGenerated();
+                  },
                 ),
               ),
             ),
-          ],
-        ),
+        ],
       ),
-    ),
-  ),
-).animate().fadeIn(duration: 250.ms).slideY(begin: 0.08, end: 0, duration: 250.ms);
+    ).animate().fadeIn(duration: 200.ms).slideY(begin: 0.05, end: 0, duration: 200.ms);
   }
 }

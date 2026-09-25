@@ -23,9 +23,12 @@ class FakeFriendsListNotifier extends FriendsListNotifier {
 }
 
 class FakeIncomingRequestsNotifier extends IncomingRequestsNotifier {
-  FakeIncomingRequestsNotifier(super.ref, List<FriendRequest> list) {
+  FakeIncomingRequestsNotifier(super.ref, List<FriendRequest> list)
+    : super(startPeriodic: false) {
     state = AsyncValue.data(list);
   }
+  @override
+  void startPeriodicPoll() {}
   @override
   Future<void> refresh({bool silent = false}) async {}
 }
@@ -68,12 +71,15 @@ void main() {
   }) {
     return ProviderScope(
       overrides: [
-        if (friends != null)
-          friendsListProvider.overrideWith((ref) => FakeFriendsListNotifier(ref, friends)),
-        if (incoming != null)
-          incomingRequestsProvider.overrideWith((ref) => FakeIncomingRequestsNotifier(ref, incoming)),
-        if (sent != null)
-          sentRequestsProvider.overrideWith((ref) => FakeSentRequestsNotifier(ref, sent)),
+        friendsListProvider.overrideWith(
+          (ref) => FakeFriendsListNotifier(ref, friends ?? const []),
+        ),
+        incomingRequestsProvider.overrideWith(
+          (ref) => FakeIncomingRequestsNotifier(ref, incoming ?? const []),
+        ),
+        sentRequestsProvider.overrideWith(
+          (ref) => FakeSentRequestsNotifier(ref, sent ?? const []),
+        ),
       ],
       child: MaterialApp(
         theme: AppTheme.coffeeLight(),
@@ -83,7 +89,9 @@ void main() {
   }
 
   group('FriendsScreen 4-Tab Hub', () {
-    testWidgets('renders all 4 tabs and displays empty state on Friends tab', (tester) async {
+    testWidgets('renders all 4 tabs and displays empty state on Friends tab', (
+      tester,
+    ) async {
       await tester.pumpWidget(createSubject(friends: []));
       await tester.pumpAndSettle();
 
@@ -93,10 +101,17 @@ void main() {
       expect(find.text('Add'), findsOneWidget);
 
       expect(find.text('No friends yet'), findsOneWidget);
-      expect(find.text('Invite someone to begin sharing encrypted memories & shared albums.'), findsOneWidget);
+      expect(
+        find.text(
+          'Invite someone to begin sharing encrypted memories & shared albums.',
+        ),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('renders friend item when friends list is populated', (tester) async {
+    testWidgets('renders friend item when friends list is populated', (
+      tester,
+    ) async {
       final friends = [
         const FriendUser(friendCode: 'KIOKU-ALICE', username: 'Alice'),
       ];
@@ -109,7 +124,9 @@ void main() {
       expect(find.text('Connected'), findsOneWidget);
     });
 
-    testWidgets('navigates to Add tab and shows Method A and Method B', (tester) async {
+    testWidgets('navigates to Add tab and shows Method A and Method B', (
+      tester,
+    ) async {
       await tester.pumpWidget(createSubject(initialTabIndex: 3));
       await tester.pumpAndSettle();
 
@@ -120,7 +137,9 @@ void main() {
       expect(find.text('Open Invite Confirmation'), findsOneWidget);
     });
 
-    testWidgets('displays badge on Incoming tab when requests are pending', (tester) async {
+    testWidgets('displays badge on Incoming tab when requests are pending', (
+      tester,
+    ) async {
       final incoming = [
         const FriendRequest(
           id: 'req_1',
@@ -136,6 +155,101 @@ void main() {
 
       expect(find.text('1'), findsOneWidget);
     });
+
+    testWidgets('shows genuine offline banner only on network offline', (
+      tester,
+    ) async {
+      UserProfileService.instance.setAuthStatusForTesting(
+        FriendAuthStatus.offline,
+      );
+
+      await tester.pumpWidget(createSubject());
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Offline mode — showing cached friends. Reconnect to sync.'),
+        findsOneWidget,
+      );
+
+      // Reset
+      UserProfileService.instance.setAuthStatusForTesting(
+        FriendAuthStatus.authenticated,
+      );
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Offline mode — showing cached friends. Reconnect to sync.'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('shows session expired message on authFailed (401)', (
+      tester,
+    ) async {
+      UserProfileService.instance.setAuthStatusForTesting(
+        FriendAuthStatus.authFailed,
+      );
+
+      await tester.pumpWidget(createSubject());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Session expired. Sign in again.'), findsOneWidget);
+      // Ensure it is NOT misclassified as Offline mode
+      expect(find.textContaining('Offline mode'), findsNothing);
+
+      // Reset
+      UserProfileService.instance.setAuthStatusForTesting(
+        FriendAuthStatus.authenticated,
+      );
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('shows not authorized message on notAuthorized (403)', (
+      tester,
+    ) async {
+      UserProfileService.instance.setAuthStatusForTesting(
+        FriendAuthStatus.notAuthorized,
+      );
+
+      await tester.pumpWidget(createSubject());
+      await tester.pumpAndSettle();
+
+      expect(find.text("Couldn't authenticate with Kioku."), findsOneWidget);
+      expect(find.textContaining('Offline mode'), findsNothing);
+
+      // Reset
+      UserProfileService.instance.setAuthStatusForTesting(
+        FriendAuthStatus.authenticated,
+      );
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('cached friends remain visible during offline or auth errors', (
+      tester,
+    ) async {
+      final friends = [
+        const FriendUser(friendCode: 'CACHED-1', username: 'Alice'),
+      ];
+
+      UserProfileService.instance.setAuthStatusForTesting(
+        FriendAuthStatus.offline,
+      );
+
+      await tester.pumpWidget(createSubject(friends: friends));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Alice'), findsOneWidget);
+      expect(
+        find.text('Offline mode — showing cached friends. Reconnect to sync.'),
+        findsOneWidget,
+      );
+
+      // Reset
+      UserProfileService.instance.setAuthStatusForTesting(
+        FriendAuthStatus.authenticated,
+      );
+      await tester.pumpAndSettle();
+    });
   });
 
   group('InviteShareSheet Widget', () {
@@ -146,16 +260,17 @@ void main() {
             userInviteProvider.overrideWith((ref) {
               final n = UserInviteNotifier(autoInit: false);
               n.state = const AsyncValue.data(
-                InviteCreation(code: '8F3KD2', url: 'https://kioku.app/i/8F3KD2'),
+                InviteCreation(
+                  code: '8F3KD2',
+                  url: 'https://kioku.app/i/8F3KD2',
+                ),
               );
               return n;
             }),
           ],
           child: MaterialApp(
             theme: AppTheme.coffeeLight(),
-            home: const Scaffold(
-              body: InviteShareSheet(),
-            ),
+            home: const Scaffold(body: InviteShareSheet()),
           ),
         ),
       );

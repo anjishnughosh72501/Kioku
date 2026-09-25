@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
 
-enum EncryptedBadgeVariant {
-  compact,
-  standard,
-  prominent,
-}
+enum EncryptedBadgeVariant { compact, standard, prominent }
 
 class EncryptedBadge extends StatefulWidget {
   const EncryptedBadge({
@@ -37,13 +33,15 @@ class _EncryptedBadgeState extends State<EncryptedBadge>
       duration: const Duration(milliseconds: 350),
     );
 
-    _scaleAnimation = Tween<double>(begin: 0.88, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 0.88,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
 
-    _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
+    _opacityAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
 
     if (widget.animateOnMount) {
       _controller.forward();
@@ -152,7 +150,11 @@ class _EncryptedBadgeState extends State<EncryptedBadge>
                   color: colors.primary.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.lock_rounded, size: 14, color: colors.primary),
+                child: Icon(
+                  Icons.lock_rounded,
+                  size: 14,
+                  color: colors.primary,
+                ),
               ),
               const SizedBox(width: 8),
               Column(
@@ -184,10 +186,7 @@ class _EncryptedBadgeState extends State<EncryptedBadge>
 
     return FadeTransition(
       opacity: _opacityAnimation,
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: content,
-      ),
+      child: ScaleTransition(scale: _scaleAnimation, child: content),
     );
   }
 }

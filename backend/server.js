@@ -23,6 +23,7 @@ function createApp() {
   const claimRoutes = require('./routes/claim');
   const flashbackRoutes = require('./routes/flashbacks');
   const friendsRoutes = require('./routes/friends');
+  const albumRoutes = require('./routes/albums');
 
   const app = express();
   app.disable('x-powered-by');
@@ -109,6 +110,7 @@ function createApp() {
   app.use('/claim', claimRoutes);
   app.use('/flashbacks', flashbackRoutes);
   app.use('/friends', friendsRoutes);
+  app.use('/albums', albumRoutes);
 
   // Universal short invite links (/i/:code and /invite/:code)
   app.get(['/i/:code', '/invite/:code'], (req, res, next) => {

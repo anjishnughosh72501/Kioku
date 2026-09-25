@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
 
 class MemorySkeleton extends StatefulWidget {
-  const MemorySkeleton({
-    super.key,
-    this.isHero = false,
-  });
+  const MemorySkeleton({super.key, this.isHero = false});
 
   final bool isHero;
 
@@ -41,7 +38,9 @@ class _MemorySkeletonState extends State<MemorySkeleton>
   Widget build(BuildContext context) {
     final colors = context.kiokuColors;
     final baseColor = colors.surfaceContainerLow;
-    final highlightColor = colors.surfaceContainerHighest.withValues(alpha: 0.6);
+    final highlightColor = colors.surfaceContainerHighest.withValues(
+      alpha: 0.6,
+    );
 
     return AnimatedBuilder(
       animation: _shimmerAnimation,
@@ -54,11 +53,7 @@ class _MemorySkeletonState extends State<MemorySkeleton>
             _shimmerAnimation.value.clamp(0.0, 1.0),
             (_shimmerAnimation.value + 0.3).clamp(0.0, 1.0),
           ],
-          colors: [
-            baseColor,
-            highlightColor,
-            baseColor,
-          ],
+          colors: [baseColor, highlightColor, baseColor],
         );
 
         if (widget.isHero) {
@@ -111,7 +106,9 @@ class _MemorySkeletonState extends State<MemorySkeleton>
                           height: 18,
                           decoration: BoxDecoration(
                             gradient: shimmerGradient,
-                            borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                            borderRadius: BorderRadius.circular(
+                              AppTheme.radiusPill,
+                            ),
                           ),
                         ),
                         Container(
@@ -119,7 +116,9 @@ class _MemorySkeletonState extends State<MemorySkeleton>
                           height: 14,
                           decoration: BoxDecoration(
                             gradient: shimmerGradient,
-                            borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                            borderRadius: BorderRadius.circular(
+                              AppTheme.radiusPill,
+                            ),
                           ),
                         ),
                       ],

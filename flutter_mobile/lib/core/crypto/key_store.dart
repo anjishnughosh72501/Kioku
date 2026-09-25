@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -38,8 +38,9 @@ abstract class ISecureStorageProvider {
 
 class FlutterSecureStorageWrapper implements ISecureStorageProvider {
   final FlutterSecureStorage _storage;
+  final Map<String, String> _fallback = {};
 
-  const FlutterSecureStorageWrapper([FlutterSecureStorage? storage])
+  FlutterSecureStorageWrapper([FlutterSecureStorage? storage])
       : _storage = storage ??
             const FlutterSecureStorage(
               aOptions: AndroidOptions(encryptedSharedPreferences: true),
@@ -47,20 +48,53 @@ class FlutterSecureStorageWrapper implements ISecureStorageProvider {
             );
 
   @override
-  Future<String?> read({required String key}) => _storage.read(key: key);
+  Future<String?> read({required String key}) async {
+    try {
+      return await _storage.read(key: key);
+    } on MissingPluginException {
+      return _fallback[key];
+    }
+  }
 
   @override
-  Future<void> write({required String key, required String? value}) =>
-      _storage.write(key: key, value: value);
+  Future<void> write({required String key, required String? value}) async {
+    try {
+      await _storage.write(key: key, value: value);
+    } on MissingPluginException {
+      if (value == null) {
+        _fallback.remove(key);
+      } else {
+        _fallback[key] = value;
+      }
+    }
+  }
 
   @override
-  Future<void> delete({required String key}) => _storage.delete(key: key);
+  Future<void> delete({required String key}) async {
+    try {
+      await _storage.delete(key: key);
+    } on MissingPluginException {
+      _fallback.remove(key);
+    }
+  }
 
   @override
-  Future<bool> containsKey({required String key}) => _storage.containsKey(key: key);
+  Future<bool> containsKey({required String key}) async {
+    try {
+      return await _storage.containsKey(key: key);
+    } on MissingPluginException {
+      return _fallback.containsKey(key);
+    }
+  }
 
   @override
-  Future<Map<String, String>> readAll() => _storage.readAll();
+  Future<Map<String, String>> readAll() async {
+    try {
+      return await _storage.readAll();
+    } on MissingPluginException {
+      return Map<String, String>.from(_fallback);
+    }
+  }
 }
 
 class InMemorySecureStorage implements ISecureStorageProvider {
@@ -92,7 +126,7 @@ class InMemorySecureStorage implements ISecureStorageProvider {
 
 class KeyStore {
   KeyStore({ISecureStorageProvider? storage})
-      : _storage = storage ?? const FlutterSecureStorageWrapper();
+      : _storage = storage ?? FlutterSecureStorageWrapper();
 
   static KeyStore instance = KeyStore();
 

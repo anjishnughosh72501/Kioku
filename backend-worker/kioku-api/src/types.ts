@@ -7,6 +7,7 @@ export interface Env {
 
 export interface FriendAuthPayload {
   friendCode: string;
+  userId?: string;
   iat?: number;
   exp?: number;
 }
@@ -140,6 +141,7 @@ export interface FlashbackRow {
 
 export type HonoVariables = {
   friendCode?: string;
+  userId?: string;
   legacyUser?: LegacyAuthPayload;
 };
 

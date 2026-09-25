@@ -4,8 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+// ignore: depend_on_referenced_packages
+import 'package:path_provider_windows/path_provider_windows.dart';
+import 'package:flutter_mobile/core/crypto/key_store.dart';
 import 'package:flutter_mobile/core/models/memory.dart';
 import 'package:flutter_mobile/core/providers.dart';
+import 'package:flutter_mobile/core/services/user_profile_service.dart';
 import 'package:flutter_mobile/core/theme/index.dart';
 import 'package:flutter_mobile/features/feed/domain/i_memory_repository.dart';
 import 'package:flutter_mobile/shared/widgets/create_album_dialog.dart';
@@ -47,8 +54,19 @@ class MockMemoryRepo implements IMemoryRepository {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  PathProviderWindows.registerWith();
+
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    UserProfileService.instance.secureStorage = InMemorySecureStorage();
+    UserProfileService.instance.httpClient = MockClient((request) async {
+      return http.Response(
+        jsonEncode({'ok': true, 'token': 'mock_token', 'albums': []}),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
   });
 
   Widget buildTestWidget(Widget child, MockMemoryRepo repo) {

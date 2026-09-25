@@ -370,15 +370,14 @@ friendsApp.post('/request', requireFriendAuth, async (c) => {
 });
 
 // 2. Poll incoming pending requests AND accepted requests for a user (bidirectional sync)
-friendsApp.get('/requests/:myCode', requireFriendAuth, async (c) => {
+const handleGetRequests = async (c: any) => {
+  const authCode = c.get('friendCode')!;
   const myCode = c.req.param('myCode');
-  if (!myCode) {
-    return c.json({ error: 'myCode is required' }, 400);
-  }
-
-  const cleanCode = String(myCode).trim().toUpperCase();
-  if (c.get('friendCode') !== cleanCode) {
-    return c.json({ error: 'Forbidden: cannot access friend requests for another code' }, 403);
+  if (myCode) {
+    const cleanCode = String(myCode).trim().toUpperCase();
+    if (authCode !== cleanCode) {
+      return c.json({ error: 'Forbidden: cannot access friend requests for another code' }, 403);
+    }
   }
 
   // Requests addressed TO me that are pending
@@ -388,7 +387,7 @@ friendsApp.get('/requests/:myCode', requireFriendAuth, async (c) => {
      WHERE to_code = ? AND status = 'pending'
      ORDER BY created_at DESC`
   )
-    .bind(cleanCode)
+    .bind(authCode)
     .all();
 
   // Requests sent BY me that were accepted
@@ -398,14 +397,16 @@ friendsApp.get('/requests/:myCode', requireFriendAuth, async (c) => {
      WHERE from_code = ? AND status = 'accepted'
      ORDER BY updated_at DESC`
   )
-    .bind(cleanCode)
+    .bind(authCode)
     .all();
 
   return c.json({
     requests: incoming.results || [],
     accepted: accepted.results || [],
   });
-});
+};
+friendsApp.get('/requests/:myCode', requireFriendAuth, handleGetRequests);
+friendsApp.get('/requests', requireFriendAuth, handleGetRequests);
 
 // 3. Acknowledge an accepted request (mark synced)
 friendsApp.post('/ack', requireFriendAuth, async (c) => {
@@ -599,119 +600,76 @@ friendsApp.post('/remove', requireFriendAuth, async (c) => {
 });
 
 // 5d. Get accepted friends list
-friendsApp.get('/list/:myCode', requireFriendAuth, async (c) => {
+const handleGetList = async (c: any) => {
+  const authCode = c.get('friendCode')!;
   const myCode = c.req.param('myCode');
-  const cleanCode = String(myCode).trim().toUpperCase();
-  if (c.get('friendCode') !== cleanCode) {
-    return c.json({ error: 'Forbidden: cannot access friend list for another code' }, 403);
+  if (myCode) {
+    const cleanParam = String(myCode).trim().toUpperCase();
+    if (authCode !== cleanParam) {
+      return c.json({ error: 'Forbidden: cannot access friend list for another code' }, 403);
+    }
   }
 
-  let rows: { results?: Array<{ friendCode: string; createdAt: number; username: string | null }> } = { results: [] };
-  try {
-    rows = await c.env.DB.prepare(
-      `SELECT
-         CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END AS friendCode,
-         f.created_at AS createdAt,
-         u.username
-       FROM friends f
-       LEFT JOIN users u ON u.friend_code = (CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END)
-       WHERE f.user_a = ? OR f.user_b = ?
-       ORDER BY f.created_at DESC`
-    )
-      .bind(cleanCode, cleanCode, cleanCode, cleanCode)
-      .all();
-  } catch (_) {
-    try {
-      rows = await c.env.DB.prepare(
-        `SELECT
-           CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END AS friendCode,
-           f.created_at AS createdAt,
-           fa.username
-         FROM friends f
-         LEFT JOIN friend_accounts fa ON fa.friend_code = (CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END)
-         WHERE f.user_a = ? OR f.user_b = ?
-         ORDER BY f.created_at DESC`
-      )
-        .bind(cleanCode, cleanCode, cleanCode, cleanCode)
-        .all();
-    } catch (_) {}
-  }
+  const rows = await c.env.DB.prepare(
+    `SELECT
+       CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END AS friendCode,
+       f.created_at AS createdAt,
+       COALESCE(u.username, fa.username) AS username
+     FROM friends f
+     LEFT JOIN users u ON u.friend_code = (CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END)
+     LEFT JOIN friend_accounts fa ON fa.friend_code = (CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END)
+     WHERE f.user_a = ? OR f.user_b = ?
+     ORDER BY f.created_at DESC`
+  )
+    .bind(authCode, authCode, authCode, authCode, authCode)
+    .all();
 
-  const enriched = (rows.results || []).map((r) => ({
+  const enriched = (rows.results || []).map((r: any) => ({
     friendCode: r.friendCode,
     username: r.username || null,
     createdAt: r.createdAt,
   }));
 
   return c.json({ friends: enriched });
-});
+};
+friendsApp.get('/list/:myCode', requireFriendAuth, handleGetList);
+friendsApp.get('/list', requireFriendAuth, handleGetList);
 
 // 5e. Get sent friend requests (pending and expired)
-friendsApp.get('/sent/:myCode', requireFriendAuth, async (c) => {
+const handleGetSent = async (c: any) => {
+  const authCode = c.get('friendCode')!;
   const myCode = c.req.param('myCode');
-  const cleanCode = String(myCode).trim().toUpperCase();
-  if (c.get('friendCode') !== cleanCode) {
-    return c.json({ error: 'Forbidden: cannot access sent requests for another code' }, 403);
+  if (myCode) {
+    const cleanParam = String(myCode).trim().toUpperCase();
+    if (authCode !== cleanParam) {
+      return c.json({ error: 'Forbidden: cannot access sent requests for another code' }, 403);
+    }
   }
 
-  let rows: {
-    results?: Array<{
-      id: string;
-      fromCode: string;
-      toCode: string;
-      fromName: string | null;
-      status: string;
-      createdAt: number;
-      updatedAt: number;
-      toName: string | null;
-    }>;
-  } = { results: [] };
-
-  try {
-    rows = await c.env.DB.prepare(
-      `SELECT
-         fr.id,
-         fr.from_code AS fromCode,
-         fr.to_code AS toCode,
-         fr.from_name AS fromName,
-         fr.status,
-         fr.created_at AS createdAt,
-         fr.updated_at AS updatedAt,
-         u.username AS toName
-       FROM friend_requests fr
-       LEFT JOIN users u ON u.friend_code = fr.to_code
-       WHERE fr.from_code = ?
-       ORDER BY fr.updated_at DESC`
-    )
-      .bind(cleanCode)
-      .all();
-  } catch (_) {
-    try {
-      rows = await c.env.DB.prepare(
-        `SELECT
-           fr.id,
-           fr.from_code AS fromCode,
-           fr.to_code AS toCode,
-           fr.from_name AS fromName,
-           fr.status,
-           fr.created_at AS createdAt,
-           fr.updated_at AS updatedAt,
-           fa.username AS toName
-         FROM friend_requests fr
-         LEFT JOIN friend_accounts fa ON fa.friend_code = fr.to_code
-         WHERE fr.from_code = ?
-         ORDER BY fr.updated_at DESC`
-      )
-        .bind(cleanCode)
-        .all();
-    } catch (_) {}
-  }
+  const rows = await c.env.DB.prepare(
+    `SELECT
+       fr.id,
+       fr.from_code AS fromCode,
+       fr.to_code AS toCode,
+       fr.from_name AS fromName,
+       fr.status,
+       fr.created_at AS createdAt,
+       fr.updated_at AS updatedAt,
+       COALESCE(u.username, fa.username) AS toName
+     FROM friend_requests fr
+     LEFT JOIN users u ON u.friend_code = fr.to_code
+     LEFT JOIN friend_accounts fa ON fa.friend_code = fr.to_code
+     WHERE fr.from_code = ?
+     ORDER BY fr.updated_at DESC`
+  )
+    .bind(authCode)
+    .all();
 
   const now = Date.now();
   const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
   const expiredIds: string[] = [];
 
-  const enriched = (rows.results || []).map((r) => {
+  const enriched = (rows.results || []).map((r: any) => {
     let currentStatus = r.status;
     if (currentStatus === 'pending' && now - r.createdAt > thirtyDaysMs) {
       currentStatus = 'expired';
@@ -739,7 +697,9 @@ friendsApp.get('/sent/:myCode', requireFriendAuth, async (c) => {
   }
 
   return c.json({ requests: enriched });
-});
+};
+friendsApp.get('/sent/:myCode', requireFriendAuth, handleGetSent);
+friendsApp.get('/sent', requireFriendAuth, handleGetSent);
 
 // 5f. Create short universal invite link
 friendsApp.post('/invite', requireFriendAuth, async (c) => {
@@ -1029,15 +989,14 @@ friendsApp.post('/albums/invite', requireFriendAuth, async (c) => {
 });
 
 // 7. Poll incoming album invites for a user
-friendsApp.get('/albums/invites/:myCode', requireFriendAuth, async (c) => {
+const handleGetAlbumInvites = async (c: any) => {
+  const authCode = c.get('friendCode')!;
   const myCode = c.req.param('myCode');
-  if (!myCode) {
-    return c.json({ error: 'myCode is required' }, 400);
-  }
-
-  const cleanCode = String(myCode).trim().toUpperCase();
-  if (c.get('friendCode') !== cleanCode) {
-    return c.json({ error: 'Forbidden: cannot access album invites for another code' }, 403);
+  if (myCode) {
+    const cleanParam = String(myCode).trim().toUpperCase();
+    if (authCode !== cleanParam) {
+      return c.json({ error: 'Forbidden: cannot access album invites for another code' }, 403);
+    }
   }
 
   const rows = await c.env.DB.prepare(
@@ -1048,11 +1007,13 @@ friendsApp.get('/albums/invites/:myCode', requireFriendAuth, async (c) => {
      WHERE to_code = ? AND status = 'pending'
      ORDER BY created_at DESC`
   )
-    .bind(cleanCode)
+    .bind(authCode)
     .all();
 
   return c.json({ invites: rows.results || [] });
-});
+};
+friendsApp.get('/albums/invites/:myCode', requireFriendAuth, handleGetAlbumInvites);
+friendsApp.get('/albums/invites', requireFriendAuth, handleGetAlbumInvites);
 
 // 8. Accept an album invite (Section 7: atomically updates invitation and creates active server membership)
 friendsApp.post('/albums/accept', requireFriendAuth, async (c) => {

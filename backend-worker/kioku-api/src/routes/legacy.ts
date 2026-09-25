@@ -3,7 +3,7 @@
 
 import { Hono } from 'hono';
 import { AppEnv, GroupRow, UserRow, MediaRow } from '../types';
-import { generateId, signJwt, getJwtSecret } from '../crypto';
+import { generateId, signJwt, verifyJwt, getJwtSecret } from '../crypto';
 import { requireLegacyAuth } from '../middleware/auth';
 
 export const legacyAuthApp = new Hono<AppEnv>();
@@ -70,25 +70,55 @@ legacyAuthApp.post('/join', async (c) => {
   return c.json({ token, userId, groupId: group.id, groupName: group.name });
 });
 
-// GET /auth/me
-legacyAuthApp.get('/me', requireLegacyAuth, async (c) => {
-  const user = c.get('legacyUser')!;
-  const group = await c.env.DB.prepare(`SELECT * FROM groups WHERE id = ?`)
-    .bind(user.groupId)
-    .first<GroupRow>();
-
-  if (!group) {
-    return c.json({ error: 'Group not found' }, 404);
+// GET /auth/me - Diagnostic endpoint supporting both friend auth and legacy tokens
+legacyAuthApp.get('/me', async (c) => {
+  const authHeader = c.req.header('authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return c.json({ error: 'Missing or malformed Authorization header' }, 401);
   }
 
-  return c.json({
-    userId: user.userId,
-    name: user.name,
-    groupId: group.id,
-    groupName: group.name,
-    inviteCode: group.invite_code,
-    role: 'member',
-  });
+  const token = authHeader.split(' ')[1];
+  try {
+    const secret = getJwtSecret(c.env);
+    const decoded = await verifyJwt<any>(token, secret);
+    if (!decoded) {
+      return c.json({ error: 'Invalid token payload' }, 401);
+    }
+
+    // FriendAuth token
+    if (decoded.friendCode) {
+      return c.json({
+        authenticated: true,
+        friendCode: decoded.friendCode,
+        userId: decoded.userId || null,
+        serverTime: Date.now(),
+      });
+    }
+
+    // Legacy group token
+    if (decoded.userId && decoded.groupId) {
+      const group = await c.env.DB.prepare(`SELECT * FROM groups WHERE id = ?`)
+        .bind(decoded.groupId)
+        .first<GroupRow>();
+
+      if (!group) {
+        return c.json({ error: 'Group not found' }, 404);
+      }
+
+      return c.json({
+        userId: decoded.userId,
+        name: decoded.name,
+        groupId: group.id,
+        groupName: group.name,
+        inviteCode: group.invite_code,
+        role: 'member',
+      });
+    }
+
+    return c.json({ error: 'Invalid token payload' }, 401);
+  } catch (err) {
+    return c.json({ error: 'Invalid or expired authorization token' }, 401);
+  }
 });
 
 // POST /auth/refresh
