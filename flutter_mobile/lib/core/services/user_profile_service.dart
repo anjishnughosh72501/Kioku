@@ -426,9 +426,12 @@ class UserProfileService {
       }
     }
 
-    if (username != null && username.isNotEmpty) {
-      _currentProfile = UserProfile(username: username, friendCode: friendCode);
-    }
+    _currentProfile = UserProfile(
+      username: (username != null && username.isNotEmpty)
+          ? username
+          : 'Storyteller',
+      friendCode: friendCode,
+    );
 
     // Restore cached bearer token if unexpired
     final savedToken = await secureStorage.read(key: _kSecBackendToken);
@@ -1063,7 +1066,14 @@ class UserProfileService {
   }
 
   Future<List<FriendRequest>> pollIncomingRequests() async {
-    final myCode = friendCode.trim().toUpperCase();
+    var myCode = friendCode.trim().toUpperCase();
+    if (myCode.isEmpty || myCode == 'KIOKU-START') {
+      final prefs = await SharedPreferences.getInstance();
+      final savedCode = prefs.getString(_keyFriendCode);
+      if (savedCode != null && savedCode.isNotEmpty) {
+        myCode = savedCode.trim().toUpperCase();
+      }
+    }
     if (myCode.isEmpty) return getCachedIncomingRequests();
 
     try {
