@@ -408,10 +408,12 @@ const handleGetRequests = async (c: any) => {
 friendsApp.get('/requests/:myCode', requireFriendAuth, handleGetRequests);
 friendsApp.get('/requests', requireFriendAuth, handleGetRequests);
 
-// 3. Acknowledge an accepted request (mark synced)
+
+ // 3. Acknowledge an accepted request (mark synced)
 friendsApp.post('/ack', requireFriendAuth, async (c) => {
   const body = await c.req.json<{ requestId?: string }>().catch(() => ({}) as any);
   const { requestId } = body;
+
   if (!requestId) {
     return c.json({ error: 'requestId is required' }, 400);
   }
@@ -420,13 +422,18 @@ friendsApp.post('/ack', requireFriendAuth, async (c) => {
   const now = Date.now();
 
   await c.env.DB.prepare(
-    `UPDATE friend_requests SET status = 'synced', updated_at = ? WHERE id = ? AND from_code = ?`
+    `UPDATE friend_requests
+     SET status = 'synced', updated_at = ?
+     WHERE id = ?
+       AND from_code = ?
+       AND status = 'accepted'`
   )
     .bind(now, requestId, cleanCode)
     .run();
 
   return c.json({ ok: true });
 });
+
 
 // 4. Accept a friend request
 friendsApp.post('/accept', requireFriendAuth, async (c) => {
